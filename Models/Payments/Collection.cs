@@ -22,6 +22,7 @@ public class Collection : AuditableEntity
     public string? ProviderReference { get; set; }
 
     public string? CheckoutUrl { get; set; }
+    public DateTime? ProviderExpiresAt { get; set; }
     public string? VirtualAccountNumber { get; set; }
     public string? VirtualAccountBankName { get; set; }
     public string? VirtualAccountName { get; set; }

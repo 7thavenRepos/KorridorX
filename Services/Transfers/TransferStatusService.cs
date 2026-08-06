@@ -74,7 +74,11 @@ public class TransferStatusService : ITransferStatusService
                 TransferStatus.Failed
             ],
 
-            [TransferStatus.Cancelled] = [],
+            [TransferStatus.Cancelled] =
+            [
+                TransferStatus.RefundPending
+            ],
+
             [TransferStatus.Refunded] = []
         };
 

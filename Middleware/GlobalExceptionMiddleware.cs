@@ -1,6 +1,7 @@
 ﻿using System.Net;
 using System.Text.Json;
 using KorridorX.Infrastructure;
+using KorridorX.Exceptions;
 
 namespace KorridorX.Middleware;
 
@@ -39,6 +40,25 @@ public class GlobalExceptionMiddleware
                 "INVALID_OPERATION",
                 ex.Message);
         }
+        catch (ProviderIntegrationException ex)
+        {
+            _logger.LogError(
+                ex,
+                "Provider integration failed. RequestLogId: {RequestLogId}, ProviderStatusCode: {ProviderStatusCode}",
+                ex.RequestLogId,
+                ex.ProviderStatusCode);
+
+            await WriteErrorAsync(
+                context,
+                HttpStatusCode.BadGateway,
+                "PROVIDER_ERROR",
+                ex.Message,
+                new
+                {
+                    requestLogId = ex.RequestLogId,
+                    providerStatusCode = ex.ProviderStatusCode
+                });
+        }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Unhandled exception occurred.");
@@ -55,12 +75,13 @@ public class GlobalExceptionMiddleware
         HttpContext context,
         HttpStatusCode statusCode,
         string code,
-        string message)
+        string message,
+        object? details = null)
     {
         context.Response.ContentType = "application/json";
         context.Response.StatusCode = (int)statusCode;
 
-        var response = ApiResponses.Fail(message, code);
+        var response = ApiResponses.Fail(message, code, details);
 
         var json = JsonSerializer.Serialize(response, new JsonSerializerOptions
         {

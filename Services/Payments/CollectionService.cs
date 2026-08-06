@@ -1,10 +1,15 @@
 using System.Text.Json;
 using KorridorX.Data;
+using KorridorX.Configuration;
+using Microsoft.Extensions.Options;
 using KorridorX.Dtos.Payments;
 using KorridorX.Extensions;
 using KorridorX.Infrastructure;
 using KorridorX.Models.Enums;
 using KorridorX.Models.Payments;
+using KorridorX.Models.Providers;
+using KorridorX.Providers.Remittance;
+using KorridorX.Exceptions;
 using KorridorX.Models.Transfers;
 using KorridorX.Services.References;
 using Microsoft.EntityFrameworkCore;
@@ -16,15 +21,24 @@ public class CollectionService : ICollectionService
     private readonly AppDbContext _db;
     private readonly IReferenceGenerator _referenceGenerator;
     private readonly ICollectionPaymentMethodPolicy _paymentMethodPolicy;
+    private readonly ICollectionStatusService _collectionStatusService;
+    private readonly IRemittanceProvider _remittanceProvider;
+    private readonly IReadOnlyDictionary<string, string> collectionWalletIds;
 
     public CollectionService(
         AppDbContext db,
         IReferenceGenerator referenceGenerator,
-        ICollectionPaymentMethodPolicy paymentMethodPolicy)
+        ICollectionPaymentMethodPolicy paymentMethodPolicy,
+        ICollectionStatusService collectionStatusService,
+        IRemittanceProvider remittanceProvider,
+        IOptions<BlaaizOptions> blaaizOptions)
     {
         _db = db;
         _referenceGenerator = referenceGenerator;
         _paymentMethodPolicy = paymentMethodPolicy;
+        _collectionStatusService = collectionStatusService;
+        _remittanceProvider = remittanceProvider;
+        collectionWalletIds = blaaizOptions.Value.CollectionWalletIds;
     }
 
     public async Task<IReadOnlyList<CollectionPaymentMethodDto>> GetAvailablePaymentMethodsAsync(
@@ -158,6 +172,214 @@ public class CollectionService : ICollectionService
         return ToDetailsDto(collection);
     }
 
+    public async Task<CollectionDetailsDto> InitiateCollectionAsync(
+        Guid userId,
+        Guid collectionId,
+        InitiateCollectionRequestDto request,
+        CancellationToken ct = default)
+    {
+        var collection = await _db.Collections
+            .Include(x => x.Transfer)
+            .ThenInclude(x => x.CustomerProfile)
+            .ThenInclude(x => x.User)
+            .Include(x => x.Attempts)
+            .FirstOrDefaultAsync(x =>
+                x.Id == collectionId &&
+                x.Transfer.CustomerProfile.UserId == userId &&
+                !x.IsDeleted &&
+                !x.Transfer.IsDeleted &&
+                !x.Transfer.CustomerProfile.IsDeleted,
+                ct);
+
+        if (collection is null)
+        {
+            throw new InvalidOperationException("Collection not found.");
+        }
+
+        if (collection.Status is CollectionStatus.Initiated or
+            CollectionStatus.Processing or
+            CollectionStatus.Successful)
+        {
+            return ToDetailsDto(collection);
+        }
+
+        if (collection.Status is not CollectionStatus.Pending and not CollectionStatus.Failed)
+        {
+            throw new InvalidOperationException(
+                $"Collection cannot be initiated while its status is '{collection.Status}'.");
+        }
+
+        if (collection.Transfer.Status != TransferStatus.PendingPayment)
+        {
+            throw new InvalidOperationException(
+                $"Collection cannot be initiated while the transfer status is '{collection.Transfer.Status}'.");
+        }
+
+        if (collection.PaymentMethod is not PaymentMethod.Card and not PaymentMethod.Interac)
+        {
+            throw new InvalidOperationException(
+                $"Live provider initiation is not yet supported for '{collection.PaymentMethod}'.");
+        }
+
+        var profile = collection.Transfer.CustomerProfile;
+        var providerCustomer = await _db.ProviderCustomers
+            .AsNoTracking()
+            .FirstOrDefaultAsync(x =>
+                x.CustomerProfileId == profile.Id &&
+                x.ProviderCode == _remittanceProvider.ProviderCode &&
+                !x.IsDeleted,
+                ct);
+
+        if (collection.PaymentMethod == PaymentMethod.Card)
+        {
+            if (providerCustomer is null)
+            {
+                throw new InvalidOperationException(
+                    "Synchronize the customer with Blaaiz before initiating a card collection.");
+            }
+
+            if (!string.Equals(
+                    providerCustomer.ProviderStatus,
+                    "VERIFIED",
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException(
+                    "The Blaaiz customer must be VERIFIED before a card collection can be initiated.");
+            }
+        }
+
+        var email = request.PayerEmail ?? profile.Email ?? profile.User.Email;
+        if (string.IsNullOrWhiteSpace(email))
+        {
+            throw new InvalidOperationException("Payer email is required to initiate this collection.");
+        }
+
+        var customerName = string.IsNullOrWhiteSpace(request.CustomerName)
+            ? $"{profile.FirstName} {profile.LastName}".Trim()
+            : request.CustomerName.Trim();
+
+        var walletId = ResolveCollectionWalletId(collection.CurrencyCode);
+        var card = request.Card is null
+            ? null
+            : new RemittanceCardDetails(
+                request.Card.CardHolderName,
+                request.Card.CardNumber,
+                request.Card.Expiry,
+                request.Card.Cvc);
+
+        var sanitizedRequestPayload = JsonSerializer.Serialize(new
+        {
+            collectionId = collection.Id,
+            collectionReference = collection.Reference,
+            transferId = collection.TransferId,
+            transferReference = collection.Transfer.Reference,
+            amount = collection.Amount,
+            currencyCode = collection.CurrencyCode,
+            paymentMethod = collection.PaymentMethod.ToString(),
+            payerEmail = email,
+            customerName,
+            interacExpiryHours = request.InteracExpiryHours,
+            redirectUrl = request.RedirectUrl,
+            card = card is null ? null : new
+            {
+                cardHolderName = card.CardHolderName,
+                cardNumber = MaskCardNumber(card.CardNumber),
+                expiry = card.Expiry,
+                cvc = "***REDACTED***"
+            }
+        });
+
+        var attempt = new CollectionAttempt
+        {
+            CollectionId = collection.Id,
+            Collection = collection,
+            Status = ProviderRequestStatus.Pending,
+            RequestPayloadJson = sanitizedRequestPayload,
+            AttemptedAt = DateTime.UtcNow
+        };
+
+        collection.Attempts.Add(attempt);
+        await _db.SaveChangesAsync(ct);
+
+        try
+        {
+            var providerResult = await _remittanceProvider.InitiateCollectionAsync(
+                new RemittanceCollectionRequest(
+                    collection.TransferId,
+                    collection.Id,
+                    collection.PaymentMethod,
+                    collection.Amount,
+                    collection.CurrencyCode,
+                    providerCustomer?.ProviderCustomerId,
+                    email,
+                    customerName,
+                    profile.PhoneNumber,
+                    walletId,
+                    request.RedirectUrl,
+                    card,
+                    request.InteracExpiryHours),
+                ct);
+
+            _collectionStatusService.ApplyTransition(
+                collection,
+                CollectionStatus.Initiated,
+                new CollectionStatusTransitionContext(
+                    Source: "Provider",
+                    Reason: "Collection was initiated with Blaaiz.",
+                    ChangedByUserId: userId,
+                    ProviderCollectionId: providerResult.ProviderTransactionId,
+                    ProviderReference: providerResult.ProviderReference,
+                    CheckoutUrl: providerResult.CheckoutUrl,
+                    ProviderExpiresAt: providerResult.ExpiresAt,
+                    ProviderRequestId: providerResult.ProviderRequestLogId.ToString(),
+                    ProviderResponseId: providerResult.ProviderTransactionId,
+                    RequestPayloadJson: sanitizedRequestPayload,
+                    ResponsePayloadJson: providerResult.RawResponseJson,
+                    MetadataJson: JsonSerializer.Serialize(new
+                    {
+                        provider = _remittanceProvider.ProviderName,
+                        providerStatus = providerResult.ProviderStatus,
+                        providerExpiresAt = providerResult.ExpiresAt
+                    })),
+                attempt);
+
+            await UpsertProviderTransactionAsync(
+                collection,
+                providerResult,
+                ct);
+
+            await _db.SaveChangesAsync(ct);
+            return ToDetailsDto(collection);
+        }
+        catch (InvalidOperationException ex)
+        {
+            attempt.Status = ProviderRequestStatus.Failed;
+            attempt.ErrorMessage = ex.Message.Length <= 1000
+                ? ex.Message
+                : ex.Message[..1000];
+            attempt.LastUpdatedAt = DateTime.UtcNow;
+            await _db.SaveChangesAsync(ct);
+            throw;
+        }
+        catch (ProviderIntegrationException ex)
+        {
+            _collectionStatusService.ApplyTransition(
+                collection,
+                CollectionStatus.Failed,
+                new CollectionStatusTransitionContext(
+                    Source: "Provider",
+                    Reason: ex.Message,
+                    ChangedByUserId: userId,
+                    ProviderRequestId: ex.RequestLogId?.ToString(),
+                    RequestPayloadJson: sanitizedRequestPayload,
+                    ResponsePayloadJson: ex.ProviderResponse),
+                attempt);
+
+            await _db.SaveChangesAsync(ct);
+            throw;
+        }
+    }
+
     public async Task<CollectionDetailsDto> GetCollectionByIdAsync(
         Guid userId,
         Guid collectionId,
@@ -219,6 +441,7 @@ public class CollectionService : ICollectionService
                 x.ProviderCollectionId,
                 x.ProviderReference,
                 x.CheckoutUrl,
+                x.ProviderExpiresAt,
                 x.VirtualAccountNumber,
                 x.VirtualAccountBankName,
                 x.VirtualAccountName,
@@ -274,6 +497,62 @@ public class CollectionService : ICollectionService
                 !x.Transfer.CustomerProfile.IsDeleted);
     }
 
+    private string? ResolveCollectionWalletId(string currencyCode)
+    {
+        if (collectionWalletIds.TryGetValue(currencyCode, out var walletId) &&
+            !string.IsNullOrWhiteSpace(walletId))
+        {
+            return walletId.Trim();
+        }
+
+        return null;
+    }
+
+    private async Task UpsertProviderTransactionAsync(
+        Collection collection,
+        RemittanceCollectionResult providerResult,
+        CancellationToken ct)
+    {
+        var transaction = await _db.ProviderTransactions
+            .FirstOrDefaultAsync(x =>
+                x.ProviderCode == _remittanceProvider.ProviderCode &&
+                x.ProviderTransactionId == providerResult.ProviderTransactionId,
+                ct);
+
+        if (transaction is null)
+        {
+            transaction = new ProviderTransaction
+            {
+                ProviderCode = _remittanceProvider.ProviderCode,
+                TransferId = collection.TransferId,
+                CollectionId = collection.Id,
+                ProviderTransactionId = providerResult.ProviderTransactionId,
+                ProviderReference = providerResult.ProviderReference,
+                TransactionType = "Collection",
+                ProviderStatus = providerResult.ProviderStatus,
+                CurrencyCode = collection.CurrencyCode,
+                Amount = collection.Amount,
+                RawPayloadJson = providerResult.RawResponseJson,
+                LastSyncedAt = DateTime.UtcNow
+            };
+
+            _db.ProviderTransactions.Add(transaction);
+            return;
+        }
+
+        transaction.ProviderReference = providerResult.ProviderReference;
+        transaction.ProviderStatus = providerResult.ProviderStatus;
+        transaction.RawPayloadJson = providerResult.RawResponseJson;
+        transaction.LastSyncedAt = DateTime.UtcNow;
+        transaction.LastUpdatedAt = DateTime.UtcNow;
+    }
+
+    private static string MaskCardNumber(string cardNumber)
+    {
+        var digits = new string(cardNumber.Where(char.IsDigit).ToArray());
+        return digits.Length >= 4 ? $"************{digits[^4..]}" : "****";
+    }
+
     private async Task<string> GenerateUniqueCollectionReferenceAsync(CancellationToken ct)
     {
         for (var i = 0; i < 5; i++)
@@ -320,6 +599,7 @@ public class CollectionService : ICollectionService
             collection.ProviderCollectionId,
             collection.ProviderReference,
             collection.CheckoutUrl,
+            collection.ProviderExpiresAt,
             collection.VirtualAccountNumber,
             collection.VirtualAccountBankName,
             collection.VirtualAccountName,

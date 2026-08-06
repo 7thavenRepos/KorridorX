@@ -4,3 +4,78 @@ GET {{KorridorX_HostAddress}}/weatherforecast/
 Accept: application/json
 
 ###
+
+### Get available funding methods for a transfer
+GET {{KorridorX_HostAddress}}/api/transfers/{{transferId}}/collection-methods
+Authorization: Bearer {{accessToken}}
+Accept: application/json
+
+### Create a collection for a transfer
+POST {{KorridorX_HostAddress}}/api/transfers/{{transferId}}/collections
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "paymentMethod": 4
+}
+
+### Get a transfer collection
+GET {{KorridorX_HostAddress}}/api/transfers/{{transferId}}/collection
+Authorization: Bearer {{accessToken}}
+Accept: application/json
+
+### Get my collections
+GET {{KorridorX_HostAddress}}/api/collections?page=1&pageSize=20
+Authorization: Bearer {{accessToken}}
+Accept: application/json
+
+### Synchronize current customer with Blaaiz
+POST {{KorridorX_HostAddress}}/api/customer-profile/me/provider/sync
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "idType": "passport",
+  "idNumber": "REPLACE_WITH_TEST_ID_NUMBER",
+  "idIssueDate": "2024-01-01",
+  "idExpiryDate": "2030-01-01"
+}
+
+### Refresh/retrieve synchronized provider customer status
+POST {{KorridorX_HostAddress}}/api/customer-profile/me/provider/sync
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{}
+
+### Initiate an Interac collection
+POST {{KorridorX_HostAddress}}/api/collections/{{collectionId}}/initiate
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "payerEmail": "payer@example.com",
+  "customerName": "Test Payer",
+  "interacExpiryHours": 48
+}
+
+### Initiate a card collection
+# Card details are transmitted directly to Blaaiz and are never persisted by KorridorX.
+POST {{KorridorX_HostAddress}}/api/collections/{{collectionId}}/initiate
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "redirectUrl": "https://example.com/payment/callback",
+  "card": {
+    "cardHolderName": "Test Customer",
+    "cardNumber": "REPLACE_WITH_PROVIDER_TEST_CARD",
+    "expiry": "12/30",
+    "cvc": "123"
+  }
+}
+
+### Blaaiz OAuth health check (Admin/SuperAdmin)
+GET {{KorridorX_HostAddress}}/api/providers/blaaiz/health
+Authorization: Bearer {{adminAccessToken}}
+Accept: application/json

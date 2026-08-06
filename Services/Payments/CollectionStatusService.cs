@@ -302,6 +302,8 @@ public class CollectionStatusService : ICollectionStatusService
             "Checkout URL",
             1000);
 
+        collection.ProviderExpiresAt = context.ProviderExpiresAt ?? collection.ProviderExpiresAt;
+
         collection.VirtualAccountNumber = NormalizeOptional(
             context.VirtualAccountNumber ?? collection.VirtualAccountNumber,
             "Virtual account number",

@@ -1,4 +1,4 @@
-﻿using KorridorX.Models.Payments;
+using KorridorX.Models.Payments;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -9,7 +9,7 @@ public class CollectionConfiguration : IEntityTypeConfiguration<Collection>
     public void Configure(EntityTypeBuilder<Collection> builder)
     {
         builder.HasIndex(x => x.Reference).IsUnique();
-        builder.HasIndex(x => x.TransferId);
+        builder.HasIndex(x => x.TransferId).IsUnique();
         builder.HasIndex(x => x.Status);
         builder.HasIndex(x => x.ProviderCollectionId);
         builder.HasIndex(x => x.ProviderReference);
@@ -24,6 +24,7 @@ public class CollectionConfiguration : IEntityTypeConfiguration<Collection>
         builder.Property(x => x.VirtualAccountBankName).HasMaxLength(150);
         builder.Property(x => x.VirtualAccountName).HasMaxLength(200);
         builder.Property(x => x.FailureReason).HasMaxLength(1000);
+        builder.Property(x => x.Status).IsConcurrencyToken();
 
         builder.Property(x => x.Amount).HasPrecision(18, 2);
 

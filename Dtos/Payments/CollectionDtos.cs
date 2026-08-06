@@ -30,6 +30,7 @@ public record CollectionDto
     string? ProviderCollectionId,
     string? ProviderReference,
     string? CheckoutUrl,
+    DateTime? ProviderExpiresAt,
     string? VirtualAccountNumber,
     string? VirtualAccountBankName,
     string? VirtualAccountName,
@@ -58,4 +59,21 @@ public record CollectionDetailsDto
 (
     CollectionDto Collection,
     List<CollectionAttemptDto> Attempts
+);
+
+public record InitiateCollectionRequestDto
+(
+    string? RedirectUrl,
+    CardCollectionDetailsDto? Card,
+    string? PayerEmail,
+    string? CustomerName,
+    int? InteracExpiryHours
+);
+
+public record CardCollectionDetailsDto
+(
+    string CardHolderName,
+    string CardNumber,
+    string Expiry,
+    string Cvc
 );

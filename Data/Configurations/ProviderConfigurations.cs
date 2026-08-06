@@ -22,6 +22,7 @@ public class ProviderCustomerConfiguration : IEntityTypeConfiguration<ProviderCu
         builder.HasIndex(x => x.CustomerProfileId);
         builder.HasIndex(x => x.BusinessProfileId);
         builder.HasIndex(x => new { x.ProviderCode, x.ProviderCustomerId }).IsUnique();
+        builder.HasIndex(x => new { x.ProviderCode, x.CustomerProfileId }).IsUnique();
 
         builder.Property(x => x.ProviderCustomerId).HasMaxLength(150);
         builder.Property(x => x.ProviderStatus).HasMaxLength(100);

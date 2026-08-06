@@ -1,0 +1,37 @@
+Blaaiz Core Integration milestone
+
+Changed or added files:
+- BlaaizIntegration.md
+- Configuration/BlaaizOptions.cs
+- Configuration/BlaaizOptionsValidator.cs
+- Controllers/CollectionsController.cs
+- Controllers/ProviderCustomersController.cs
+- Controllers/ProvidersController.cs
+- Data/Configurations/ProviderConfigurations.cs
+- Dtos/Payments/CollectionDtos.cs
+- Dtos/Providers/ProviderCustomerDtos.cs
+- Exceptions/ProviderIntegrationException.cs
+- KorridorX.http
+- Middleware/GlobalExceptionMiddleware.cs
+- Models/Payments/Collection.cs
+- Program.cs
+- Providers/Remittance/Blaaiz/BlaaizApiClient.cs
+- Providers/Remittance/Blaaiz/BlaaizRemittanceProvider.cs
+- Providers/Remittance/Blaaiz/BlaaizTokenService.cs
+- Providers/Remittance/Blaaiz/IBlaaizApiClient.cs
+- Providers/Remittance/Blaaiz/IBlaaizTokenService.cs
+- Providers/Remittance/Blaaiz/Models/BlaaizApiResult.cs
+- Providers/Remittance/Blaaiz/Models/BlaaizAuthModels.cs
+- Providers/Remittance/Blaaiz/Models/BlaaizCollectionModels.cs
+- Providers/Remittance/Blaaiz/Models/BlaaizCustomerModels.cs
+- Providers/Remittance/IRemittanceProvider.cs
+- Providers/Remittance/RemittanceProviderContracts.cs
+- Services/Payments/CollectionService.cs
+- Services/Payments/CollectionStatusService.cs
+- Services/Payments/CollectionStatusTransitionContext.cs
+- Services/Payments/ICollectionService.cs
+- Services/Providers/IProviderCustomerService.cs
+- Services/Providers/IProviderRequestAuditService.cs
+- Services/Providers/ProviderCustomerService.cs
+- Services/Providers/ProviderRequestAuditService.cs
+- appsettings.Development.json

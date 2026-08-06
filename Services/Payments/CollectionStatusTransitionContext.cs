@@ -8,6 +8,7 @@ public sealed record CollectionStatusTransitionContext
     string? ProviderCollectionId = null,
     string? ProviderReference = null,
     string? CheckoutUrl = null,
+    DateTime? ProviderExpiresAt = null,
     string? VirtualAccountNumber = null,
     string? VirtualAccountBankName = null,
     string? VirtualAccountName = null,

@@ -55,6 +55,25 @@ public class CollectionsController : ControllerBase
             "Collection created successfully."));
     }
 
+    [HttpPost("{collectionId:guid}/initiate")]
+    public async Task<IActionResult> InitiateCollection(
+        [FromRoute] Guid collectionId,
+        [FromBody] InitiateCollectionRequestDto request,
+        CancellationToken ct)
+    {
+        var userId = GetUserId();
+
+        var result = await _collectionService.InitiateCollectionAsync(
+            userId,
+            collectionId,
+            request,
+            ct);
+
+        return Ok(ApiResponses.Ok(
+            result,
+            "Collection initiated successfully."));
+    }
+
     [HttpGet("{collectionId:guid}")]
     public async Task<IActionResult> GetCollectionById(
         [FromRoute] Guid collectionId,

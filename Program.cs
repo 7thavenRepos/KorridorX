@@ -8,25 +8,50 @@ using KorridorX.Providers.Remittance;
 using KorridorX.Providers.Remittance.Blaaiz;
 using KorridorX.Services.Auth;
 using KorridorX.Services.Fx;
+using KorridorX.Services.Payments;
 using KorridorX.Services.Recipients;
 using KorridorX.Services.References;
 using KorridorX.Services.Transfers;
+using KorridorX.Services.Providers;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using Microsoft.Extensions.Options;
 using Microsoft.OpenApi.Models;
 using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.Configure<JwtOptions>(builder.Configuration.GetSection("Jwt"));
-builder.Services.Configure<BlaaizOptions>(builder.Configuration.GetSection("Blaaiz"));
+builder.Services
+    .AddOptions<BlaaizOptions>()
+    .Bind(builder.Configuration.GetSection("Blaaiz"))
+    .ValidateOnStart();
+builder.Services.AddSingleton<IValidateOptions<BlaaizOptions>, BlaaizOptionsValidator>();
+builder.Services.AddMemoryCache();
 
 builder.Services.AddControllers();
 
 builder.Services.AddScoped<IReferenceGenerator, ReferenceGenerator>();
+builder.Services.AddScoped<IProviderRequestAuditService, ProviderRequestAuditService>();
+builder.Services.AddScoped<IBlaaizTokenService, BlaaizTokenService>();
 builder.Services.AddScoped<IRemittanceProvider, BlaaizRemittanceProvider>();
+builder.Services.AddScoped<IProviderCustomerService, ProviderCustomerService>();
+
+builder.Services.AddHttpClient("BlaaizAuth", (serviceProvider, client) =>
+{
+    var options = serviceProvider.GetRequiredService<IOptions<BlaaizOptions>>().Value;
+    client.BaseAddress = new Uri(options.BaseUrl.TrimEnd('/') + "/");
+    client.Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds);
+});
+
+builder.Services.AddHttpClient<IBlaaizApiClient, BlaaizApiClient>((serviceProvider, client) =>
+{
+    var options = serviceProvider.GetRequiredService<IOptions<BlaaizOptions>>().Value;
+    client.BaseAddress = new Uri(options.BaseUrl.TrimEnd('/') + "/");
+    client.Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds);
+});
 
 builder.Services.AddScoped<IJwtTokenService, JwtTokenService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
@@ -35,6 +60,9 @@ builder.Services.AddScoped<IRecipientService, RecipientService>();
 builder.Services.AddScoped<ITransferQuoteService, TransferQuoteService>();
 builder.Services.AddScoped<ITransferStatusService, TransferStatusService>();
 builder.Services.AddScoped<ITransferService, TransferService>();
+builder.Services.AddScoped<ICollectionPaymentMethodPolicy, CollectionPaymentMethodPolicy>();
+builder.Services.AddScoped<ICollectionStatusService, CollectionStatusService>();
+builder.Services.AddScoped<ICollectionService, CollectionService>();
 
 builder.Services.AddDbContext<AppDbContext>(options =>
 {

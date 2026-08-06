@@ -16,6 +16,12 @@ public interface ICollectionService
         CreateCollectionRequestDto request,
         CancellationToken ct = default);
 
+    Task<CollectionDetailsDto> InitiateCollectionAsync(
+        Guid userId,
+        Guid collectionId,
+        InitiateCollectionRequestDto request,
+        CancellationToken ct = default);
+
     Task<CollectionDetailsDto> GetCollectionByIdAsync(
         Guid userId,
         Guid collectionId,
