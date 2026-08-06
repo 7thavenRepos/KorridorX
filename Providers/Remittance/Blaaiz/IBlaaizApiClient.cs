@@ -14,6 +14,17 @@ public interface IBlaaizApiClient
         Guid customerProfileId,
         CancellationToken ct = default);
 
+    Task<BlaaizApiResult<BlaaizKycUploadUrlResponse>> RequestKycUploadUrlAsync(
+        BlaaizKycUploadUrlRequest request,
+        Guid customerProfileId,
+        CancellationToken ct = default);
+
+    Task<BlaaizApiResult<BlaaizMessageResponse>> AttachCustomerFilesAsync(
+        string providerCustomerId,
+        BlaaizAttachCustomerFilesRequest request,
+        Guid customerProfileId,
+        CancellationToken ct = default);
+
     Task<BlaaizApiResult<BlaaizCardCollectionResponse>> InitiateCardCollectionAsync(
         BlaaizCardCollectionRequest request,
         Guid transferId,

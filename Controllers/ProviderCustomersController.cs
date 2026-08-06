@@ -1,5 +1,4 @@
 using System.Security.Claims;
-using KorridorX.Dtos.Providers;
 using KorridorX.Infrastructure;
 using KorridorX.Services.Providers;
 using Microsoft.AspNetCore.Authorization;
@@ -17,18 +16,6 @@ public class ProviderCustomersController : ControllerBase
     public ProviderCustomersController(IProviderCustomerService service)
     {
         _service = service;
-    }
-
-    [HttpPost("sync")]
-    public async Task<IActionResult> Sync(
-        [FromBody] SyncProviderCustomerRequestDto request,
-        CancellationToken ct)
-    {
-        var result = await _service.SyncMyCustomerAsync(GetUserId(), request, ct);
-
-        return Ok(ApiResponses.Ok(
-            result,
-            "Provider customer synchronized successfully."));
     }
 
     [HttpGet]

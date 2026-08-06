@@ -55,3 +55,28 @@ public sealed record RemittanceCollectionResult(
     DateTime? ExpiresAt,
     string RawResponseJson,
     Guid ProviderRequestLogId);
+
+public sealed record RemittanceKycUploadUrlRequest(
+    Guid CustomerProfileId,
+    string ProviderCustomerId,
+    KycDocumentType DocumentType);
+
+public sealed record RemittanceKycUploadUrlResult(
+    string ProviderFileId,
+    string UploadUrl,
+    IReadOnlyDictionary<string, string> UploadHeaders,
+    string RawResponseJson,
+    Guid ProviderRequestLogId);
+
+public sealed record RemittanceKycDocumentSubmissionRequest(
+    Guid CustomerProfileId,
+    string ProviderCustomerId,
+    string IdentityFileId,
+    string? IdentityBackFileId,
+    string? ProofOfAddressFileId,
+    string? LivenessCheckFileId);
+
+public sealed record RemittanceKycDocumentSubmissionResult(
+    string ProviderStatus,
+    string RawResponseJson,
+    Guid ProviderRequestLogId);

@@ -107,6 +107,59 @@ public class BlaaizRemittanceProvider : IRemittanceProvider
             created.RequestLogId);
     }
 
+    public async Task<RemittanceKycUploadUrlResult> RequestIndividualKycUploadUrlAsync(
+        RemittanceKycUploadUrlRequest request,
+        CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(request.ProviderCustomerId))
+        {
+            throw new InvalidOperationException("Provider customer ID is required before requesting a KYC upload URL.");
+        }
+
+        var response = await _apiClient.RequestKycUploadUrlAsync(
+            new BlaaizKycUploadUrlRequest
+            {
+                CustomerId = request.ProviderCustomerId,
+                FileCategory = MapFileCategory(request.DocumentType)
+            },
+            request.CustomerProfileId,
+            ct);
+
+        return new RemittanceKycUploadUrlResult(
+            response.Data.FileId,
+            response.Data.Url,
+            response.Data.Headers,
+            response.RawResponseJson,
+            response.RequestLogId);
+    }
+
+    public async Task<RemittanceKycDocumentSubmissionResult> SubmitIndividualKycDocumentsAsync(
+        RemittanceKycDocumentSubmissionRequest request,
+        CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(request.IdentityFileId))
+        {
+            throw new InvalidOperationException("An uploaded identity-front file is required before KYC submission.");
+        }
+
+        var response = await _apiClient.AttachCustomerFilesAsync(
+            request.ProviderCustomerId,
+            new BlaaizAttachCustomerFilesRequest
+            {
+                IdentityFileId = request.IdentityFileId,
+                IdentityBackFileId = request.IdentityBackFileId,
+                ProofOfAddressFileId = request.ProofOfAddressFileId,
+                LivenessCheckFileId = request.LivenessCheckFileId
+            },
+            request.CustomerProfileId,
+            ct);
+
+        return new RemittanceKycDocumentSubmissionResult(
+            "PENDING",
+            response.RawResponseJson,
+            response.RequestLogId);
+    }
+
     public async Task<RemittanceCollectionResult> InitiateCollectionAsync(
         RemittanceCollectionRequest request,
         CancellationToken ct = default)
@@ -234,6 +287,15 @@ public class BlaaizRemittanceProvider : IRemittanceProvider
             response.RawResponseJson,
             response.RequestLogId);
     }
+
+    private static string MapFileCategory(KycDocumentType documentType) => documentType switch
+    {
+        KycDocumentType.IdentityFront => "identity",
+        KycDocumentType.IdentityBack => "identity_back",
+        KycDocumentType.ProofOfAddress => "proof_of_address",
+        KycDocumentType.LivenessCheck => "liveness_check",
+        _ => throw new InvalidOperationException("Unsupported KYC document type.")
+    };
 
     private static string NormalizeRequired(string? value, string fieldName)
     {

@@ -1,4 +1,4 @@
-﻿using System.Net;
+using System.Net;
 using System.Text.Json;
 using KorridorX.Infrastructure;
 using KorridorX.Exceptions;
@@ -38,6 +38,15 @@ public class GlobalExceptionMiddleware
                 context,
                 HttpStatusCode.BadRequest,
                 "INVALID_OPERATION",
+                ex.Message);
+        }
+        catch (JsonException ex)
+        {
+            await WriteErrorAsync(
+                context,
+                HttpStatusCode.BadRequest,
+                "INVALID_JSON",
+                "The request contains invalid JSON.",
                 ex.Message);
         }
         catch (ProviderIntegrationException ex)

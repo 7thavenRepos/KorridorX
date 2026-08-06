@@ -1,4 +1,4 @@
-﻿using KorridorX.Models.Compliance;
+using KorridorX.Models.Compliance;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -32,6 +32,8 @@ public class KycApplicationConfiguration : IEntityTypeConfiguration<KycApplicati
         builder.HasIndex(x => x.ProviderApplicationId);
 
         builder.Property(x => x.ProviderApplicationId).HasMaxLength(150);
+        builder.Property(x => x.IdentityType).HasMaxLength(50);
+        builder.Property(x => x.IdentityNumberLastFour).HasMaxLength(4);
         builder.Property(x => x.ReviewNote).HasMaxLength(1000);
 
         builder.HasOne(x => x.KycProfile)
@@ -47,7 +49,9 @@ public class KycDocumentConfiguration : IEntityTypeConfiguration<KycDocument>
     {
         builder.HasIndex(x => x.KycApplicationId);
         builder.HasIndex(x => x.DocumentType);
+        builder.HasIndex(x => x.ProviderFileId);
         builder.HasIndex(x => x.ProviderDocumentId);
+        builder.HasIndex(x => new { x.KycApplicationId, x.DocumentType }).IsUnique();
 
         builder.Property(x => x.DocumentType).HasMaxLength(100);
         builder.Property(x => x.FileName).HasMaxLength(255);
@@ -55,7 +59,9 @@ public class KycDocumentConfiguration : IEntityTypeConfiguration<KycDocument>
         builder.Property(x => x.StorageProvider).HasMaxLength(50);
         builder.Property(x => x.StorageKey).HasMaxLength(500);
         builder.Property(x => x.StorageUrl).HasMaxLength(1000);
+        builder.Property(x => x.ProviderFileId).HasMaxLength(150);
         builder.Property(x => x.ProviderDocumentId).HasMaxLength(150);
+        builder.Property(x => x.RejectionReason).HasMaxLength(1000);
 
         builder.HasOne(x => x.KycApplication)
             .WithMany(x => x.Documents)

@@ -1,9 +1,74 @@
 @KorridorX_HostAddress = http://localhost:5112
 
-GET {{KorridorX_HostAddress}}/weatherforecast/
+### Start or retrieve current KYC application
+POST {{KorridorX_HostAddress}}/api/kyc/applications/start
+Authorization: Bearer {{accessToken}}
 Accept: application/json
 
-###
+### Save KYC identity and create/refresh provider customer
+PUT {{KorridorX_HostAddress}}/api/kyc/applications/{{kycApplicationId}}/identity
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "idType": "passport",
+  "idNumber": "REPLACE_WITH_PROVIDER_TEST_ID",
+  "idIssueDate": "2024-01-01",
+  "idExpiryDate": "2030-01-01"
+}
+
+### Request identity-front upload URL
+POST {{KorridorX_HostAddress}}/api/kyc/applications/{{kycApplicationId}}/documents/upload-url
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "documentType": 1,
+  "fileName": "passport.jpg",
+  "mimeType": "image/jpeg",
+  "fileSizeBytes": 250000
+}
+
+### Upload the file directly to the returned uploadUrl
+# Use the exact headers returned by the upload-url endpoint.
+# PUT {{providerUploadUrl}}
+# Content-Type: image/jpeg
+#
+# < ./passport.jpg
+
+### Confirm provider upload
+POST {{KorridorX_HostAddress}}/api/kyc/applications/{{kycApplicationId}}/documents/{{kycDocumentId}}/confirm
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "providerFileId": "{{providerFileId}}"
+}
+
+### Submit KYC application for provider review
+POST {{KorridorX_HostAddress}}/api/kyc/applications/{{kycApplicationId}}/submit
+Authorization: Bearer {{accessToken}}
+Accept: application/json
+
+### Get current KYC status
+GET {{KorridorX_HostAddress}}/api/kyc/status
+Authorization: Bearer {{accessToken}}
+Accept: application/json
+
+### Get provider customer mapping
+GET {{KorridorX_HostAddress}}/api/customer-profile/me/provider
+Authorization: Bearer {{accessToken}}
+Accept: application/json
+
+### Admin: list KYC applications
+GET {{KorridorX_HostAddress}}/api/admin/kyc/applications?status=UnderReview&page=1&pageSize=20
+Authorization: Bearer {{adminAccessToken}}
+Accept: application/json
+
+### Admin: KYC application details
+GET {{KorridorX_HostAddress}}/api/admin/kyc/applications/{{kycApplicationId}}
+Authorization: Bearer {{adminAccessToken}}
+Accept: application/json
 
 ### Get available funding methods for a transfer
 GET {{KorridorX_HostAddress}}/api/transfers/{{transferId}}/collection-methods
@@ -29,26 +94,7 @@ GET {{KorridorX_HostAddress}}/api/collections?page=1&pageSize=20
 Authorization: Bearer {{accessToken}}
 Accept: application/json
 
-### Synchronize current customer with Blaaiz
-POST {{KorridorX_HostAddress}}/api/customer-profile/me/provider/sync
-Authorization: Bearer {{accessToken}}
-Content-Type: application/json
-
-{
-  "idType": "passport",
-  "idNumber": "REPLACE_WITH_TEST_ID_NUMBER",
-  "idIssueDate": "2024-01-01",
-  "idExpiryDate": "2030-01-01"
-}
-
-### Refresh/retrieve synchronized provider customer status
-POST {{KorridorX_HostAddress}}/api/customer-profile/me/provider/sync
-Authorization: Bearer {{accessToken}}
-Content-Type: application/json
-
-{}
-
-### Initiate an Interac collection
+### Initiate an Interac collection (requires approved KYC)
 POST {{KorridorX_HostAddress}}/api/collections/{{collectionId}}/initiate
 Authorization: Bearer {{accessToken}}
 Content-Type: application/json
@@ -59,8 +105,7 @@ Content-Type: application/json
   "interacExpiryHours": 48
 }
 
-### Initiate a card collection
-# Card details are transmitted directly to Blaaiz and are never persisted by KorridorX.
+### Initiate a card collection (requires approved KYC)
 POST {{KorridorX_HostAddress}}/api/collections/{{collectionId}}/initiate
 Authorization: Bearer {{accessToken}}
 Content-Type: application/json

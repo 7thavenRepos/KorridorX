@@ -7,12 +7,14 @@ using KorridorX.Models.Identity;
 using KorridorX.Providers.Remittance;
 using KorridorX.Providers.Remittance.Blaaiz;
 using KorridorX.Services.Auth;
+using KorridorX.Services.Compliance;
 using KorridorX.Services.Fx;
 using KorridorX.Services.Payments;
 using KorridorX.Services.Recipients;
 using KorridorX.Services.References;
 using KorridorX.Services.Transfers;
 using KorridorX.Services.Providers;
+using KorridorX.Services.Webhooks;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -38,6 +40,10 @@ builder.Services.AddScoped<IProviderRequestAuditService, ProviderRequestAuditSer
 builder.Services.AddScoped<IBlaaizTokenService, BlaaizTokenService>();
 builder.Services.AddScoped<IRemittanceProvider, BlaaizRemittanceProvider>();
 builder.Services.AddScoped<IProviderCustomerService, ProviderCustomerService>();
+builder.Services.AddScoped<IKycService, KycService>();
+builder.Services.AddScoped<IComplianceGateService, ComplianceGateService>();
+builder.Services.AddScoped<IAdminKycService, AdminKycService>();
+builder.Services.AddScoped<IBlaaizWebhookService, BlaaizWebhookService>();
 
 builder.Services.AddHttpClient("BlaaizAuth", (serviceProvider, client) =>
 {

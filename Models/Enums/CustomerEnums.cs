@@ -1,4 +1,4 @@
-﻿namespace KorridorX.Models.Enums;
+namespace KorridorX.Models.Enums;
 
 public enum CustomerType
 {
@@ -24,4 +24,12 @@ public enum KybStatus
     Approved = 4,
     Rejected = 5,
     Expired = 6
+}
+
+public enum KycDocumentType
+{
+    IdentityFront = 1,
+    IdentityBack = 2,
+    ProofOfAddress = 3,
+    LivenessCheck = 4
 }

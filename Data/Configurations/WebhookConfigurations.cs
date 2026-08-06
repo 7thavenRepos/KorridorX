@@ -1,4 +1,4 @@
-﻿using KorridorX.Models.Webhooks;
+using KorridorX.Models.Webhooks;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -9,7 +9,7 @@ public class WebhookEventConfiguration : IEntityTypeConfiguration<WebhookEvent>
     public void Configure(EntityTypeBuilder<WebhookEvent> builder)
     {
         builder.HasIndex(x => x.ProviderCode);
-        builder.HasIndex(x => x.ProviderEventId);
+        builder.HasIndex(x => new { x.ProviderCode, x.ProviderEventId }).IsUnique();
         builder.HasIndex(x => x.EventType);
         builder.HasIndex(x => x.ProcessingStatus);
         builder.HasIndex(x => x.ReceivedAt);
@@ -17,6 +17,7 @@ public class WebhookEventConfiguration : IEntityTypeConfiguration<WebhookEvent>
         builder.Property(x => x.ProviderEventId).HasMaxLength(150);
         builder.Property(x => x.EventType).HasMaxLength(150);
         builder.Property(x => x.SignatureHeader).HasMaxLength(1000);
+        builder.Property(x => x.TimestampHeader).HasMaxLength(100);
         builder.Property(x => x.ErrorMessage).HasMaxLength(2000);
     }
 }

@@ -1,24 +1,34 @@
-# Blaaiz Core Integration
+# Blaaiz Integration
 
 ## Configuration
 
-Set the following under `Blaaiz` in `appsettings.Development.json` or user secrets:
+Set the following under `Blaaiz` in `appsettings.Development.json`, user secrets, or environment variables:
 
 - `IsEnabled`: enables live provider calls.
-- `BaseUrl`: use `https://api-dev.blaaiz.com` for sandbox or `https://api-prod.blaaiz.com` for production.
+- `BaseUrl`: sandbox or production API base URL.
 - `ClientId` and `ClientSecret`: OAuth client credentials.
-- `Scopes`: space-separated OAuth scopes assigned to the credentials.
-- `CollectionWalletIds`: business wallet IDs keyed by currency. A wallet ID is required for API card collections.
+- `Scopes`: must include `customer:read`, `customer:write`, and `file:upload` for individual KYC, plus the collection scopes used by the platform.
+- `WebhookSigningSecret`: the dedicated webhook signing secret, not the OAuth client secret.
+- `WebhookTimestampToleranceMinutes`: replay-window tolerance for signed webhooks.
+- `CollectionWalletIds`: business wallet IDs keyed by currency.
 
 Do not commit real credentials. Prefer .NET user secrets locally and environment variables in deployed environments.
 
-## Customer synchronization
+## Customer and KYC synchronization
 
-`POST /api/customer-profile/me/provider/sync`
+Provider customer creation is now orchestrated by the KorridorX KYC flow. The customer-facing provider-sync POST endpoint has been removed to prevent a parallel onboarding path.
 
-For a new individual provider customer, supply `idType`, `idNumber`, `idIssueDate`, and `idExpiryDate`. Once a provider customer already exists, send an empty object to refresh its status from Blaaiz.
+Use the endpoints under `/api/kyc` to create the provider customer, request document upload URLs, attach provider file IDs, and submit the application.
 
-KorridorX masks identity numbers in provider request and response logs.
+`GET /api/customer-profile/me/provider` remains available as a read-only diagnostic endpoint.
+
+## Webhooks
+
+Register this URL as the Blaaiz `collection_url`:
+
+`POST /api/webhooks/blaaiz/collection`
+
+The endpoint validates both `x-blaaiz-signature` and `x-blaaiz-timestamp`, stores each event, rejects replayed or invalid requests, and processes `customer.status_changed` idempotently.
 
 ## Collection initiation
 
@@ -30,13 +40,10 @@ Then initiate it:
 
 `POST /api/collections/{collectionId}/initiate`
 
-Live initiation currently supports:
+Live provider initiation is blocked until:
 
-- `Card`: requires a configured currency wallet, card details, and a provider customer whose status is `VERIFIED`.
-- `Interac`: requires a CAD collection and payer email. Settlement remains asynchronous until webhook confirmation.
+- KorridorX `CustomerProfile.KycStatus` is `Approved`.
+- The linked `KycProfile.Status` is `Approved`.
+- The provider customer status is `VERIFIED`.
 
 Card numbers and CVC values are sent to Blaaiz but are never stored in collection attempts or provider request logs.
-
-## Database migration
-
-This milestone adds `Collection.ProviderExpiresAt` and a unique provider/customer-profile index. Create and apply a migration locally.

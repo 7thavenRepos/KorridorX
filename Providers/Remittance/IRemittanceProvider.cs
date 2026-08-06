@@ -16,4 +16,12 @@ public interface IRemittanceProvider
     Task<RemittanceCollectionResult> InitiateCollectionAsync(
         RemittanceCollectionRequest request,
         CancellationToken ct = default);
+
+    Task<RemittanceKycUploadUrlResult> RequestIndividualKycUploadUrlAsync(
+        RemittanceKycUploadUrlRequest request,
+        CancellationToken ct = default);
+
+    Task<RemittanceKycDocumentSubmissionResult> SubmitIndividualKycDocumentsAsync(
+        RemittanceKycDocumentSubmissionRequest request,
+        CancellationToken ct = default);
 }

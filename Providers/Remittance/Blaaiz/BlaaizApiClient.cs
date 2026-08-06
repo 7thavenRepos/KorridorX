@@ -87,6 +87,59 @@ public class BlaaizApiClient : IBlaaizApiClient
             ct);
     }
 
+    public Task<BlaaizApiResult<BlaaizKycUploadUrlResponse>> RequestKycUploadUrlAsync(
+        BlaaizKycUploadUrlRequest request,
+        Guid customerProfileId,
+        CancellationToken ct = default)
+    {
+        var auditBody = JsonSerializer.Serialize(new
+        {
+            customer_id = request.CustomerId,
+            file_category = request.FileCategory,
+            customerProfileId
+        });
+
+        return SendAsync<BlaaizKycUploadUrlRequest, BlaaizKycUploadUrlResponse>(
+            HttpMethod.Post,
+            "/api/external/file/get-presigned-url",
+            request,
+            auditBody,
+            null,
+            null,
+            null,
+            RedactUploadUrlResponse,
+            ct);
+    }
+
+    public Task<BlaaizApiResult<BlaaizMessageResponse>> AttachCustomerFilesAsync(
+        string providerCustomerId,
+        BlaaizAttachCustomerFilesRequest request,
+        Guid customerProfileId,
+        CancellationToken ct = default)
+    {
+        var endpoint = $"/api/external/customer/{Uri.EscapeDataString(providerCustomerId)}/files";
+        var auditBody = JsonSerializer.Serialize(new
+        {
+            customerProfileId,
+            providerCustomerId,
+            id_file = request.IdentityFileId,
+            id_file_back = request.IdentityBackFileId,
+            proof_of_address_file = request.ProofOfAddressFileId,
+            liveness_check_file = request.LivenessCheckFileId
+        });
+
+        return SendAsync<BlaaizAttachCustomerFilesRequest, BlaaizMessageResponse>(
+            HttpMethod.Post,
+            endpoint,
+            request,
+            auditBody,
+            null,
+            null,
+            null,
+            null,
+            ct);
+    }
+
     public Task<BlaaizApiResult<BlaaizCardCollectionResponse>> InitiateCardCollectionAsync(
         BlaaizCardCollectionRequest request,
         Guid transferId,
@@ -313,6 +366,29 @@ public class BlaaizApiClient : IBlaaizApiClient
                 : null;
 
             return JsonSerializer.Serialize(new { message, data = sanitized }, SerializerOptions);
+        }
+        catch (JsonException)
+        {
+            return rawResponse;
+        }
+    }
+
+    private static string RedactUploadUrlResponse(string rawResponse)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(rawResponse);
+            var root = document.RootElement;
+
+            return JsonSerializer.Serialize(new
+            {
+                message = root.TryGetProperty("message", out var message) ? message.GetString() : null,
+                file_id = root.TryGetProperty("file_id", out var fileId) ? fileId.GetString() : null,
+                url = root.TryGetProperty("url", out _) ? "***PRESIGNED_URL_REDACTED***" : null,
+                headers = root.TryGetProperty("headers", out var headers)
+                    ? JsonSerializer.Deserialize<object?>(headers.GetRawText(), SerializerOptions)
+                    : null
+            }, SerializerOptions);
         }
         catch (JsonException)
         {

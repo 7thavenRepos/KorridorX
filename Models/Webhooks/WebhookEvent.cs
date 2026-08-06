@@ -1,4 +1,4 @@
-﻿using KorridorX.Models.Common;
+using KorridorX.Models.Common;
 using KorridorX.Models.Enums;
 
 namespace KorridorX.Models.Webhooks;
@@ -11,6 +11,7 @@ public class WebhookEvent : BaseEntity
     public string EventType { get; set; } = "";
 
     public string? SignatureHeader { get; set; }
+    public string? TimestampHeader { get; set; }
     public string RawPayloadJson { get; set; } = "";
 
     public WebhookProcessingStatus ProcessingStatus { get; set; } = WebhookProcessingStatus.Pending;

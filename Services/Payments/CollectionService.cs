@@ -12,6 +12,7 @@ using KorridorX.Providers.Remittance;
 using KorridorX.Exceptions;
 using KorridorX.Models.Transfers;
 using KorridorX.Services.References;
+using KorridorX.Services.Compliance;
 using Microsoft.EntityFrameworkCore;
 
 namespace KorridorX.Services.Payments;
@@ -23,6 +24,7 @@ public class CollectionService : ICollectionService
     private readonly ICollectionPaymentMethodPolicy _paymentMethodPolicy;
     private readonly ICollectionStatusService _collectionStatusService;
     private readonly IRemittanceProvider _remittanceProvider;
+    private readonly IComplianceGateService _complianceGateService;
     private readonly IReadOnlyDictionary<string, string> collectionWalletIds;
 
     public CollectionService(
@@ -31,6 +33,7 @@ public class CollectionService : ICollectionService
         ICollectionPaymentMethodPolicy paymentMethodPolicy,
         ICollectionStatusService collectionStatusService,
         IRemittanceProvider remittanceProvider,
+        IComplianceGateService complianceGateService,
         IOptions<BlaaizOptions> blaaizOptions)
     {
         _db = db;
@@ -38,6 +41,7 @@ public class CollectionService : ICollectionService
         _paymentMethodPolicy = paymentMethodPolicy;
         _collectionStatusService = collectionStatusService;
         _remittanceProvider = remittanceProvider;
+        _complianceGateService = complianceGateService;
         collectionWalletIds = blaaizOptions.Value.CollectionWalletIds;
     }
 
@@ -222,31 +226,11 @@ public class CollectionService : ICollectionService
         }
 
         var profile = collection.Transfer.CustomerProfile;
-        var providerCustomer = await _db.ProviderCustomers
-            .AsNoTracking()
-            .FirstOrDefaultAsync(x =>
-                x.CustomerProfileId == profile.Id &&
-                x.ProviderCode == _remittanceProvider.ProviderCode &&
-                !x.IsDeleted,
-                ct);
 
-        if (collection.PaymentMethod == PaymentMethod.Card)
-        {
-            if (providerCustomer is null)
-            {
-                throw new InvalidOperationException(
-                    "Synchronize the customer with Blaaiz before initiating a card collection.");
-            }
-
-            if (!string.Equals(
-                    providerCustomer.ProviderStatus,
-                    "VERIFIED",
-                    StringComparison.OrdinalIgnoreCase))
-            {
-                throw new InvalidOperationException(
-                    "The Blaaiz customer must be VERIFIED before a card collection can be initiated.");
-            }
-        }
+        var complianceGate = await _complianceGateService.EnsureCanInitiateMoneyMovementAsync(
+            profile.Id,
+            _remittanceProvider.ProviderCode,
+            ct);
 
         var email = request.PayerEmail ?? profile.Email ?? profile.User.Email;
         if (string.IsNullOrWhiteSpace(email))
@@ -310,7 +294,7 @@ public class CollectionService : ICollectionService
                     collection.PaymentMethod,
                     collection.Amount,
                     collection.CurrencyCode,
-                    providerCustomer?.ProviderCustomerId,
+                    complianceGate.ProviderCustomerId,
                     email,
                     customerName,
                     profile.PhoneNumber,

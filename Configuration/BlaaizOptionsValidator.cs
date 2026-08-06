@@ -39,6 +39,11 @@ public class BlaaizOptionsValidator : IValidateOptions<BlaaizOptions>
             errors.Add("Blaaiz:Scopes is required when Blaaiz is enabled.");
         }
 
+        if (string.IsNullOrWhiteSpace(options.WebhookSigningSecret))
+        {
+            errors.Add("Blaaiz:WebhookSigningSecret is required when Blaaiz is enabled.");
+        }
+
         if (options.TimeoutSeconds is < 5 or > 120)
         {
             errors.Add("Blaaiz:TimeoutSeconds must be between 5 and 120.");
@@ -47,6 +52,11 @@ public class BlaaizOptionsValidator : IValidateOptions<BlaaizOptions>
         if (options.TokenRefreshBufferSeconds is < 0 or > 300)
         {
             errors.Add("Blaaiz:TokenRefreshBufferSeconds must be between 0 and 300.");
+        }
+
+        if (options.WebhookTimestampToleranceMinutes is < 1 or > 30)
+        {
+            errors.Add("Blaaiz:WebhookTimestampToleranceMinutes must be between 1 and 30.");
         }
 
         return errors.Count == 0
