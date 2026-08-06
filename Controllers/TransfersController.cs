@@ -67,6 +67,25 @@ public class TransfersController : ControllerBase
             "Transfers retrieved successfully."));
     }
 
+    [HttpPost("{transferId:guid}/cancel")]
+    public async Task<IActionResult> CancelTransfer(
+        [FromRoute] Guid transferId,
+        [FromBody] CancelTransferRequestDto request,
+        CancellationToken ct)
+    {
+        var userId = GetUserId();
+
+        var result = await _transferService.CancelTransferAsync(
+            userId,
+            transferId,
+            request,
+            ct);
+
+        return Ok(ApiResponses.Ok(
+            result,
+            "Transfer cancelled successfully."));
+    }
+
     private Guid GetUserId()
     {
         var userIdValue = User.FindFirstValue(ClaimTypes.NameIdentifier);

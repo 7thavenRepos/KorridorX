@@ -1,4 +1,4 @@
-﻿using KorridorX.Data;
+using KorridorX.Data;
 using KorridorX.Dtos.Transfers;
 using KorridorX.Extensions;
 using KorridorX.Infrastructure;
@@ -13,13 +13,16 @@ public class TransferService : ITransferService
 {
     private readonly AppDbContext _db;
     private readonly IReferenceGenerator _referenceGenerator;
+    private readonly ITransferStatusService _transferStatusService;
 
     public TransferService(
         AppDbContext db,
-        IReferenceGenerator referenceGenerator)
+        IReferenceGenerator referenceGenerator,
+        ITransferStatusService transferStatusService)
     {
         _db = db;
         _referenceGenerator = referenceGenerator;
+        _transferStatusService = transferStatusService;
     }
 
     public async Task<TransferDetailsDto> CreateTransferAsync(
@@ -154,7 +157,7 @@ public class TransferService : ITransferService
             ProviderRate = quote.ProviderRate,
 
             ProviderCode = quote.ProviderCode,
-            Status = TransferStatus.PendingPayment,
+            Status = TransferStatus.Draft,
 
             CreatedByUserId = userId
         };
@@ -164,27 +167,18 @@ public class TransferService : ITransferService
         quote.LastUpdatedAt = DateTime.UtcNow;
         quote.LastUpdatedByUserId = userId;
 
-        var statusHistory = new TransferStatusHistory
-        {
-            TransferId = transfer.Id,
-            OldStatus = TransferStatus.Draft,
-            NewStatus = TransferStatus.PendingPayment,
-            Reason = "Transfer created from accepted quote.",
-            Source = "Customer",
-            ChangedByUserId = userId
-        };
-
-        var timelineEvent = new TransferTimelineEvent
-        {
-            TransferId = transfer.Id,
-            EventType = "TRANSFER_CREATED",
-            Title = "Transfer created",
-            Description = "Your transfer has been created and is pending payment."
-        };
-
         _db.Transfers.Add(transfer);
-        _db.TransferStatusHistories.Add(statusHistory);
-        _db.TransferTimelineEvents.Add(timelineEvent);
+
+        _transferStatusService.ApplyTransition(
+            transfer,
+            TransferStatus.PendingPayment,
+            new TransferStatusTransitionContext(
+                Source: "Customer",
+                Reason: "Transfer created from accepted quote.",
+                ChangedByUserId: userId,
+                EventType: "TRANSFER_CREATED",
+                Title: "Transfer created",
+                Description: "Your transfer has been created and is pending payment."));
 
         await _db.SaveChangesAsync(ct);
         await tx.CommitAsync(ct);
@@ -276,6 +270,67 @@ public class TransferService : ITransferService
                 x.CreatedAt,
                 x.LastUpdatedAt))
             .PaginateAsync(page, pageSize, ct);
+    }
+
+    public async Task<TransferDetailsDto> CancelTransferAsync(
+        Guid userId,
+        Guid transferId,
+        CancelTransferRequestDto request,
+        CancellationToken ct = default)
+    {
+        var reason = string.IsNullOrWhiteSpace(request.Reason)
+            ? "Cancelled by customer."
+            : request.Reason.Trim();
+
+        if (reason.Length > 1000)
+        {
+            throw new InvalidOperationException("Cancellation reason cannot exceed 1000 characters.");
+        }
+
+        await using var tx = await _db.Database.BeginTransactionAsync(ct);
+
+        var transfer = await _db.Transfers
+            .Include(x => x.CustomerProfile)
+            .FirstOrDefaultAsync(x =>
+                x.Id == transferId &&
+                x.CustomerProfile.UserId == userId &&
+                !x.IsDeleted,
+                ct);
+
+        if (transfer is null)
+        {
+            throw new InvalidOperationException("Transfer not found.");
+        }
+
+        if (transfer.Status == TransferStatus.Cancelled)
+        {
+            await tx.CommitAsync(ct);
+            return await GetTransferByIdAsync(userId, transfer.Id, ct);
+        }
+
+        _transferStatusService.ApplyTransition(
+            transfer,
+            TransferStatus.Cancelled,
+            new TransferStatusTransitionContext(
+                Source: "Customer",
+                Reason: reason,
+                ChangedByUserId: userId,
+                EventType: "TRANSFER_CANCELLED",
+                Title: "Transfer cancelled",
+                Description: reason));
+
+        try
+        {
+            await _db.SaveChangesAsync(ct);
+            await tx.CommitAsync(ct);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            throw new InvalidOperationException(
+                "The transfer status changed while the cancellation was being processed. Please refresh and try again.");
+        }
+
+        return await GetTransferByIdAsync(userId, transfer.Id, ct);
     }
 
     private async Task<string> GenerateUniqueTransferReferenceAsync(CancellationToken ct)

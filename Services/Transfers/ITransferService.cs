@@ -20,4 +20,10 @@ public interface ITransferService
         int page,
         int pageSize,
         CancellationToken ct = default);
+
+    Task<TransferDetailsDto> CancelTransferAsync(
+        Guid userId,
+        Guid transferId,
+        CancelTransferRequestDto request,
+        CancellationToken ct = default);
 }

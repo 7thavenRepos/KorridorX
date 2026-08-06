@@ -33,6 +33,7 @@ builder.Services.AddScoped<IAuthService, AuthService>();
 
 builder.Services.AddScoped<IRecipientService, RecipientService>();
 builder.Services.AddScoped<ITransferQuoteService, TransferQuoteService>();
+builder.Services.AddScoped<ITransferStatusService, TransferStatusService>();
 builder.Services.AddScoped<ITransferService, TransferService>();
 
 builder.Services.AddDbContext<AppDbContext>(options =>

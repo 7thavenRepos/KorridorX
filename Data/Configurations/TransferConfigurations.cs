@@ -29,6 +29,7 @@ public class TransferConfiguration : IEntityTypeConfiguration<Transfer>
         builder.Property(x => x.ProviderTransferId).HasMaxLength(150);
         builder.Property(x => x.ProviderReference).HasMaxLength(150);
         builder.Property(x => x.FailureReason).HasMaxLength(1000);
+        builder.Property(x => x.Status).IsConcurrencyToken();
 
         builder.Property(x => x.SourceAmount).HasPrecision(18, 2);
         builder.Property(x => x.DestinationAmount).HasPrecision(18, 2);
