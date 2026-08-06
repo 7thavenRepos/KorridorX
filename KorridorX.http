@@ -124,3 +124,93 @@ Content-Type: application/json
 GET {{KorridorX_HostAddress}}/api/providers/blaaiz/health
 Authorization: Bearer {{adminAccessToken}}
 Accept: application/json
+
+### Get my payouts
+GET {{KorridorX_HostAddress}}/api/payouts?page=1&pageSize=20
+Authorization: Bearer {{accessToken}}
+Accept: application/json
+
+### Get payout for a transfer
+GET {{KorridorX_HostAddress}}/api/transfers/{{transferId}}/payout
+Authorization: Bearer {{accessToken}}
+Accept: application/json
+
+### Get payout details
+GET {{KorridorX_HostAddress}}/api/payouts/{{payoutId}}
+Authorization: Bearer {{accessToken}}
+Accept: application/json
+
+### Operations: manually dispatch a funded transfer payout
+POST {{KorridorX_HostAddress}}/api/admin/transfers/{{transferId}}/payout/dispatch
+Authorization: Bearer {{adminAccessToken}}
+Accept: application/json
+
+### Operations: reconcile pending Blaaiz transactions
+POST {{KorridorX_HostAddress}}/api/admin/providers/blaaiz/reconcile?batchSize=50
+Authorization: Bearer {{adminAccessToken}}
+Accept: application/json
+
+### Blaaiz collection webhook
+# POST {{KorridorX_HostAddress}}/api/webhooks/blaaiz/collection
+# x-blaaiz-signature: {{blaaizSignature}}
+# x-blaaiz-timestamp: {{blaaizTimestamp}}
+# Content-Type: application/json
+#
+# {{signedBlaaizCollectionPayload}}
+
+### Blaaiz payout webhook
+# POST {{KorridorX_HostAddress}}/api/webhooks/blaaiz/payout
+# x-blaaiz-signature: {{blaaizSignature}}
+# x-blaaiz-timestamp: {{blaaizTimestamp}}
+# Content-Type: application/json
+#
+# {{signedBlaaizPayoutPayload}}
+
+### Synchronize NGN banks (Admin/Operations)
+POST {{KorridorX_HostAddress}}/api/admin/providers/blaaiz/banks/sync?countryCode=NG&currencyCode=NGN
+Authorization: Bearer {{accessToken}}
+
+### List synchronized banks
+GET {{KorridorX_HostAddress}}/api/lookups/banks?countryCode=NG&page=1&pageSize=100
+Authorization: Bearer {{accessToken}}
+
+### Verify a recipient bank account
+POST {{KorridorX_HostAddress}}/api/recipients/{{recipientId}}/bank-accounts/{{bankAccountId}}/verify
+Authorization: Bearer {{accessToken}}
+
+### Provider transaction monitoring
+GET {{KorridorX_HostAddress}}/api/admin/providers/transactions?page=1&pageSize=20
+Authorization: Bearer {{accessToken}}
+
+### Provider request monitoring
+GET {{KorridorX_HostAddress}}/api/admin/providers/requests?page=1&pageSize=20
+Authorization: Bearer {{accessToken}}
+
+### Webhook monitoring
+GET {{KorridorX_HostAddress}}/api/admin/providers/webhooks?page=1&pageSize=20
+Authorization: Bearer {{accessToken}}
+
+### Reconcile one provider transaction
+POST {{KorridorX_HostAddress}}/api/admin/providers/transactions/{{providerTransactionRowId}}/reconcile
+Authorization: Bearer {{accessToken}}
+
+### Ask Blaaiz to replay one transaction webhook
+POST {{KorridorX_HostAddress}}/api/admin/providers/transactions/{{providerTransactionRowId}}/webhook-replay
+Authorization: Bearer {{accessToken}}
+
+### Retry a failed payout
+POST {{KorridorX_HostAddress}}/api/admin/payouts/{{payoutId}}/retry
+Authorization: Bearer {{accessToken}}
+
+### Initiate a supported collection refund
+POST {{KorridorX_HostAddress}}/api/admin/collections/{{collectionId}}/refund
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "reason": "Recipient payout could not be completed."
+}
+
+### Refresh provider refund status
+POST {{KorridorX_HostAddress}}/api/admin/collections/{{collectionId}}/refund/refresh
+Authorization: Bearer {{accessToken}}

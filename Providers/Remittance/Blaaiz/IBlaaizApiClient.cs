@@ -4,6 +4,31 @@ namespace KorridorX.Providers.Remittance.Blaaiz;
 
 public interface IBlaaizApiClient
 {
+
+    Task<BlaaizApiResult<List<BlaaizBankData>>> ListBanksAsync(
+        string? countryCode = null,
+        string? currencyCode = null,
+        CancellationToken ct = default);
+
+    Task<BlaaizApiResult<BlaaizResolveBankAccountResponse>> ResolveBankAccountAsync(
+        BlaaizResolveBankAccountRequest request,
+        CancellationToken ct = default);
+
+    Task<BlaaizApiResult<BlaaizWebhookReplayResponse>> ReplayWebhookAsync(
+        BlaaizWebhookReplayRequest request,
+        CancellationToken ct = default);
+
+    Task<BlaaizApiResult<BlaaizRefundEnvelope>> InitiateRefundAsync(
+        BlaaizRefundRequest request,
+        Guid? transferId = null,
+        Guid? collectionId = null,
+        CancellationToken ct = default);
+
+    Task<BlaaizApiResult<BlaaizRefundEnvelope>> GetRefundAsync(
+        string providerRefundId,
+        Guid? transferId = null,
+        Guid? collectionId = null,
+        CancellationToken ct = default);
     Task<BlaaizApiResult<BlaaizCustomerEnvelope>> CreateCustomerAsync(
         BlaaizCreateCustomerRequest request,
         Guid customerProfileId,
@@ -35,5 +60,18 @@ public interface IBlaaizApiClient
         BlaaizInteracMoneyRequest request,
         Guid transferId,
         Guid collectionId,
+        CancellationToken ct = default);
+
+    Task<BlaaizApiResult<BlaaizPayoutResponse>> InitiatePayoutAsync(
+        BlaaizPayoutRequest request,
+        Guid transferId,
+        Guid payoutId,
+        CancellationToken ct = default);
+
+    Task<BlaaizApiResult<BlaaizTransactionEnvelope>> GetTransactionAsync(
+        string providerTransactionIdOrReference,
+        Guid? transferId = null,
+        Guid? collectionId = null,
+        Guid? payoutId = null,
         CancellationToken ct = default);
 }

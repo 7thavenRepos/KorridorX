@@ -80,3 +80,89 @@ public sealed record RemittanceKycDocumentSubmissionResult(
     string ProviderStatus,
     string RawResponseJson,
     Guid ProviderRequestLogId);
+
+
+public sealed record RemittancePayoutRequest(
+    Guid TransferId,
+    Guid PayoutId,
+    PaymentMethod PaymentMethod,
+    decimal DestinationAmount,
+    string SourceCurrencyCode,
+    string DestinationCurrencyCode,
+    string ProviderCustomerId,
+    string WalletId,
+    string RecipientFirstName,
+    string RecipientLastName,
+    string? RecipientEmail,
+    string? RecipientPhoneNumber,
+    string? BankId,
+    string? BankName,
+    string? AccountName,
+    string? AccountNumber,
+    string? RoutingNumber,
+    string? SortCode,
+    string? Iban,
+    string? SwiftBic,
+    string? Note);
+
+public sealed record RemittancePayoutResult(
+    string ProviderTransactionId,
+    string? ProviderReference,
+    string ProviderStatus,
+    string CurrencyCode,
+    decimal Amount,
+    string? InteracQuestion,
+    string? InteracAnswer,
+    DateTime? ProviderCreatedAt,
+    string RawResponseJson,
+    Guid ProviderRequestLogId);
+
+public sealed record RemittanceTransactionStatusResult(
+    string ProviderTransactionId,
+    string? ProviderReference,
+    string TransactionType,
+    string ProviderStatus,
+    string CurrencyCode,
+    decimal Amount,
+    string? FailureReason,
+    DateTime? ProviderCreatedAt,
+    string RawResponseJson,
+    Guid ProviderRequestLogId);
+
+
+public sealed record RemittanceBank(
+    string ProviderBankId,
+    string Name,
+    string Code,
+    string? NationalBankCode,
+    string? ProviderCountryId,
+    string CountryCode,
+    string? CountryName,
+    string RawResponseJson);
+
+public sealed record RemittanceBankAccountResolutionResult(
+    string ProviderBankId,
+    string AccountNumber,
+    string AccountName,
+    string RawResponseJson,
+    Guid ProviderRequestLogId);
+
+public sealed record RemittanceWebhookReplayResult(
+    string ProviderTransactionId,
+    string Message,
+    string RawResponseJson,
+    Guid ProviderRequestLogId);
+
+public sealed record RemittanceRefundResult(
+    string ProviderRefundId,
+    string ProviderStatus,
+    decimal Amount,
+    string CurrencyCode,
+    string OriginalTransactionId,
+    string? ProviderReference,
+    string? ProviderRefundReference,
+    string? FailureReason,
+    DateTime? ProviderCreatedAt,
+    DateTime? ProviderUpdatedAt,
+    string RawResponseJson,
+    Guid ProviderRequestLogId);

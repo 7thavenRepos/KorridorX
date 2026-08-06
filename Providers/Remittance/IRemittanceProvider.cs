@@ -9,6 +9,34 @@ public interface IRemittanceProvider
 
     Task<bool> IsAvailableAsync(CancellationToken ct = default);
 
+    Task<IReadOnlyList<RemittanceBank>> GetBanksAsync(
+        string? countryCode = null,
+        string? currencyCode = null,
+        CancellationToken ct = default);
+
+    Task<RemittanceBankAccountResolutionResult> ResolveBankAccountAsync(
+        string providerBankId,
+        string accountNumber,
+        CancellationToken ct = default);
+
+    Task<RemittanceWebhookReplayResult> ReplayWebhookAsync(
+        string providerTransactionId,
+        CancellationToken ct = default);
+
+    Task<RemittanceRefundResult> InitiateRefundAsync(
+        string providerCollectionTransactionId,
+        string reference,
+        string? reason = null,
+        Guid? transferId = null,
+        Guid? collectionId = null,
+        CancellationToken ct = default);
+
+    Task<RemittanceRefundResult> GetRefundAsync(
+        string providerRefundId,
+        Guid? transferId = null,
+        Guid? collectionId = null,
+        CancellationToken ct = default);
+
     Task<RemittanceProviderCustomerResult> SyncIndividualCustomerAsync(
         RemittanceProviderCustomerRequest request,
         CancellationToken ct = default);
@@ -23,5 +51,16 @@ public interface IRemittanceProvider
 
     Task<RemittanceKycDocumentSubmissionResult> SubmitIndividualKycDocumentsAsync(
         RemittanceKycDocumentSubmissionRequest request,
+        CancellationToken ct = default);
+
+    Task<RemittancePayoutResult> InitiatePayoutAsync(
+        RemittancePayoutRequest request,
+        CancellationToken ct = default);
+
+    Task<RemittanceTransactionStatusResult> GetTransactionAsync(
+        string providerTransactionIdOrReference,
+        Guid? transferId = null,
+        Guid? collectionId = null,
+        Guid? payoutId = null,
         CancellationToken ct = default);
 }

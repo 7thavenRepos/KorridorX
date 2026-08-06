@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Identity;
 
 namespace KorridorX.Data.Seed;
 
@@ -17,6 +17,7 @@ public static class RoleSeeder
             "BusinessAdmin",
             "Compliance",
             "Support",
+            "Operations",
             "Admin",
             "SuperAdmin"
         };

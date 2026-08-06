@@ -207,7 +207,9 @@ public class CollectionService : ICollectionService
             return ToDetailsDto(collection);
         }
 
-        if (collection.Status is not CollectionStatus.Pending and not CollectionStatus.Failed)
+        if (collection.Status is not CollectionStatus.Pending and
+            not CollectionStatus.Failed and
+            not CollectionStatus.Expired)
         {
             throw new InvalidOperationException(
                 $"Collection cannot be initiated while its status is '{collection.Status}'.");
@@ -432,6 +434,14 @@ public class CollectionService : ICollectionService
                 x.InitiatedAt,
                 x.ConfirmedAt,
                 x.FailedAt,
+                x.ExpiredAt,
+                x.RefundInitiatedAt,
+                x.RefundedAt,
+                x.ProviderRefundId,
+                x.ProviderRefundReference,
+                x.RefundReason,
+                x.RefundFailureReason,
+                x.LastRefundSyncedAt,
                 x.FailureReason,
                 x.CreatedAt,
                 x.LastUpdatedAt))
@@ -590,6 +600,14 @@ public class CollectionService : ICollectionService
             collection.InitiatedAt,
             collection.ConfirmedAt,
             collection.FailedAt,
+            collection.ExpiredAt,
+            collection.RefundInitiatedAt,
+            collection.RefundedAt,
+            collection.ProviderRefundId,
+            collection.ProviderRefundReference,
+            collection.RefundReason,
+            collection.RefundFailureReason,
+            collection.LastRefundSyncedAt,
             collection.FailureReason,
             collection.CreatedAt,
             collection.LastUpdatedAt);

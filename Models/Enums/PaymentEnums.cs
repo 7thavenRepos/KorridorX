@@ -1,4 +1,4 @@
-﻿namespace KorridorX.Models.Enums;
+namespace KorridorX.Models.Enums;
 
 public enum CollectionStatus
 {
@@ -8,7 +8,10 @@ public enum CollectionStatus
     Successful = 4,
     Failed = 5,
     Cancelled = 6,
-    Refunded = 7
+    Refunded = 7,
+    RefundPending = 8,
+    Expired = 9,
+    RefundFailed = 10
 }
 
 public enum PayoutStatus

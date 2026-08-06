@@ -70,6 +70,7 @@ public class TransferStatusService : ITransferStatusService
 
             [TransferStatus.RefundPending] =
             [
+                TransferStatus.Processing,
                 TransferStatus.Refunded,
                 TransferStatus.Failed
             ],

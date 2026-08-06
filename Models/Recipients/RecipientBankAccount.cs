@@ -30,4 +30,9 @@ public class RecipientBankAccount : AuditableEntity
 
     public string? ProviderRecipientId { get; set; }
     public string? ProviderBankAccountId { get; set; }
+    public string? ProviderBankId { get; set; }
+    public string? ProviderVerifiedAccountName { get; set; }
+    public string? ProviderVerificationReference { get; set; }
+    public DateTime? VerificationAttemptedAt { get; set; }
+    public string? LastVerificationError { get; set; }
 }

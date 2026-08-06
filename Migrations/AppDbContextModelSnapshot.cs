@@ -1474,6 +1474,9 @@ namespace KorridorX.Migrations
                     b.Property<Guid?>("DeletedByUserId")
                         .HasColumnType("uuid");
 
+                    b.Property<DateTime?>("ExpiredAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<DateTime?>("FailedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -1486,6 +1489,9 @@ namespace KorridorX.Migrations
 
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("boolean");
+
+                    b.Property<DateTime?>("LastRefundSyncedAt")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<DateTime?>("LastUpdatedAt")
                         .HasColumnType("timestamp with time zone");
@@ -1512,10 +1518,32 @@ namespace KorridorX.Migrations
                         .HasMaxLength(150)
                         .HasColumnType("character varying(150)");
 
+                    b.Property<string>("ProviderRefundId")
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
+
+                    b.Property<string>("ProviderRefundReference")
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
+
                     b.Property<string>("Reference")
                         .IsRequired()
                         .HasMaxLength(50)
                         .HasColumnType("character varying(50)");
+
+                    b.Property<string>("RefundFailureReason")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<DateTime?>("RefundInitiatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("RefundReason")
+                        .HasMaxLength(250)
+                        .HasColumnType("character varying(250)");
+
+                    b.Property<DateTime?>("RefundedAt")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<int>("Status")
                         .IsConcurrencyToken()
@@ -1541,6 +1569,8 @@ namespace KorridorX.Migrations
                     b.HasIndex("ProviderCollectionId");
 
                     b.HasIndex("ProviderReference");
+
+                    b.HasIndex("ProviderRefundId");
 
                     b.HasIndex("Reference")
                         .IsUnique();
@@ -1647,6 +1677,14 @@ namespace KorridorX.Migrations
                     b.Property<DateTime?>("InitiatedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<string>("InteracAnswer")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("InteracQuestion")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("boolean");
 
@@ -1681,6 +1719,7 @@ namespace KorridorX.Migrations
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<int>("Status")
+                        .IsConcurrencyToken()
                         .HasColumnType("integer");
 
                     b.Property<Guid>("TransferId")
@@ -1697,7 +1736,8 @@ namespace KorridorX.Migrations
 
                     b.HasIndex("Status");
 
-                    b.HasIndex("TransferId");
+                    b.HasIndex("TransferId")
+                        .IsUnique();
 
                     b.ToTable("Payouts");
                 });
@@ -1808,6 +1848,82 @@ namespace KorridorX.Migrations
                         .IsUnique();
 
                     b.ToTable("PaymentProviders");
+                });
+
+            modelBuilder.Entity("KorridorX.Models.Providers.ProviderBank", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("CountryCode")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
+
+                    b.Property<string>("CountryName")
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime>("LastSyncedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("LastUpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("NationalBankCode")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("ProviderBankId")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
+
+                    b.Property<int>("ProviderCode")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ProviderCountryId")
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
+
+                    b.Property<string>("RawPayloadJson")
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Code");
+
+                    b.HasIndex("Name");
+
+                    b.HasIndex("ProviderCode", "ProviderBankId")
+                        .IsUnique();
+
+                    b.HasIndex("ProviderCode", "CountryCode", "IsActive");
+
+                    b.ToTable("ProviderBanks");
                 });
 
             modelBuilder.Entity("KorridorX.Models.Providers.ProviderCustomer", b =>
@@ -2194,13 +2310,29 @@ namespace KorridorX.Migrations
                     b.Property<Guid?>("LastUpdatedByUserId")
                         .HasColumnType("uuid");
 
+                    b.Property<string>("LastVerificationError")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
                     b.Property<string>("ProviderBankAccountId")
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
+
+                    b.Property<string>("ProviderBankId")
                         .HasMaxLength(150)
                         .HasColumnType("character varying(150)");
 
                     b.Property<string>("ProviderRecipientId")
                         .HasMaxLength(150)
                         .HasColumnType("character varying(150)");
+
+                    b.Property<string>("ProviderVerificationReference")
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
+
+                    b.Property<string>("ProviderVerifiedAccountName")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
 
                     b.Property<Guid>("RecipientId")
                         .HasColumnType("uuid");
@@ -2216,6 +2348,9 @@ namespace KorridorX.Migrations
                     b.Property<string>("SwiftBic")
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
+
+                    b.Property<DateTime?>("VerificationAttemptedAt")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<DateTime?>("VerifiedAt")
                         .HasColumnType("timestamp with time zone");

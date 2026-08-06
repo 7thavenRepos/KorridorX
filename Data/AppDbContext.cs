@@ -57,6 +57,7 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<Guid
     public DbSet<ProviderCustomer> ProviderCustomers => Set<ProviderCustomer>();
     public DbSet<ProviderRequestLog> ProviderRequestLogs => Set<ProviderRequestLog>();
     public DbSet<ProviderTransaction> ProviderTransactions => Set<ProviderTransaction>();
+    public DbSet<ProviderBank> ProviderBanks => Set<ProviderBank>();
 
     public DbSet<WebhookEvent> WebhookEvents => Set<WebhookEvent>();
     public DbSet<WebhookProcessingAttempt> WebhookProcessingAttempts => Set<WebhookProcessingAttempt>();

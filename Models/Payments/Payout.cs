@@ -1,4 +1,4 @@
-﻿using KorridorX.Models.Common;
+using KorridorX.Models.Common;
 using KorridorX.Models.Enums;
 using KorridorX.Models.Transfers;
 
@@ -20,6 +20,9 @@ public class Payout : AuditableEntity
     public string ProviderCode { get; set; } = "Blaaiz";
     public string? ProviderPayoutId { get; set; }
     public string? ProviderReference { get; set; }
+
+    public string? InteracQuestion { get; set; }
+    public string? InteracAnswer { get; set; }
 
     public DateTime? InitiatedAt { get; set; }
     public DateTime? CompletedAt { get; set; }

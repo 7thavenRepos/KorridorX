@@ -7,6 +7,12 @@ public interface IBlaaizWebhookService
         string? signature,
         string? timestamp,
         CancellationToken ct = default);
+
+    Task<BlaaizWebhookResult> ProcessPayoutWebhookAsync(
+        string rawPayload,
+        string? signature,
+        string? timestamp,
+        CancellationToken ct = default);
 }
 
 public record BlaaizWebhookResult(

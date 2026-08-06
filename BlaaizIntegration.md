@@ -10,7 +10,10 @@ Set the following under `Blaaiz` in `appsettings.Development.json`, user secrets
 - `Scopes`: must include `customer:read`, `customer:write`, and `file:upload` for individual KYC, plus the collection scopes used by the platform.
 - `WebhookSigningSecret`: the dedicated webhook signing secret, not the OAuth client secret.
 - `WebhookTimestampToleranceMinutes`: replay-window tolerance for signed webhooks.
-- `CollectionWalletIds`: business wallet IDs keyed by currency.
+- `CollectionWalletIds`: collection wallet IDs keyed by source currency.
+- `PayoutWalletIds`: payout wallet IDs keyed by the currency KorridorX pays from.
+- `AutomaticPayoutDispatchEnabled`: remains `false` until the payout corridor has been validated in sandbox.
+- Reconciliation settings control periodic provider transaction status checks.
 
 Do not commit real credentials. Prefer .NET user secrets locally and environment variables in deployed environments.
 
@@ -24,9 +27,10 @@ Use the endpoints under `/api/kyc` to create the provider customer, request docu
 
 ## Webhooks
 
-Register this URL as the Blaaiz `collection_url`:
+Register both Blaaiz webhook URLs:
 
-`POST /api/webhooks/blaaiz/collection`
+- `collection_url`: `POST /api/webhooks/blaaiz/collection`
+- `payout_url`: `POST /api/webhooks/blaaiz/payout`
 
 The endpoint validates both `x-blaaiz-signature` and `x-blaaiz-timestamp`, stores each event, rejects replayed or invalid requests, and processes `customer.status_changed` idempotently.
 
@@ -47,3 +51,10 @@ Live provider initiation is blocked until:
 - The provider customer status is `VERIFIED`.
 
 Card numbers and CVC values are sent to Blaaiz but are never stored in collection attempts or provider request logs.
+
+
+## Payouts and reconciliation
+
+Funded transfers can be dispatched to Blaaiz through the payout service. Automatic dispatch is deliberately disabled by default; operations can test individual transfers using `POST /api/admin/transfers/{transferId}/payout/dispatch`.
+
+The reconciliation worker retrieves non-terminal provider transactions and applies collection or payout status changes through the same centralized status workflows used by webhooks. Operations can trigger a batch using `POST /api/admin/providers/blaaiz/reconcile`.

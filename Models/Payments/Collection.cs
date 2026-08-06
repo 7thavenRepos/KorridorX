@@ -1,4 +1,4 @@
-﻿using KorridorX.Models.Common;
+using KorridorX.Models.Common;
 using KorridorX.Models.Enums;
 using KorridorX.Models.Transfers;
 
@@ -30,6 +30,15 @@ public class Collection : AuditableEntity
     public DateTime? InitiatedAt { get; set; }
     public DateTime? ConfirmedAt { get; set; }
     public DateTime? FailedAt { get; set; }
+    public DateTime? ExpiredAt { get; set; }
+    public DateTime? RefundInitiatedAt { get; set; }
+    public DateTime? RefundedAt { get; set; }
+
+    public string? ProviderRefundId { get; set; }
+    public string? ProviderRefundReference { get; set; }
+    public string? RefundReason { get; set; }
+    public string? RefundFailureReason { get; set; }
+    public DateTime? LastRefundSyncedAt { get; set; }
 
     public string? FailureReason { get; set; }
 

@@ -50,7 +50,12 @@ public record RecipientBankAccountDto
     bool IsVerified,
     DateTime? VerifiedAt,
     bool IsDefault,
-    bool IsActive
+    bool IsActive,
+    string? ProviderBankId,
+    string? ProviderVerifiedAccountName,
+    string? ProviderVerificationReference,
+    DateTime? VerificationAttemptedAt,
+    string? LastVerificationError
 );
 
 public record RecipientMobileWalletDto
@@ -106,7 +111,8 @@ public record AddRecipientBankAccountRequestDto
     string? SwiftBic,
     string? RoutingNumber,
     string? SortCode,
-    bool IsDefault
+    bool IsDefault,
+    string? ProviderBankId = null
 );
 
 public record UpdateRecipientBankAccountRequestDto
@@ -123,7 +129,8 @@ public record UpdateRecipientBankAccountRequestDto
     string? RoutingNumber,
     string? SortCode,
     bool IsDefault,
-    bool IsActive
+    bool IsActive,
+    string? ProviderBankId = null
 );
 
 public record AddRecipientMobileWalletRequestDto

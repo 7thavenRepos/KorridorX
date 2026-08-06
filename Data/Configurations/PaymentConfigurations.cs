@@ -13,6 +13,7 @@ public class CollectionConfiguration : IEntityTypeConfiguration<Collection>
         builder.HasIndex(x => x.Status);
         builder.HasIndex(x => x.ProviderCollectionId);
         builder.HasIndex(x => x.ProviderReference);
+        builder.HasIndex(x => x.ProviderRefundId);
 
         builder.Property(x => x.Reference).HasMaxLength(50);
         builder.Property(x => x.CurrencyCode).HasMaxLength(10);
@@ -24,6 +25,10 @@ public class CollectionConfiguration : IEntityTypeConfiguration<Collection>
         builder.Property(x => x.VirtualAccountBankName).HasMaxLength(150);
         builder.Property(x => x.VirtualAccountName).HasMaxLength(200);
         builder.Property(x => x.FailureReason).HasMaxLength(1000);
+        builder.Property(x => x.ProviderRefundId).HasMaxLength(150);
+        builder.Property(x => x.ProviderRefundReference).HasMaxLength(150);
+        builder.Property(x => x.RefundReason).HasMaxLength(250);
+        builder.Property(x => x.RefundFailureReason).HasMaxLength(1000);
         builder.Property(x => x.Status).IsConcurrencyToken();
 
         builder.Property(x => x.Amount).HasPrecision(18, 2);
@@ -58,7 +63,7 @@ public class PayoutConfiguration : IEntityTypeConfiguration<Payout>
     public void Configure(EntityTypeBuilder<Payout> builder)
     {
         builder.HasIndex(x => x.Reference).IsUnique();
-        builder.HasIndex(x => x.TransferId);
+        builder.HasIndex(x => x.TransferId).IsUnique();
         builder.HasIndex(x => x.Status);
         builder.HasIndex(x => x.ProviderPayoutId);
         builder.HasIndex(x => x.ProviderReference);
@@ -68,7 +73,10 @@ public class PayoutConfiguration : IEntityTypeConfiguration<Payout>
         builder.Property(x => x.ProviderCode).HasMaxLength(50);
         builder.Property(x => x.ProviderPayoutId).HasMaxLength(150);
         builder.Property(x => x.ProviderReference).HasMaxLength(150);
+        builder.Property(x => x.InteracQuestion).HasMaxLength(500);
+        builder.Property(x => x.InteracAnswer).HasMaxLength(500);
         builder.Property(x => x.FailureReason).HasMaxLength(1000);
+        builder.Property(x => x.Status).IsConcurrencyToken();
 
         builder.Property(x => x.Amount).HasPrecision(18, 2);
 

@@ -3,6 +3,7 @@ using KorridorX.Dtos.Recipients;
 using KorridorX.Extensions;
 using KorridorX.Infrastructure;
 using KorridorX.Models.Customers;
+using KorridorX.Models.Enums;
 using KorridorX.Models.Recipients;
 using Microsoft.EntityFrameworkCore;
 
@@ -202,7 +203,8 @@ public class RecipientService : IRecipientService
         var currencyCode = NormalizeCode(request.CurrencyCode);
 
         await EnsureCountryAndCurrencyAreLinkedAsync(countryCode, currencyCode, ct);
-        await EnsureBankAccountDoesNotExistAsync(recipientId, request.AccountNumber, request.BankCode, ct);
+        var providerBank = await ResolveProviderBankAsync(request.ProviderBankId, countryCode, ct);
+        await EnsureBankAccountDoesNotExistAsync(recipientId, request.AccountNumber, providerBank?.Code ?? request.BankCode, ct);
 
         if (request.IsDefault)
         {
@@ -214,8 +216,8 @@ public class RecipientService : IRecipientService
             RecipientId = recipientId,
             CountryCode = countryCode,
             CurrencyCode = currencyCode,
-            BankName = request.BankName.Trim(),
-            BankCode = Clean(request.BankCode),
+            BankName = providerBank?.Name ?? request.BankName.Trim(),
+            BankCode = providerBank?.Code ?? Clean(request.BankCode),
             BranchCode = Clean(request.BranchCode),
             AccountName = request.AccountName.Trim(),
             AccountNumber = request.AccountNumber.Trim(),
@@ -223,6 +225,7 @@ public class RecipientService : IRecipientService
             SwiftBic = Clean(request.SwiftBic),
             RoutingNumber = Clean(request.RoutingNumber),
             SortCode = Clean(request.SortCode),
+            ProviderBankId = providerBank?.ProviderBankId,
             IsDefault = request.IsDefault,
             CreatedByUserId = userId
         };
@@ -256,7 +259,8 @@ public class RecipientService : IRecipientService
         var currencyCode = NormalizeCode(request.CurrencyCode);
 
         await EnsureCountryAndCurrencyAreLinkedAsync(countryCode, currencyCode, ct);
-        await EnsureBankAccountDoesNotExistAsync(recipientId, request.AccountNumber, request.BankCode, ct, bankAccountId);
+        var providerBank = await ResolveProviderBankAsync(request.ProviderBankId, countryCode, ct);
+        await EnsureBankAccountDoesNotExistAsync(recipientId, request.AccountNumber, providerBank?.Code ?? request.BankCode, ct, bankAccountId);
 
         if (request.IsDefault)
         {
@@ -265,8 +269,8 @@ public class RecipientService : IRecipientService
 
         account.CountryCode = countryCode;
         account.CurrencyCode = currencyCode;
-        account.BankName = request.BankName.Trim();
-        account.BankCode = Clean(request.BankCode);
+        account.BankName = providerBank?.Name ?? request.BankName.Trim();
+        account.BankCode = providerBank?.Code ?? Clean(request.BankCode);
         account.BranchCode = Clean(request.BranchCode);
         account.AccountName = request.AccountName.Trim();
         account.AccountNumber = request.AccountNumber.Trim();
@@ -274,6 +278,13 @@ public class RecipientService : IRecipientService
         account.SwiftBic = Clean(request.SwiftBic);
         account.RoutingNumber = Clean(request.RoutingNumber);
         account.SortCode = Clean(request.SortCode);
+        account.ProviderBankId = providerBank?.ProviderBankId;
+        account.IsVerified = false;
+        account.VerifiedAt = null;
+        account.ProviderVerifiedAccountName = null;
+        account.ProviderVerificationReference = null;
+        account.VerificationAttemptedAt = null;
+        account.LastVerificationError = null;
         account.IsDefault = request.IsDefault;
         account.IsActive = request.IsActive;
         account.LastUpdatedAt = DateTime.UtcNow;
@@ -569,7 +580,12 @@ public class RecipientService : IRecipientService
             account.IsVerified,
             account.VerifiedAt,
             account.IsDefault,
-            account.IsActive);
+            account.IsActive,
+            account.ProviderBankId,
+            account.ProviderVerifiedAccountName,
+            account.ProviderVerificationReference,
+            account.VerificationAttemptedAt,
+            account.LastVerificationError);
     }
 
     private static RecipientMobileWalletDto ToDto(RecipientMobileWallet wallet)
@@ -586,6 +602,35 @@ public class RecipientService : IRecipientService
             wallet.VerifiedAt,
             wallet.IsDefault,
             wallet.IsActive);
+    }
+
+    private async Task<KorridorX.Models.Providers.ProviderBank?> ResolveProviderBankAsync(
+        string? providerBankId,
+        string countryCode,
+        CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(providerBankId))
+        {
+            return null;
+        }
+
+        var normalizedId = providerBankId.Trim();
+        var bank = await _db.ProviderBanks
+            .AsNoTracking()
+            .FirstOrDefaultAsync(x =>
+                x.ProviderCode == ProviderCode.Blaaiz &&
+                x.ProviderBankId == normalizedId &&
+                x.CountryCode == countryCode &&
+                x.IsActive &&
+                !x.IsDeleted,
+                ct);
+
+        if (bank is null)
+        {
+            throw new InvalidOperationException("The selected provider bank is invalid or inactive for this country.");
+        }
+
+        return bank;
     }
 
     private static void ValidateRecipient(string firstName, string lastName, string countryCode, string? email)

@@ -5,7 +5,9 @@ using System.Text.Json;
 using KorridorX.Configuration;
 using KorridorX.Data;
 using KorridorX.Models.Enums;
+using KorridorX.Models.Providers;
 using KorridorX.Models.Webhooks;
+using KorridorX.Services.Payments;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 
@@ -15,33 +17,64 @@ public class BlaaizWebhookService : IBlaaizWebhookService
 {
     private readonly AppDbContext _db;
     private readonly BlaaizOptions _options;
+    private readonly ICollectionStatusService _collectionStatusService;
+    private readonly IPayoutStatusService _payoutStatusService;
 
     public BlaaizWebhookService(
         AppDbContext db,
-        IOptions<BlaaizOptions> options)
+        IOptions<BlaaizOptions> options,
+        ICollectionStatusService collectionStatusService,
+        IPayoutStatusService payoutStatusService)
     {
         _db = db;
         _options = options.Value;
+        _collectionStatusService = collectionStatusService;
+        _payoutStatusService = payoutStatusService;
     }
 
-    public async Task<BlaaizWebhookResult> ProcessCollectionWebhookAsync(
+    public Task<BlaaizWebhookResult> ProcessCollectionWebhookAsync(
         string rawPayload,
         string? signature,
         string? timestamp,
-        CancellationToken ct = default)
+        CancellationToken ct = default) =>
+        ProcessWebhookAsync(rawPayload, signature, timestamp, "collection", ct);
+
+    public Task<BlaaizWebhookResult> ProcessPayoutWebhookAsync(
+        string rawPayload,
+        string? signature,
+        string? timestamp,
+        CancellationToken ct = default) =>
+        ProcessWebhookAsync(rawPayload, signature, timestamp, "payout", ct);
+
+    private async Task<BlaaizWebhookResult> ProcessWebhookAsync(
+        string rawPayload,
+        string? signature,
+        string? timestamp,
+        string expectedChannel,
+        CancellationToken ct)
     {
         if (!_options.IsEnabled)
         {
             throw new InvalidOperationException("Blaaiz integration is disabled.");
         }
 
+        if (string.IsNullOrWhiteSpace(rawPayload))
+        {
+            throw new InvalidOperationException("Blaaiz webhook payload is empty.");
+        }
+
         ValidateSignature(rawPayload, signature, timestamp);
 
         using var document = JsonDocument.Parse(rawPayload);
         var root = document.RootElement;
+        var data = GetDataNode(root);
 
-        var eventType = ReadRequiredString(root, "event_type", "event");
-        var eventId = ReadRequiredString(root, "event_id");
+        var providerStatus = ReadOptionalString(data, root, "transaction_status", "status", "new_status");
+        var type = ReadOptionalString(data, root, "type", "transaction_type");
+        var eventType = ReadOptionalString(root, data, "event_type", "event")
+            ?? InferEventType(type, providerStatus, expectedChannel);
+        var eventId = ReadOptionalString(root, data, "event_id")
+            ?? CreateDeterministicEventId(eventType, rawPayload);
 
         var existing = await _db.WebhookEvents
             .AsNoTracking()
@@ -111,17 +144,10 @@ public class BlaaizWebhookService : IBlaaizWebhookService
 
         try
         {
-            if (string.Equals(eventType, "customer.status_changed", StringComparison.OrdinalIgnoreCase))
-            {
-                var processed = await ProcessCustomerStatusChangedAsync(root, ct);
-                webhook.ProcessingStatus = processed
-                    ? WebhookProcessingStatus.Processed
-                    : WebhookProcessingStatus.Ignored;
-            }
-            else
-            {
-                webhook.ProcessingStatus = WebhookProcessingStatus.Ignored;
-            }
+            var processed = await RouteEventAsync(eventType, root, data, rawPayload, ct);
+            webhook.ProcessingStatus = processed
+                ? WebhookProcessingStatus.Processed
+                : WebhookProcessingStatus.Ignored;
 
             var now = DateTime.UtcNow;
             webhook.ProcessedAt = now;
@@ -151,14 +177,280 @@ public class BlaaizWebhookService : IBlaaizWebhookService
         }
     }
 
-    private async Task<bool> ProcessCustomerStatusChangedAsync(
+    private async Task<bool> RouteEventAsync(
+        string eventType,
         JsonElement root,
+        JsonElement data,
+        string rawPayload,
         CancellationToken ct)
     {
-        var providerCustomerId = ReadRequiredString(root, "customer_id");
-        var providerStatus = ReadRequiredString(root, "new_status").ToUpperInvariant();
-        var comment = ReadOptionalString(root, "comment");
-        var updatedAt = ReadOptionalDateTime(root, "updated_at") ?? DateTime.UtcNow;
+        if (eventType.Equals("customer.status_changed", StringComparison.OrdinalIgnoreCase))
+        {
+            return await ProcessCustomerStatusChangedAsync(root, data, ct);
+        }
+
+        if (eventType.StartsWith("collection.", StringComparison.OrdinalIgnoreCase) ||
+            eventType.Equals("refund", StringComparison.OrdinalIgnoreCase) ||
+            eventType.Equals("refund_initiated", StringComparison.OrdinalIgnoreCase))
+        {
+            return await ProcessCollectionEventAsync(eventType, root, data, rawPayload, ct);
+        }
+
+        if (eventType.StartsWith("payout.", StringComparison.OrdinalIgnoreCase))
+        {
+            return await ProcessPayoutEventAsync(eventType, root, data, rawPayload, ct);
+        }
+
+        return false;
+    }
+
+    private async Task<bool> ProcessCollectionEventAsync(
+        string eventType,
+        JsonElement root,
+        JsonElement data,
+        string rawPayload,
+        CancellationToken ct)
+    {
+        var isRefund = eventType.Equals("refund", StringComparison.OrdinalIgnoreCase) ||
+                       eventType.Equals("refund_initiated", StringComparison.OrdinalIgnoreCase);
+
+        // For refund webhooks transaction_id identifies the original collection,
+        // while refund_id identifies the provider refund transaction itself.
+        var collectionTransactionId = ReadTransactionId(
+            data,
+            root,
+            "transaction_id",
+            "provider_transaction_id",
+            "collection_id");
+
+        var refundId = isRefund
+            ? ReadOptionalString(data, root, "refund_id")
+            : null;
+
+        var collectionReference = isRefund
+            ? ReadOptionalString(data, root, "collection_reference")
+            : ReadOptionalString(data, root, "transaction_reference", "reference");
+
+        var providerReference = isRefund
+            ? ReadOptionalString(data, root, "refund_reference", "reference")
+            : collectionReference;
+
+        if (string.IsNullOrWhiteSpace(collectionTransactionId) &&
+            string.IsNullOrWhiteSpace(collectionReference) &&
+            string.IsNullOrWhiteSpace(refundId))
+        {
+            throw new InvalidOperationException(
+                isRefund
+                    ? "Refund webhook is missing collection or refund identification."
+                    : "Collection webhook is missing transaction identification.");
+        }
+
+        var collection = await _db.Collections
+            .Include(x => x.Transfer)
+            .Include(x => x.Attempts)
+            .FirstOrDefaultAsync(x =>
+                !x.IsDeleted &&
+                ((!string.IsNullOrWhiteSpace(collectionTransactionId) &&
+                  x.ProviderCollectionId == collectionTransactionId) ||
+                 (!string.IsNullOrWhiteSpace(collectionReference) &&
+                  x.ProviderReference == collectionReference) ||
+                 (!string.IsNullOrWhiteSpace(refundId) &&
+                  x.ProviderRefundId == refundId)),
+                ct);
+
+        if (collection is null)
+        {
+            return false;
+        }
+
+        var providerStatus = ReadOptionalString(data, root, "transaction_status", "status")
+            ?? EventStatus(eventType);
+        var mappedStatus = MapCollectionStatus(eventType, providerStatus);
+        var amount = ReadOptionalDecimal(data, root, "transaction_amount", "amount");
+        var currency = ReadOptionalString(data, root, "transaction_currency", "currency");
+        var failureReason = ReadOptionalString(data, root, "failure_reason", "reason", "message");
+        var occurredAt = ReadOptionalDateTime(data, root, "updated_at", "date", "timestamp")
+            ?? DateTime.UtcNow;
+
+        if (mappedStatus is CollectionStatus.Successful or
+            CollectionStatus.Refunded or
+            CollectionStatus.RefundFailed)
+        {
+            ValidateMoney(collection.Amount, collection.CurrencyCode, amount, currency);
+        }
+
+        if (isRefund)
+        {
+            collection.ProviderRefundId = refundId ?? collection.ProviderRefundId;
+            collection.ProviderRefundReference = providerReference ?? collection.ProviderRefundReference;
+            collection.RefundFailureReason = mappedStatus == CollectionStatus.RefundFailed
+                ? failureReason ?? "The provider refund failed."
+                : null;
+            collection.LastRefundSyncedAt = DateTime.UtcNow;
+        }
+
+        var latestAttempt = collection.Attempts.OrderByDescending(x => x.AttemptedAt).FirstOrDefault();
+        var metadata = JsonSerializer.Serialize(new
+        {
+            webhook = true,
+            eventType,
+            providerStatus,
+            collectionTransactionId,
+            collectionReference,
+            refundId,
+            providerReference
+        });
+
+        if (collection.Status == mappedStatus ||
+            _collectionStatusService.CanTransition(collection.Status, mappedStatus))
+        {
+            _collectionStatusService.ApplyTransition(
+                collection,
+                mappedStatus,
+                new CollectionStatusTransitionContext(
+                    Source: "Webhook",
+                    Reason: failureReason ?? $"Blaaiz reported {providerStatus}.",
+                    ProviderCollectionId: isRefund
+                        ? collection.ProviderCollectionId
+                        : collectionTransactionId,
+                    ProviderReference: isRefund
+                        ? collection.ProviderReference
+                        : providerReference,
+                    ProviderResponseId: isRefund ? refundId : collectionTransactionId,
+                    ResponsePayloadJson: rawPayload,
+                    MetadataJson: metadata,
+                    OccurredAt: occurredAt),
+                isRefund ? null : latestAttempt);
+        }
+
+        var providerTransactionId = isRefund ? refundId : collectionTransactionId;
+        if (!string.IsNullOrWhiteSpace(providerTransactionId))
+        {
+            await UpsertProviderTransactionAsync(
+                collection.TransferId,
+                collection.Id,
+                null,
+                providerTransactionId,
+                providerReference,
+                isRefund ? "refund" : "collection",
+                providerStatus,
+                currency ?? collection.CurrencyCode,
+                amount ?? collection.Amount,
+                rawPayload,
+                occurredAt,
+                ct);
+        }
+
+        return true;
+    }
+
+    private async Task<bool> ProcessPayoutEventAsync(
+        string eventType,
+        JsonElement root,
+        JsonElement data,
+        string rawPayload,
+        CancellationToken ct)
+    {
+        var transactionId = ReadTransactionId(data, root,
+            "transaction_id", "provider_transaction_id", "payout_id");
+        var reference = ReadOptionalString(data, root,
+            "transaction_reference", "reference");
+
+        if (string.IsNullOrWhiteSpace(transactionId) && string.IsNullOrWhiteSpace(reference))
+        {
+            throw new InvalidOperationException("Payout webhook is missing transaction identification.");
+        }
+
+        var payout = await _db.Payouts
+            .Include(x => x.Transfer)
+            .Include(x => x.Attempts)
+            .FirstOrDefaultAsync(x =>
+                !x.IsDeleted &&
+                ((!string.IsNullOrWhiteSpace(transactionId) && x.ProviderPayoutId == transactionId) ||
+                 (!string.IsNullOrWhiteSpace(reference) && x.ProviderReference == reference)),
+                ct);
+
+        if (payout is null)
+        {
+            return false;
+        }
+
+        var providerStatus = ReadOptionalString(data, root, "transaction_status", "status")
+            ?? EventStatus(eventType);
+        var mappedStatus = MapPayoutStatus(eventType, providerStatus);
+        var amount = ReadRecipientAmount(data) ?? ReadOptionalDecimal(data, root, "transaction_amount", "amount");
+        var currency = ReadRecipientString(data, "currency")
+            ?? ReadOptionalString(data, root, "transaction_currency", "currency");
+        var failureReason = ReadOptionalString(data, root, "failure_reason", "reason", "message");
+        var occurredAt = ReadOptionalDateTime(data, root, "updated_at", "date", "timestamp")
+            ?? DateTime.UtcNow;
+
+        if (mappedStatus == PayoutStatus.Successful)
+        {
+            ValidateMoney(payout.Amount, payout.CurrencyCode, amount, currency);
+        }
+
+        var latestAttempt = payout.Attempts.OrderByDescending(x => x.AttemptedAt).FirstOrDefault();
+        var metadata = JsonSerializer.Serialize(new
+        {
+            webhook = true,
+            eventType,
+            providerStatus,
+            transactionId,
+            reference
+        });
+
+        if (payout.Status == mappedStatus ||
+            _payoutStatusService.CanTransition(payout.Status, mappedStatus))
+        {
+            _payoutStatusService.ApplyTransition(
+                payout,
+                mappedStatus,
+                new PayoutStatusTransitionContext(
+                    Source: "Webhook",
+                    Reason: failureReason ?? $"Blaaiz reported {providerStatus}.",
+                    ProviderPayoutId: transactionId,
+                    ProviderReference: reference,
+                    ProviderResponseId: transactionId,
+                    ResponsePayloadJson: rawPayload,
+                    MetadataJson: metadata,
+                    OccurredAt: occurredAt),
+                latestAttempt);
+        }
+
+        payout.Transfer.ProviderTransferId = transactionId ?? payout.Transfer.ProviderTransferId;
+        payout.Transfer.ProviderReference = reference ?? payout.Transfer.ProviderReference;
+
+        if (!string.IsNullOrWhiteSpace(transactionId))
+        {
+            await UpsertProviderTransactionAsync(
+                payout.TransferId,
+                null,
+                payout.Id,
+                transactionId,
+                reference,
+                "payout",
+                providerStatus,
+                currency ?? payout.CurrencyCode,
+                amount ?? payout.Amount,
+                rawPayload,
+                occurredAt,
+                ct);
+        }
+
+        return true;
+    }
+
+    private async Task<bool> ProcessCustomerStatusChangedAsync(
+        JsonElement root,
+        JsonElement data,
+        CancellationToken ct)
+    {
+        var providerCustomerId = ReadRequiredString(data, root, "customer_id", "id");
+        var providerStatus = ReadRequiredString(data, root, "new_status", "verification_status", "status")
+            .ToUpperInvariant();
+        var comment = ReadOptionalString(data, root, "comment", "rejection_reason");
+        var updatedAt = ReadOptionalDateTime(data, root, "updated_at", "timestamp") ?? DateTime.UtcNow;
 
         var providerCustomer = await _db.ProviderCustomers
             .Include(x => x.CustomerProfile)
@@ -191,7 +483,7 @@ public class BlaaizWebhookService : IBlaaizWebhookService
             .OrderByDescending(x => x.CreatedAt)
             .FirstOrDefault();
 
-        var status = MapProviderStatus(providerStatus);
+        var status = MapProviderKycStatus(providerStatus);
         var now = DateTime.UtcNow;
 
         providerCustomer.ProviderStatus = providerStatus;
@@ -203,9 +495,7 @@ public class BlaaizWebhookService : IBlaaizWebhookService
         kycProfile.LastUpdatedAt = now;
 
         providerCustomer.CustomerProfile.KycStatus = status;
-        providerCustomer.CustomerProfile.KycApprovedAt = status == KycStatus.Approved
-            ? updatedAt
-            : null;
+        providerCustomer.CustomerProfile.KycApprovedAt = status == KycStatus.Approved ? updatedAt : null;
         providerCustomer.CustomerProfile.LastUpdatedAt = now;
 
         if (status == KycStatus.Approved)
@@ -227,38 +517,74 @@ public class BlaaizWebhookService : IBlaaizWebhookService
         if (application is not null)
         {
             application.Status = status;
-            application.ReviewedAt = status is KycStatus.Approved or KycStatus.Rejected
-                ? updatedAt
-                : null;
+            application.ReviewedAt = status is KycStatus.Approved or KycStatus.Rejected ? updatedAt : null;
             application.ReviewNote = status == KycStatus.Rejected ? comment : null;
             application.LastUpdatedAt = now;
 
-            if (status == KycStatus.Rejected)
+            foreach (var kycDocument in application.Documents.Where(x => !x.IsDeleted))
             {
-                foreach (var kycDocument in application.Documents.Where(x => !x.IsDeleted))
+                if (status == KycStatus.Rejected)
                 {
                     kycDocument.IsAttachedToProvider = false;
                     kycDocument.RejectionReason = comment;
-                    kycDocument.LastUpdatedAt = now;
                 }
-            }
-            else if (status == KycStatus.Approved)
-            {
-                foreach (var kycDocument in application.Documents.Where(x => !x.IsDeleted))
+                else if (status == KycStatus.Approved)
                 {
                     kycDocument.RejectionReason = null;
-                    kycDocument.LastUpdatedAt = now;
                 }
+
+                kycDocument.LastUpdatedAt = now;
             }
         }
 
         return true;
     }
 
-    private void ValidateSignature(
+    private async Task UpsertProviderTransactionAsync(
+        Guid transferId,
+        Guid? collectionId,
+        Guid? payoutId,
+        string providerTransactionId,
+        string? providerReference,
+        string transactionType,
+        string providerStatus,
+        string currencyCode,
+        decimal amount,
         string rawPayload,
-        string? receivedSignature,
-        string? timestamp)
+        DateTime providerCreatedAt,
+        CancellationToken ct)
+    {
+        var transaction = await _db.ProviderTransactions
+            .FirstOrDefaultAsync(x =>
+                x.ProviderCode == ProviderCode.Blaaiz &&
+                x.ProviderTransactionId == providerTransactionId,
+                ct);
+
+        if (transaction is null)
+        {
+            transaction = new ProviderTransaction
+            {
+                ProviderCode = ProviderCode.Blaaiz,
+                ProviderTransactionId = providerTransactionId
+            };
+            _db.ProviderTransactions.Add(transaction);
+        }
+
+        transaction.TransferId = transferId;
+        transaction.CollectionId = collectionId ?? transaction.CollectionId;
+        transaction.PayoutId = payoutId ?? transaction.PayoutId;
+        transaction.ProviderReference = providerReference ?? transaction.ProviderReference;
+        transaction.TransactionType = transactionType;
+        transaction.ProviderStatus = providerStatus;
+        transaction.CurrencyCode = currencyCode;
+        transaction.Amount = amount;
+        transaction.RawPayloadJson = rawPayload;
+        transaction.ProviderCreatedAt = providerCreatedAt;
+        transaction.LastSyncedAt = DateTime.UtcNow;
+        transaction.LastUpdatedAt = DateTime.UtcNow;
+    }
+
+    private void ValidateSignature(string rawPayload, string? receivedSignature, string? timestamp)
     {
         if (string.IsNullOrWhiteSpace(_options.WebhookSigningSecret) ||
             string.IsNullOrWhiteSpace(receivedSignature) ||
@@ -277,24 +603,18 @@ public class BlaaizWebhookService : IBlaaizWebhookService
 
         using var json = JsonDocument.Parse(rawPayload);
         var canonicalPayload = JsonSerializer.Serialize(json.RootElement);
-
         var actual = receivedSignature.Trim();
+
         if (actual.StartsWith("sha256=", StringComparison.OrdinalIgnoreCase))
         {
             actual = actual[7..];
         }
 
-        var isValid = SignatureMatches(
-            $"{timestamp}.{canonicalPayload}",
-            actual,
-            _options.WebhookSigningSecret);
+        var isValid = SignatureMatches($"{timestamp}.{canonicalPayload}", actual, _options.WebhookSigningSecret);
 
         if (!isValid && !string.Equals(canonicalPayload, rawPayload, StringComparison.Ordinal))
         {
-            isValid = SignatureMatches(
-                $"{timestamp}.{rawPayload}",
-                actual,
-                _options.WebhookSigningSecret);
+            isValid = SignatureMatches($"{timestamp}.{rawPayload}", actual, _options.WebhookSigningSecret);
         }
 
         if (!isValid)
@@ -303,16 +623,11 @@ public class BlaaizWebhookService : IBlaaizWebhookService
         }
     }
 
-    private static bool SignatureMatches(
-        string signedContent,
-        string receivedSignature,
-        string secret)
+    private static bool SignatureMatches(string signedContent, string receivedSignature, string secret)
     {
         using var hmac = new HMACSHA256(Encoding.UTF8.GetBytes(secret));
-        var expected = Convert.ToHexString(
-                hmac.ComputeHash(Encoding.UTF8.GetBytes(signedContent)))
+        var expected = Convert.ToHexString(hmac.ComputeHash(Encoding.UTF8.GetBytes(signedContent)))
             .ToLowerInvariant();
-
         var expectedBytes = Encoding.UTF8.GetBytes(expected);
         var actualBytes = Encoding.UTF8.GetBytes(receivedSignature.ToLowerInvariant());
 
@@ -341,38 +656,102 @@ public class BlaaizWebhookService : IBlaaizWebhookService
         throw new UnauthorizedAccessException("Invalid Blaaiz webhook timestamp.");
     }
 
-    private static string ReadRequiredString(JsonElement root, params string[] names)
+    private static JsonElement GetDataNode(JsonElement root)
     {
-        foreach (var name in names)
+        if (root.ValueKind == JsonValueKind.Object &&
+            root.TryGetProperty("data", out var data) &&
+            data.ValueKind == JsonValueKind.Object)
         {
-            if (root.TryGetProperty(name, out var value) &&
-                value.ValueKind == JsonValueKind.String &&
-                !string.IsNullOrWhiteSpace(value.GetString()))
-            {
-                return value.GetString()!;
-            }
+            return data;
         }
 
-        throw new InvalidOperationException(
-            $"Blaaiz webhook payload is missing '{string.Join("' or '", names)}'.");
+        return root;
     }
 
-    private static string? ReadOptionalString(JsonElement root, string name)
+    private static string CreateDeterministicEventId(string eventType, string rawPayload)
     {
-        return root.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String
-            ? value.GetString()
-            : null;
+        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes($"{eventType}:{rawPayload}"));
+        return $"derived-{Convert.ToHexString(bytes).ToLowerInvariant()}";
     }
 
-    private static DateTime? ReadOptionalDateTime(JsonElement root, string name)
+    private static string InferEventType(string? type, string? status, string expectedChannel)
     {
-        var value = ReadOptionalString(root, name);
-        return DateTime.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.AdjustToUniversal, out var parsed)
-            ? parsed.ToUniversalTime()
-            : null;
+        var channel = string.IsNullOrWhiteSpace(type) ? expectedChannel : type.Trim().ToLowerInvariant();
+        var suffix = (status ?? "pending").Trim().ToUpperInvariant() switch
+        {
+            "SUCCESSFUL" or "COMPLETED" => "completed",
+            "PROCESSING" => "processing",
+            "FAILED" or "REJECTED" => "failed",
+            "EXPIRED" => "expired",
+            _ => "pending"
+        };
+
+        return $"{channel}.{suffix}";
     }
 
-    private static KycStatus MapProviderStatus(string providerStatus) => providerStatus switch
+    private static string EventStatus(string eventType) => eventType.ToLowerInvariant() switch
+    {
+        "collection.completed" or "payout.completed" => "SUCCESSFUL",
+        "collection.processing" or "payout.processing" => "PROCESSING",
+        "collection.failed" or "payout.failed" => "FAILED",
+        "collection.expired" => "EXPIRED",
+        "refund_initiated" => "REFUND_PENDING",
+        "refund" => "REFUNDED",
+        _ => "PENDING"
+    };
+
+    private static CollectionStatus MapCollectionStatus(string eventType, string providerStatus)
+    {
+        if (eventType.Equals("refund_initiated", StringComparison.OrdinalIgnoreCase))
+        {
+            return CollectionStatus.RefundPending;
+        }
+
+        if (eventType.Equals("refund", StringComparison.OrdinalIgnoreCase))
+        {
+            return providerStatus.Trim().ToUpperInvariant() switch
+            {
+                "FAILED" or "REJECTED" => CollectionStatus.RefundFailed,
+                "SUCCESSFUL" or "COMPLETED" => CollectionStatus.Refunded,
+                _ => CollectionStatus.RefundPending
+            };
+        }
+
+        return providerStatus.Trim().ToUpperInvariant() switch
+        {
+            "SUCCESSFUL" or "COMPLETED" => CollectionStatus.Successful,
+            "PROCESSING" => CollectionStatus.Processing,
+            "FAILED" or "REJECTED" => CollectionStatus.Failed,
+            "EXPIRED" => CollectionStatus.Expired,
+            "REFUND_PENDING" or "REFUND_INITIATED" => CollectionStatus.RefundPending,
+            "REFUNDED" => CollectionStatus.Refunded,
+            _ => CollectionStatus.Initiated
+        };
+    }
+
+    private static PayoutStatus MapPayoutStatus(string eventType, string providerStatus)
+    {
+        if (eventType.Equals("payout.completed", StringComparison.OrdinalIgnoreCase))
+        {
+            return PayoutStatus.Successful;
+        }
+
+        if (eventType.Equals("payout.failed", StringComparison.OrdinalIgnoreCase))
+        {
+            return PayoutStatus.Failed;
+        }
+
+        return providerStatus.Trim().ToUpperInvariant() switch
+        {
+            "SUCCESSFUL" or "COMPLETED" => PayoutStatus.Successful,
+            "PROCESSING" => PayoutStatus.Processing,
+            "FAILED" or "REJECTED" => PayoutStatus.Failed,
+            "REVERSED" => PayoutStatus.Reversed,
+            _ => PayoutStatus.Initiated
+        };
+    }
+
+    private static KycStatus MapProviderKycStatus(string providerStatus) => providerStatus switch
     {
         "VERIFIED" => KycStatus.Approved,
         "REJECTED" => KycStatus.Rejected,
@@ -380,6 +759,205 @@ public class BlaaizWebhookService : IBlaaizWebhookService
         "PENDING" => KycStatus.Pending,
         _ => throw new InvalidOperationException($"Unsupported Blaaiz customer status '{providerStatus}'.")
     };
+
+    private static string ReadRequiredString(
+        JsonElement primary,
+        JsonElement fallback,
+        params string[] names) =>
+        ReadOptionalString(primary, fallback, names)
+        ?? throw new InvalidOperationException(
+            $"Blaaiz webhook payload is missing '{string.Join("' or '", names)}'.");
+
+    private static string? ReadOptionalString(
+        JsonElement primary,
+        JsonElement fallback,
+        params string[] names)
+    {
+        foreach (var element in EnumerateObjectCandidates(primary, fallback))
+        {
+            foreach (var name in names)
+            {
+                if (!element.TryGetProperty(name, out var value))
+                {
+                    continue;
+                }
+
+                if (value.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(value.GetString()))
+                {
+                    return value.GetString();
+                }
+
+                if (value.ValueKind is JsonValueKind.Number or JsonValueKind.True or JsonValueKind.False)
+                {
+                    return value.GetRawText();
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private static string? ReadTransactionId(
+        JsonElement primary,
+        JsonElement fallback,
+        params string[] names)
+    {
+        var explicitId = ReadOptionalString(primary, fallback, names);
+        if (!string.IsNullOrWhiteSpace(explicitId))
+        {
+            return explicitId;
+        }
+
+        if (primary.ValueKind == JsonValueKind.Object &&
+            primary.TryGetProperty("id", out var primaryId))
+        {
+            return primaryId.ValueKind == JsonValueKind.String
+                ? primaryId.GetString()
+                : primaryId.GetRawText();
+        }
+
+        foreach (var element in EnumerateObjectCandidates(primary, fallback))
+        {
+            if (element.TryGetProperty("transaction", out var transaction) &&
+                transaction.ValueKind == JsonValueKind.Object &&
+                transaction.TryGetProperty("id", out var id))
+            {
+                return id.ValueKind == JsonValueKind.String ? id.GetString() : id.GetRawText();
+            }
+        }
+
+        return null;
+    }
+
+    private static decimal? ReadOptionalDecimal(
+        JsonElement primary,
+        JsonElement fallback,
+        params string[] names)
+    {
+        foreach (var element in EnumerateObjectCandidates(primary, fallback))
+        {
+            foreach (var name in names)
+            {
+                if (!element.TryGetProperty(name, out var value))
+                {
+                    continue;
+                }
+
+                if (value.ValueKind == JsonValueKind.Number && value.TryGetDecimal(out var number))
+                {
+                    return number;
+                }
+
+                if (value.ValueKind == JsonValueKind.String &&
+                    decimal.TryParse(value.GetString(), NumberStyles.Any, CultureInfo.InvariantCulture, out number))
+                {
+                    return number;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private static decimal? ReadRecipientAmount(JsonElement data)
+    {
+        foreach (var element in EnumerateObjectCandidates(data, data))
+        {
+            if (element.TryGetProperty("recipient", out var recipient) &&
+                recipient.ValueKind == JsonValueKind.Object)
+            {
+                return ReadOptionalDecimal(recipient, recipient, "amount");
+            }
+        }
+
+        return null;
+    }
+
+    private static string? ReadRecipientString(JsonElement data, params string[] names)
+    {
+        foreach (var element in EnumerateObjectCandidates(data, data))
+        {
+            if (element.TryGetProperty("recipient", out var recipient) &&
+                recipient.ValueKind == JsonValueKind.Object)
+            {
+                return ReadOptionalString(recipient, recipient, names);
+            }
+        }
+
+        return null;
+    }
+
+    private static IEnumerable<JsonElement> EnumerateObjectCandidates(
+        JsonElement primary,
+        JsonElement fallback)
+    {
+        foreach (var element in new[] { primary, fallback })
+        {
+            if (element.ValueKind != JsonValueKind.Object)
+            {
+                continue;
+            }
+
+            yield return element;
+
+            if (element.TryGetProperty("data", out var data) && data.ValueKind == JsonValueKind.Object)
+            {
+                yield return data;
+
+                if (data.TryGetProperty("transaction", out var dataTransaction) &&
+                    dataTransaction.ValueKind == JsonValueKind.Object)
+                {
+                    yield return dataTransaction;
+                }
+            }
+
+            if (element.TryGetProperty("transaction", out var transaction) &&
+                transaction.ValueKind == JsonValueKind.Object)
+            {
+                yield return transaction;
+            }
+        }
+    }
+
+    private static DateTime? ReadOptionalDateTime(
+        JsonElement primary,
+        JsonElement fallback,
+        params string[] names)
+    {
+        var value = ReadOptionalString(primary, fallback, names);
+        return DateTime.TryParse(
+            value,
+            CultureInfo.InvariantCulture,
+            DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal,
+            out var parsed)
+            ? parsed.ToUniversalTime()
+            : null;
+    }
+
+    private static void ValidateMoney(
+        decimal expectedAmount,
+        string expectedCurrency,
+        decimal? actualAmount,
+        string? actualCurrency)
+    {
+        if (actualAmount is null || string.IsNullOrWhiteSpace(actualCurrency))
+        {
+            throw new InvalidOperationException(
+                "Successful provider webhook is missing transaction amount or currency.");
+        }
+
+        if (!string.Equals(expectedCurrency, actualCurrency, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                $"Provider transaction currency mismatch. Expected {expectedCurrency}, received {actualCurrency}.");
+        }
+
+        if (Math.Abs(expectedAmount - actualAmount.Value) > 0.01m)
+        {
+            throw new InvalidOperationException(
+                $"Provider transaction amount mismatch. Expected {expectedAmount}, received {actualAmount.Value}.");
+        }
+    }
 
     private static string Truncate(string value, int maxLength) =>
         value.Length <= maxLength ? value : value[..maxLength];

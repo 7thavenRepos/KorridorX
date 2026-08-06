@@ -59,6 +59,21 @@ public class BlaaizOptionsValidator : IValidateOptions<BlaaizOptions>
             errors.Add("Blaaiz:WebhookTimestampToleranceMinutes must be between 1 and 30.");
         }
 
+        if (options.ReconciliationIntervalMinutes is < 1 or > 1440)
+        {
+            errors.Add("Blaaiz:ReconciliationIntervalMinutes must be between 1 and 1440.");
+        }
+
+        if (options.ReconciliationBatchSize is < 1 or > 500)
+        {
+            errors.Add("Blaaiz:ReconciliationBatchSize must be between 1 and 500.");
+        }
+
+        if (options.PayoutDispatchIntervalSeconds is < 10 or > 3600)
+        {
+            errors.Add("Blaaiz:PayoutDispatchIntervalSeconds must be between 10 and 3600.");
+        }
+
         return errors.Count == 0
             ? ValidateOptionsResult.Success
             : ValidateOptionsResult.Fail(errors);

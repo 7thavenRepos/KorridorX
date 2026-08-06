@@ -1,3 +1,4 @@
+using KorridorX.BackgroundJobs;
 using KorridorX.Configuration;
 using KorridorX.Data;
 using KorridorX.Data.Seed;
@@ -14,6 +15,7 @@ using KorridorX.Services.Recipients;
 using KorridorX.Services.References;
 using KorridorX.Services.Transfers;
 using KorridorX.Services.Providers;
+using KorridorX.Services.Reconciliation;
 using KorridorX.Services.Webhooks;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
@@ -40,6 +42,8 @@ builder.Services.AddScoped<IProviderRequestAuditService, ProviderRequestAuditSer
 builder.Services.AddScoped<IBlaaizTokenService, BlaaizTokenService>();
 builder.Services.AddScoped<IRemittanceProvider, BlaaizRemittanceProvider>();
 builder.Services.AddScoped<IProviderCustomerService, ProviderCustomerService>();
+builder.Services.AddScoped<IBankDirectoryService, BankDirectoryService>();
+builder.Services.AddScoped<IProviderOperationsQueryService, ProviderOperationsQueryService>();
 builder.Services.AddScoped<IKycService, KycService>();
 builder.Services.AddScoped<IComplianceGateService, ComplianceGateService>();
 builder.Services.AddScoped<IAdminKycService, AdminKycService>();
@@ -69,6 +73,12 @@ builder.Services.AddScoped<ITransferService, TransferService>();
 builder.Services.AddScoped<ICollectionPaymentMethodPolicy, CollectionPaymentMethodPolicy>();
 builder.Services.AddScoped<ICollectionStatusService, CollectionStatusService>();
 builder.Services.AddScoped<ICollectionService, CollectionService>();
+builder.Services.AddScoped<IPayoutStatusService, PayoutStatusService>();
+builder.Services.AddScoped<IPayoutService, PayoutService>();
+builder.Services.AddScoped<IRefundService, RefundService>();
+builder.Services.AddScoped<IProviderReconciliationService, ProviderReconciliationService>();
+builder.Services.AddHostedService<PayoutDispatchWorker>();
+builder.Services.AddHostedService<BlaaizReconciliationWorker>();
 
 builder.Services.AddDbContext<AppDbContext>(options =>
 {

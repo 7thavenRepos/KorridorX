@@ -47,6 +47,10 @@ public class RecipientBankAccountConfiguration : IEntityTypeConfiguration<Recipi
         builder.Property(x => x.SortCode).HasMaxLength(100);
         builder.Property(x => x.ProviderRecipientId).HasMaxLength(150);
         builder.Property(x => x.ProviderBankAccountId).HasMaxLength(150);
+        builder.Property(x => x.ProviderBankId).HasMaxLength(150);
+        builder.Property(x => x.ProviderVerifiedAccountName).HasMaxLength(200);
+        builder.Property(x => x.ProviderVerificationReference).HasMaxLength(150);
+        builder.Property(x => x.LastVerificationError).HasMaxLength(1000);
 
         builder.HasOne(x => x.Recipient)
             .WithMany(x => x.BankAccounts)

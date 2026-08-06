@@ -31,6 +31,123 @@ public class BlaaizRemittanceProvider : IRemittanceProvider
     public string ProviderName => "Blaaiz";
     public ProviderCode ProviderCode => ProviderCode.Blaaiz;
 
+    public async Task<IReadOnlyList<RemittanceBank>> GetBanksAsync(
+        string? countryCode = null,
+        string? currencyCode = null,
+        CancellationToken ct = default)
+    {
+        var response = await _apiClient.ListBanksAsync(countryCode, currencyCode, ct);
+
+        return response.Data
+            .Where(x => !string.IsNullOrWhiteSpace(x.Id) && !string.IsNullOrWhiteSpace(x.Name))
+            .Select(x => new RemittanceBank(
+                x.Id,
+                x.Name,
+                x.Code,
+                x.NationalBankCode,
+                x.CountryId,
+                x.Country?.Code?.ToUpperInvariant() ?? countryCode?.Trim().ToUpperInvariant() ?? "",
+                x.Country?.Name,
+                System.Text.Json.JsonSerializer.Serialize(x)))
+            .ToList();
+    }
+
+    public async Task<RemittanceBankAccountResolutionResult> ResolveBankAccountAsync(
+        string providerBankId,
+        string accountNumber,
+        CancellationToken ct = default)
+    {
+        var bankId = NormalizeRequired(providerBankId, "Provider bank ID");
+        var number = NormalizeRequired(accountNumber, "Account number");
+
+        var response = await _apiClient.ResolveBankAccountAsync(
+            new BlaaizResolveBankAccountRequest
+            {
+                BankId = bankId,
+                AccountNumber = number
+            },
+            ct);
+
+        return new RemittanceBankAccountResolutionResult(
+            bankId,
+            number,
+            NormalizeRequired(response.Data.AccountName, "Resolved account name"),
+            response.RawResponseJson,
+            response.RequestLogId);
+    }
+
+    public async Task<RemittanceWebhookReplayResult> ReplayWebhookAsync(
+        string providerTransactionId,
+        CancellationToken ct = default)
+    {
+        var transactionId = NormalizeRequired(providerTransactionId, "Provider transaction ID");
+        var response = await _apiClient.ReplayWebhookAsync(
+            new BlaaizWebhookReplayRequest { TransactionId = transactionId },
+            ct);
+
+        return new RemittanceWebhookReplayResult(
+            transactionId,
+            response.Data.Message,
+            response.RawResponseJson,
+            response.RequestLogId);
+    }
+
+    public async Task<RemittanceRefundResult> InitiateRefundAsync(
+        string providerCollectionTransactionId,
+        string reference,
+        string? reason = null,
+        Guid? transferId = null,
+        Guid? collectionId = null,
+        CancellationToken ct = default)
+    {
+        var response = await _apiClient.InitiateRefundAsync(
+            new BlaaizRefundRequest
+            {
+                TransactionId = NormalizeRequired(providerCollectionTransactionId, "Provider collection transaction ID"),
+                Reference = NormalizeRequired(reference, "Refund reference"),
+                Reason = NormalizeOptional(reason)
+            },
+            transferId,
+            collectionId,
+            ct);
+
+        return MapRefund(response);
+    }
+
+    public async Task<RemittanceRefundResult> GetRefundAsync(
+        string providerRefundId,
+        Guid? transferId = null,
+        Guid? collectionId = null,
+        CancellationToken ct = default)
+    {
+        var response = await _apiClient.GetRefundAsync(
+            NormalizeRequired(providerRefundId, "Provider refund ID"),
+            transferId,
+            collectionId,
+            ct);
+
+        return MapRefund(response);
+    }
+
+    private static RemittanceRefundResult MapRefund(
+        BlaaizApiResult<BlaaizRefundEnvelope> response)
+    {
+        var refund = response.Data.Data;
+        return new RemittanceRefundResult(
+            refund.Id,
+            refund.Status,
+            refund.Amount,
+            refund.Currency,
+            refund.TransactionId,
+            refund.Reference,
+            refund.RefundReference,
+            refund.FailureReason,
+            refund.CreatedAt,
+            refund.UpdatedAt,
+            response.RawResponseJson,
+            response.RequestLogId);
+    }
+
     public async Task<bool> IsAvailableAsync(CancellationToken ct = default)
     {
         if (!_options.IsEnabled)
@@ -287,6 +404,123 @@ public class BlaaizRemittanceProvider : IRemittanceProvider
             response.RawResponseJson,
             response.RequestLogId);
     }
+
+    public async Task<RemittancePayoutResult> InitiatePayoutAsync(
+        RemittancePayoutRequest request,
+        CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(request.WalletId))
+        {
+            throw new InvalidOperationException(
+                $"No Blaaiz payout wallet is configured for {request.SourceCurrencyCode}.");
+        }
+
+        if (string.IsNullOrWhiteSpace(request.ProviderCustomerId))
+        {
+            throw new InvalidOperationException("A verified Blaaiz customer is required before payout initiation.");
+        }
+
+        var providerRequest = new BlaaizPayoutRequest
+        {
+            WalletId = request.WalletId,
+            CustomerId = request.ProviderCustomerId,
+            Method = MapPayoutMethod(request.PaymentMethod),
+            FromCurrencyId = request.SourceCurrencyCode.ToUpperInvariant(),
+            ToCurrencyId = request.DestinationCurrencyCode.ToUpperInvariant(),
+            ToAmount = request.DestinationAmount,
+            Note = NormalizeOptional(request.Note)
+        };
+
+        switch (request.PaymentMethod)
+        {
+            case PaymentMethod.BankTransfer:
+                providerRequest.BankId = NormalizeRequired(request.BankId, "Bank ID");
+                providerRequest.AccountNumber = NormalizeRequired(request.AccountNumber, "Account number");
+                providerRequest.AccountName = NormalizeOptional(request.AccountName);
+                providerRequest.BankName = NormalizeOptional(request.BankName);
+                providerRequest.SortCode = NormalizeOptional(request.SortCode);
+                providerRequest.Iban = NormalizeOptional(request.Iban);
+                providerRequest.BicCode = NormalizeOptional(request.SwiftBic);
+                // Country is not required for the currently enabled NGN bank-transfer corridor.
+                // Additional country-specific payout fields will be added when more corridors are enabled.
+                providerRequest.Country = null;
+                break;
+
+            case PaymentMethod.Interac:
+                providerRequest.Email = NormalizeRequired(request.RecipientEmail, "Recipient email").ToLowerInvariant();
+                providerRequest.InteracFirstName = NormalizeRequired(request.RecipientFirstName, "Recipient first name");
+                providerRequest.InteracLastName = NormalizeRequired(request.RecipientLastName, "Recipient last name");
+                break;
+
+            default:
+                throw new InvalidOperationException(
+                    $"Live Blaaiz payout initiation is not yet implemented for '{request.PaymentMethod}'.");
+        }
+
+        var response = await _apiClient.InitiatePayoutAsync(
+            providerRequest,
+            request.TransferId,
+            request.PayoutId,
+            ct);
+
+        var transaction = response.Data.Transaction;
+        if (string.IsNullOrWhiteSpace(transaction.Id))
+        {
+            throw new InvalidOperationException("Blaaiz did not return a payout transaction ID.");
+        }
+
+        return new RemittancePayoutResult(
+            transaction.Id,
+            transaction.Reference,
+            transaction.Status,
+            transaction.Recipient?.Currency ?? transaction.Currency,
+            transaction.Recipient?.Amount ?? transaction.Amount,
+            transaction.Question,
+            transaction.Answer,
+            transaction.Date,
+            response.RawResponseJson,
+            response.RequestLogId);
+    }
+
+    public async Task<RemittanceTransactionStatusResult> GetTransactionAsync(
+        string providerTransactionIdOrReference,
+        Guid? transferId = null,
+        Guid? collectionId = null,
+        Guid? payoutId = null,
+        CancellationToken ct = default)
+    {
+        var response = await _apiClient.GetTransactionAsync(
+            providerTransactionIdOrReference,
+            transferId,
+            collectionId,
+            payoutId,
+            ct);
+
+        var transaction = response.Data.Data;
+
+        var isPayout = string.Equals(transaction.Type, "payout", StringComparison.OrdinalIgnoreCase);
+
+        return new RemittanceTransactionStatusResult(
+            transaction.Id,
+            transaction.Reference,
+            transaction.Type,
+            transaction.Status,
+            isPayout ? transaction.Recipient?.Currency ?? transaction.Currency : transaction.Currency,
+            isPayout ? transaction.Recipient?.Amount ?? transaction.Amount : transaction.Amount,
+            transaction.FailureReason,
+            transaction.Date,
+            response.RawResponseJson,
+            response.RequestLogId);
+    }
+
+    private static string MapPayoutMethod(PaymentMethod paymentMethod) => paymentMethod switch
+    {
+        PaymentMethod.BankTransfer => "bank_transfer",
+        PaymentMethod.Interac => "interac",
+        PaymentMethod.Ach => "ach",
+        PaymentMethod.Wire => "wire",
+        _ => throw new InvalidOperationException($"Unsupported Blaaiz payout method '{paymentMethod}'.")
+    };
 
     private static string MapFileCategory(KycDocumentType documentType) => documentType switch
     {

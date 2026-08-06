@@ -15,7 +15,8 @@ public class CollectionStatusService : ICollectionStatusService
             [
                 CollectionStatus.Initiated,
                 CollectionStatus.Failed,
-                CollectionStatus.Cancelled
+                CollectionStatus.Cancelled,
+                CollectionStatus.Expired
             ],
 
             [CollectionStatus.Initiated] =
@@ -23,14 +24,16 @@ public class CollectionStatusService : ICollectionStatusService
                 CollectionStatus.Processing,
                 CollectionStatus.Successful,
                 CollectionStatus.Failed,
-                CollectionStatus.Cancelled
+                CollectionStatus.Cancelled,
+                CollectionStatus.Expired
             ],
 
             [CollectionStatus.Processing] =
             [
                 CollectionStatus.Successful,
                 CollectionStatus.Failed,
-                CollectionStatus.Cancelled
+                CollectionStatus.Cancelled,
+                CollectionStatus.Expired
             ],
 
             [CollectionStatus.Failed] =
@@ -44,12 +47,26 @@ public class CollectionStatusService : ICollectionStatusService
                 CollectionStatus.Initiated
             ],
 
-            [CollectionStatus.Successful] =
+            [CollectionStatus.Expired] =
             [
-                CollectionStatus.Refunded
+                CollectionStatus.Initiated
             ],
 
-            [CollectionStatus.Refunded] = []
+            [CollectionStatus.Successful] =
+            [
+                CollectionStatus.RefundPending,
+                CollectionStatus.Refunded,
+                CollectionStatus.RefundFailed
+            ],
+
+            [CollectionStatus.RefundPending] =
+            [
+                CollectionStatus.Refunded,
+                CollectionStatus.RefundFailed
+            ],
+
+            [CollectionStatus.Refunded] = [],
+            [CollectionStatus.RefundFailed] = []
         };
 
     private readonly AppDbContext _db;
@@ -174,6 +191,25 @@ public class CollectionStatusService : ICollectionStatusService
                 }
                 break;
 
+            case CollectionStatus.RefundPending:
+                if (transfer.Status != TransferStatus.RefundPending &&
+                    _transferStatusService.CanTransition(transfer.Status, TransferStatus.RefundPending))
+                {
+                    _transferStatusService.ApplyTransition(
+                        transfer,
+                        TransferStatus.RefundPending,
+                        new TransferStatusTransitionContext(
+                            Source: source,
+                            Reason: reason ?? "A collection refund was initiated.",
+                            ChangedByUserId: context.ChangedByUserId,
+                            EventType: "COLLECTION_REFUND_PENDING",
+                            Title: "Refund initiated",
+                            Description: "A refund of the transfer payment has been initiated.",
+                            MetadataJson: context.MetadataJson,
+                            OccurredAt: occurredAt));
+                }
+                break;
+
             case CollectionStatus.Refunded:
                 if (transfer.Status != TransferStatus.RefundPending &&
                     _transferStatusService.CanTransition(transfer.Status, TransferStatus.RefundPending))
@@ -203,6 +239,33 @@ public class CollectionStatusService : ICollectionStatusService
                             Description: "The transfer payment has been refunded.",
                             MetadataJson: context.MetadataJson,
                             OccurredAt: occurredAt));
+                }
+                break;
+
+            case CollectionStatus.RefundFailed:
+                if (_transferStatusService.CanTransition(transfer.Status, TransferStatus.Failed))
+                {
+                    _transferStatusService.ApplyTransition(
+                        transfer,
+                        TransferStatus.Failed,
+                        new TransferStatusTransitionContext(
+                            Source: source,
+                            Reason: reason ?? "The collection refund failed and requires manual recovery.",
+                            ChangedByUserId: context.ChangedByUserId,
+                            EventType: "COLLECTION_REFUND_FAILED",
+                            Title: "Refund failed",
+                            Description: "The refund could not be completed automatically. Operations will review the transfer.",
+                            MetadataJson: context.MetadataJson,
+                            OccurredAt: occurredAt));
+                }
+                else
+                {
+                    AddCollectionTimelineEvent(
+                        transfer.Id,
+                        newStatus,
+                        reason,
+                        context.MetadataJson,
+                        occurredAt);
                 }
                 break;
 
@@ -240,6 +303,15 @@ public class CollectionStatusService : ICollectionStatusService
 
             CollectionStatus.Cancelled =>
                 ("COLLECTION_CANCELLED", "Payment cancelled", reason ?? "The payment request was cancelled."),
+
+            CollectionStatus.Expired =>
+                ("COLLECTION_EXPIRED", "Payment request expired", reason ?? "The payment request expired before payment was completed."),
+
+            CollectionStatus.RefundPending =>
+                ("COLLECTION_REFUND_PENDING", "Refund initiated", reason ?? "A refund has been initiated."),
+
+            CollectionStatus.RefundFailed =>
+                ("COLLECTION_REFUND_FAILED", "Refund failed", reason ?? "The refund could not be completed and requires manual review."),
 
             _ =>
                 ("COLLECTION_STATUS_CHANGED", "Payment status updated", reason ?? "The payment status has been updated.")
@@ -279,6 +351,26 @@ public class CollectionStatusService : ICollectionStatusService
             case CollectionStatus.Failed:
                 collection.FailedAt = occurredAt;
                 collection.FailureReason = reason ?? "Payment collection failed.";
+                break;
+
+            case CollectionStatus.Expired:
+                collection.ExpiredAt = occurredAt;
+                collection.FailureReason = reason ?? "Payment request expired.";
+                break;
+
+            case CollectionStatus.RefundPending:
+                collection.RefundInitiatedAt ??= occurredAt;
+                break;
+
+            case CollectionStatus.Refunded:
+                collection.RefundInitiatedAt ??= occurredAt;
+                collection.RefundedAt ??= occurredAt;
+                collection.RefundFailureReason = null;
+                break;
+
+            case CollectionStatus.RefundFailed:
+                collection.RefundInitiatedAt ??= occurredAt;
+                collection.RefundFailureReason = reason ?? "The provider refund failed.";
                 break;
         }
     }
@@ -347,7 +439,7 @@ public class CollectionStatusService : ICollectionStatusService
         attempt.Status = newStatus switch
         {
             CollectionStatus.Successful or CollectionStatus.Refunded => ProviderRequestStatus.Successful,
-            CollectionStatus.Failed or CollectionStatus.Cancelled => ProviderRequestStatus.Failed,
+            CollectionStatus.Failed or CollectionStatus.Cancelled or CollectionStatus.Expired or CollectionStatus.RefundFailed => ProviderRequestStatus.Failed,
             _ => ProviderRequestStatus.Pending
         };
 

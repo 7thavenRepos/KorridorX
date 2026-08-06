@@ -31,6 +31,117 @@ public class BlaaizApiClient : IBlaaizApiClient
         _auditService = auditService;
     }
 
+    public Task<BlaaizApiResult<List<BlaaizBankData>>> ListBanksAsync(
+        string? countryCode = null,
+        string? currencyCode = null,
+        CancellationToken ct = default)
+    {
+        var query = new List<string>();
+        if (!string.IsNullOrWhiteSpace(countryCode))
+        {
+            query.Add($"country={Uri.EscapeDataString(countryCode.Trim().ToUpperInvariant())}");
+        }
+
+        if (!string.IsNullOrWhiteSpace(currencyCode))
+        {
+            query.Add($"currency={Uri.EscapeDataString(currencyCode.Trim().ToUpperInvariant())}");
+        }
+
+        var endpoint = "/api/external/bank" + (query.Count == 0 ? "" : $"?{string.Join("&", query)}");
+
+        return SendAsync<object, List<BlaaizBankData>>(
+            HttpMethod.Get,
+            endpoint,
+            null,
+            JsonSerializer.Serialize(new { countryCode, currencyCode }),
+            null,
+            null,
+            null,
+            null,
+            ct);
+    }
+
+    public Task<BlaaizApiResult<BlaaizResolveBankAccountResponse>> ResolveBankAccountAsync(
+        BlaaizResolveBankAccountRequest request,
+        CancellationToken ct = default)
+    {
+        var auditBody = JsonSerializer.Serialize(new
+        {
+            account_number = MaskSensitive(request.AccountNumber),
+            bank_id = request.BankId
+        });
+
+        return SendAsync<BlaaizResolveBankAccountRequest, BlaaizResolveBankAccountResponse>(
+            HttpMethod.Post,
+            "/api/external/bank/account-lookup",
+            request,
+            auditBody,
+            null,
+            null,
+            null,
+            null,
+            ct);
+    }
+
+    public Task<BlaaizApiResult<BlaaizWebhookReplayResponse>> ReplayWebhookAsync(
+        BlaaizWebhookReplayRequest request,
+        CancellationToken ct = default)
+    {
+        return SendAsync<BlaaizWebhookReplayRequest, BlaaizWebhookReplayResponse>(
+            HttpMethod.Post,
+            "/api/external/webhook-replay",
+            request,
+            JsonSerializer.Serialize(request, SerializerOptions),
+            null,
+            null,
+            null,
+            null,
+            ct);
+    }
+
+    public Task<BlaaizApiResult<BlaaizRefundEnvelope>> InitiateRefundAsync(
+        BlaaizRefundRequest request,
+        Guid? transferId = null,
+        Guid? collectionId = null,
+        CancellationToken ct = default)
+    {
+        return SendAsync<BlaaizRefundRequest, BlaaizRefundEnvelope>(
+            HttpMethod.Post,
+            "/api/external/refund",
+            request,
+            JsonSerializer.Serialize(request, SerializerOptions),
+            transferId,
+            collectionId,
+            null,
+            null,
+            ct);
+    }
+
+    public Task<BlaaizApiResult<BlaaizRefundEnvelope>> GetRefundAsync(
+        string providerRefundId,
+        Guid? transferId = null,
+        Guid? collectionId = null,
+        CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(providerRefundId))
+        {
+            throw new InvalidOperationException("Provider refund ID is required.");
+        }
+
+        var endpoint = $"/api/external/refund/{Uri.EscapeDataString(providerRefundId.Trim())}";
+
+        return SendAsync<object, BlaaizRefundEnvelope>(
+            HttpMethod.Get,
+            endpoint,
+            null,
+            JsonSerializer.Serialize(new { providerRefundId }),
+            transferId,
+            collectionId,
+            null,
+            null,
+            ct);
+    }
+
     public Task<BlaaizApiResult<BlaaizCustomerEnvelope>> CreateCustomerAsync(
         BlaaizCreateCustomerRequest request,
         Guid customerProfileId,
@@ -188,6 +299,82 @@ public class BlaaizApiClient : IBlaaizApiClient
             transferId,
             collectionId,
             null,
+            null,
+            ct);
+    }
+
+    public Task<BlaaizApiResult<BlaaizPayoutResponse>> InitiatePayoutAsync(
+        BlaaizPayoutRequest request,
+        Guid transferId,
+        Guid payoutId,
+        CancellationToken ct = default)
+    {
+        var auditBody = JsonSerializer.Serialize(new
+        {
+            wallet_id = request.WalletId,
+            customer_id = request.CustomerId,
+            method = request.Method,
+            from_currency_id = request.FromCurrencyId,
+            to_currency_id = request.ToCurrencyId,
+            from_amount = request.FromAmount,
+            to_amount = request.ToAmount,
+            type = request.RecipientType,
+            phone_number = request.PhoneNumber,
+            email = request.Email,
+            interac_first_name = request.InteracFirstName,
+            interac_last_name = request.InteracLastName,
+            bank_id = request.BankId,
+            bank_name = request.BankName,
+            account_name = request.AccountName,
+            account_number = MaskSensitive(request.AccountNumber ?? ""),
+            routing_number = MaskSensitive(request.RoutingNumber ?? ""),
+            swift_code = MaskSensitive(request.SwiftCode ?? ""),
+            sort_code = MaskSensitive(request.SortCode ?? ""),
+            iban = MaskSensitive(request.Iban ?? ""),
+            country = request.Country,
+            note = request.Note
+        }, SerializerOptions);
+
+        return SendAsync<BlaaizPayoutRequest, BlaaizPayoutResponse>(
+            HttpMethod.Post,
+            "/api/external/payout",
+            request,
+            auditBody,
+            transferId,
+            null,
+            payoutId,
+            null,
+            ct);
+    }
+
+    public Task<BlaaizApiResult<BlaaizTransactionEnvelope>> GetTransactionAsync(
+        string providerTransactionIdOrReference,
+        Guid? transferId = null,
+        Guid? collectionId = null,
+        Guid? payoutId = null,
+        CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(providerTransactionIdOrReference))
+        {
+            throw new InvalidOperationException("Provider transaction ID or reference is required.");
+        }
+
+        var endpoint = $"/api/external/transaction/{Uri.EscapeDataString(providerTransactionIdOrReference.Trim())}";
+
+        return SendAsync<object, BlaaizTransactionEnvelope>(
+            HttpMethod.Get,
+            endpoint,
+            null,
+            JsonSerializer.Serialize(new
+            {
+                providerTransactionIdOrReference,
+                transferId,
+                collectionId,
+                payoutId
+            }),
+            transferId,
+            collectionId,
+            payoutId,
             null,
             ct);
     }

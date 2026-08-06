@@ -20,18 +20,30 @@ public class BlaaizWebhooksController : ControllerBase
     [HttpPost("collection")]
     public async Task<IActionResult> ReceiveCollectionWebhook(CancellationToken ct)
     {
-        using var reader = new StreamReader(Request.Body);
-        var rawPayload = await reader.ReadToEndAsync(ct);
-
-        var signature = Request.Headers["x-blaaiz-signature"].FirstOrDefault();
-        var timestamp = Request.Headers["x-blaaiz-timestamp"].FirstOrDefault();
-
         var result = await _webhookService.ProcessCollectionWebhookAsync(
-            rawPayload,
-            signature,
-            timestamp,
+            await ReadBodyAsync(ct),
+            Request.Headers["x-blaaiz-signature"].FirstOrDefault(),
+            Request.Headers["x-blaaiz-timestamp"].FirstOrDefault(),
             ct);
 
-        return Ok(ApiResponses.Ok(result, "Blaaiz webhook accepted."));
+        return Ok(ApiResponses.Ok(result, "Blaaiz collection webhook accepted."));
+    }
+
+    [HttpPost("payout")]
+    public async Task<IActionResult> ReceivePayoutWebhook(CancellationToken ct)
+    {
+        var result = await _webhookService.ProcessPayoutWebhookAsync(
+            await ReadBodyAsync(ct),
+            Request.Headers["x-blaaiz-signature"].FirstOrDefault(),
+            Request.Headers["x-blaaiz-timestamp"].FirstOrDefault(),
+            ct);
+
+        return Ok(ApiResponses.Ok(result, "Blaaiz payout webhook accepted."));
+    }
+
+    private async Task<string> ReadBodyAsync(CancellationToken ct)
+    {
+        using var reader = new StreamReader(Request.Body);
+        return await reader.ReadToEndAsync(ct);
     }
 }
