@@ -3,6 +3,7 @@ using KorridorX.Data;
 using KorridorX.Exceptions;
 using KorridorX.Models.Enums;
 using KorridorX.Models.Providers;
+using KorridorX.Models.Payments;
 using KorridorX.Providers.Remittance;
 using KorridorX.Services.Payments;
 using Microsoft.EntityFrameworkCore;

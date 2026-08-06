@@ -4,9 +4,11 @@ using System.Text;
 using System.Text.Json;
 using KorridorX.Configuration;
 using KorridorX.Data;
+using KorridorX.Models.Compliance;
 using KorridorX.Models.Enums;
 using KorridorX.Models.Providers;
 using KorridorX.Models.Webhooks;
+using KorridorX.Providers.Remittance;
 using KorridorX.Services.Payments;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
@@ -19,17 +21,20 @@ public class BlaaizWebhookService : IBlaaizWebhookService
     private readonly BlaaizOptions _options;
     private readonly ICollectionStatusService _collectionStatusService;
     private readonly IPayoutStatusService _payoutStatusService;
+    private readonly IRemittanceProvider _provider;
 
     public BlaaizWebhookService(
         AppDbContext db,
         IOptions<BlaaizOptions> options,
         ICollectionStatusService collectionStatusService,
-        IPayoutStatusService payoutStatusService)
+        IPayoutStatusService payoutStatusService,
+        IRemittanceProvider provider)
     {
         _db = db;
         _options = options.Value;
         _collectionStatusService = collectionStatusService;
         _payoutStatusService = payoutStatusService;
+        _provider = provider;
     }
 
     public Task<BlaaizWebhookResult> ProcessCollectionWebhookAsync(
@@ -454,22 +459,56 @@ public class BlaaizWebhookService : IBlaaizWebhookService
 
         var providerCustomer = await _db.ProviderCustomers
             .Include(x => x.CustomerProfile)
+            .Include(x => x.BusinessProfile)
             .FirstOrDefaultAsync(x =>
                 x.ProviderCode == ProviderCode.Blaaiz &&
                 x.ProviderCustomerId == providerCustomerId &&
                 !x.IsDeleted,
                 ct);
 
-        if (providerCustomer?.CustomerProfileId is null || providerCustomer.CustomerProfile is null)
+        if (providerCustomer is null)
         {
             return false;
         }
+
+        if (providerCustomer.BusinessProfileId.HasValue && providerCustomer.BusinessProfile is not null)
+        {
+            return await ProcessBusinessCustomerStatusAsync(
+                providerCustomer,
+                providerStatus,
+                comment,
+                updatedAt,
+                ct);
+        }
+
+        if (providerCustomer.CustomerProfileId.HasValue && providerCustomer.CustomerProfile is not null)
+        {
+            return await ProcessIndividualCustomerStatusAsync(
+                providerCustomer,
+                providerStatus,
+                comment,
+                updatedAt,
+                ct);
+        }
+
+        return false;
+    }
+
+    private async Task<bool> ProcessIndividualCustomerStatusAsync(
+        ProviderCustomer providerCustomer,
+        string providerStatus,
+        string? comment,
+        DateTime updatedAt,
+        CancellationToken ct)
+    {
+        var customerProfileId = providerCustomer.CustomerProfileId!.Value;
+        var customerProfile = providerCustomer.CustomerProfile!;
 
         var kycProfile = await _db.KycProfiles
             .Include(x => x.Applications)
             .ThenInclude(x => x.Documents)
             .FirstOrDefaultAsync(x =>
-                x.CustomerProfileId == providerCustomer.CustomerProfileId.Value &&
+                x.CustomerProfileId == customerProfileId &&
                 !x.IsDeleted,
                 ct);
 
@@ -494,9 +533,9 @@ public class BlaaizWebhookService : IBlaaizWebhookService
         kycProfile.RejectionReason = status == KycStatus.Rejected ? comment : null;
         kycProfile.LastUpdatedAt = now;
 
-        providerCustomer.CustomerProfile.KycStatus = status;
-        providerCustomer.CustomerProfile.KycApprovedAt = status == KycStatus.Approved ? updatedAt : null;
-        providerCustomer.CustomerProfile.LastUpdatedAt = now;
+        customerProfile.KycStatus = status;
+        customerProfile.KycApprovedAt = status == KycStatus.Approved ? updatedAt : null;
+        customerProfile.LastUpdatedAt = now;
 
         if (status == KycStatus.Approved)
         {
@@ -538,6 +577,172 @@ public class BlaaizWebhookService : IBlaaizWebhookService
         }
 
         return true;
+    }
+
+    private async Task<bool> ProcessBusinessCustomerStatusAsync(
+        ProviderCustomer providerCustomer,
+        string providerStatus,
+        string? comment,
+        DateTime updatedAt,
+        CancellationToken ct)
+    {
+        var businessProfileId = providerCustomer.BusinessProfileId!.Value;
+        var businessProfile = providerCustomer.BusinessProfile!;
+        var status = MapProviderKybStatus(providerStatus);
+        var now = DateTime.UtcNow;
+
+        var application = await _db.BusinessKybApplications
+            .Include(x => x.Owners)
+            .Include(x => x.Documents)
+            .Where(x => x.BusinessProfileId == businessProfileId && !x.IsDeleted)
+            .OrderByDescending(x => x.CreatedAt)
+            .FirstOrDefaultAsync(ct);
+
+        RemittanceBusinessCustomerResult? providerSnapshot = null;
+        if (application is not null &&
+            providerStatus is "VERIFIED" or "REJECTED" or "PROCESSING")
+        {
+            providerSnapshot = await _provider.GetBusinessCustomerAsync(
+                businessProfileId,
+                providerCustomer.ProviderCustomerId,
+                ct);
+        }
+
+        providerCustomer.ProviderStatus = providerSnapshot?.ProviderStatus ?? providerStatus;
+        providerCustomer.MetadataJson = providerSnapshot?.RawResponseJson ?? providerCustomer.MetadataJson;
+        providerCustomer.LastSyncedAt = now;
+        providerCustomer.LastUpdatedAt = now;
+
+        businessProfile.KybStatus = status;
+        businessProfile.KybApprovedAt = status == KybStatus.Approved ? updatedAt : null;
+        businessProfile.KybRejectedAt = status == KybStatus.Rejected ? updatedAt : null;
+        businessProfile.KybRejectionReason = status == KybStatus.Rejected ? comment : null;
+        businessProfile.LastUpdatedAt = now;
+
+        if (application is null)
+        {
+            return true;
+        }
+
+        application.Status = status;
+        application.ReviewedAt = status is KybStatus.Approved or KybStatus.Rejected ? updatedAt : null;
+        application.ReviewNote = status == KybStatus.Rejected ? comment : null;
+        application.ProviderResponseJson = providerSnapshot?.RawResponseJson ?? application.ProviderResponseJson;
+        application.LastUpdatedAt = now;
+
+        if (providerSnapshot is not null)
+        {
+            ApplyBusinessProviderSnapshot(application, providerSnapshot);
+        }
+
+        if (status == KybStatus.Rejected)
+        {
+            var rejectionMessages = new List<string>();
+            if (!string.IsNullOrWhiteSpace(comment)) rejectionMessages.Add(comment);
+
+            rejectionMessages.AddRange(application.Owners
+                .Where(x => !x.IsDeleted && string.Equals(x.ProviderStatus, "REJECTED", StringComparison.OrdinalIgnoreCase))
+                .SelectMany(x => ReadAdminComments(x.ProviderAdminCommentsJson)));
+
+            rejectionMessages.AddRange(application.Documents
+                .Where(x => !x.IsDeleted && string.Equals(x.ProviderStatus, "REJECTED", StringComparison.OrdinalIgnoreCase))
+                .SelectMany(x => ReadAdminComments(x.ProviderAdminCommentsJson)));
+
+            var distinctMessages = rejectionMessages
+                .Where(x => !string.IsNullOrWhiteSpace(x))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            if (distinctMessages.Count > 0)
+            {
+                var combined = string.Join(" | ", distinctMessages);
+                application.ReviewNote = combined;
+                businessProfile.KybRejectionReason = combined;
+            }
+        }
+        else if (status == KybStatus.Approved)
+        {
+            businessProfile.KybRejectionReason = null;
+            application.ReviewNote = null;
+        }
+
+        return true;
+    }
+
+    private static void ApplyBusinessProviderSnapshot(
+        BusinessKybApplication application,
+        RemittanceBusinessCustomerResult snapshot)
+    {
+        application.ProviderApplicationId = snapshot.ProviderCustomerId;
+
+        foreach (var providerOwner in snapshot.Owners)
+        {
+            var owner = application.Owners.FirstOrDefault(x =>
+                !x.IsDeleted &&
+                !string.IsNullOrWhiteSpace(x.ProviderOwnerId) &&
+                x.ProviderOwnerId == providerOwner.ProviderOwnerId);
+
+            if (owner is null) continue;
+
+            owner.ProviderStatus = providerOwner.ProviderStatus;
+            owner.ProviderAdminCommentsJson = providerOwner.AdminCommentsJson;
+            owner.RejectionReason = string.Equals(providerOwner.ProviderStatus, "REJECTED", StringComparison.OrdinalIgnoreCase)
+                ? FirstAdminComment(providerOwner.AdminCommentsJson)
+                : null;
+            owner.LastUpdatedAt = DateTime.UtcNow;
+        }
+
+        foreach (var providerDocument in snapshot.Documents)
+        {
+            var document = application.Documents.FirstOrDefault(x =>
+                !x.IsDeleted &&
+                ((!string.IsNullOrWhiteSpace(x.ProviderDocumentId) &&
+                  x.ProviderDocumentId == providerDocument.ProviderDocumentId) ||
+                 (x.DocumentType == MapBusinessDocumentType(providerDocument.DocumentType) &&
+                  string.Equals(x.Name, providerDocument.Name, StringComparison.OrdinalIgnoreCase))));
+
+            if (document is null) continue;
+
+            document.ProviderDocumentId = providerDocument.ProviderDocumentId;
+            document.ProviderStatus = providerDocument.ProviderStatus;
+            document.ProviderAdminCommentsJson = providerDocument.AdminCommentsJson;
+            document.RejectionReason = string.Equals(providerDocument.ProviderStatus, "REJECTED", StringComparison.OrdinalIgnoreCase)
+                ? FirstAdminComment(providerDocument.AdminCommentsJson)
+                : null;
+            document.LastUpdatedAt = DateTime.UtcNow;
+        }
+    }
+
+    private static BusinessKybDocumentType MapBusinessDocumentType(string providerType) =>
+        providerType.Trim().ToUpperInvariant() switch
+        {
+            "CERTIFICATE_OF_INCORPORATION" => BusinessKybDocumentType.CertificateOfIncorporation,
+            "ARTICLES_OF_INCORPORATION" => BusinessKybDocumentType.ArticlesOfIncorporation,
+            "BENEFICIAL_OWNERSHIP_CERTIFICATE" => BusinessKybDocumentType.BeneficialOwnershipCertificate,
+            "INCORPORATION_DOCUMENTS" => BusinessKybDocumentType.IncorporationDocuments,
+            "CAC_STATUS_REPORT" => BusinessKybDocumentType.CacStatusReport,
+            "SHARE_REGISTER" => BusinessKybDocumentType.ShareRegister,
+            "BANK_STATEMENT" => BusinessKybDocumentType.BankStatement,
+            "PROOF_OF_ADDRESS" => BusinessKybDocumentType.ProofOfBusinessAddress,
+            "TAX_DOCUMENT" => BusinessKybDocumentType.TaxDocument,
+            _ => BusinessKybDocumentType.Other
+        };
+
+    private static string? FirstAdminComment(string? commentsJson) =>
+        ReadAdminComments(commentsJson).FirstOrDefault();
+
+    private static IReadOnlyList<string> ReadAdminComments(string? commentsJson)
+    {
+        if (string.IsNullOrWhiteSpace(commentsJson)) return [];
+
+        try
+        {
+            return JsonSerializer.Deserialize<List<string>>(commentsJson) ?? [];
+        }
+        catch (JsonException)
+        {
+            return [commentsJson];
+        }
     }
 
     private async Task UpsertProviderTransactionAsync(
@@ -750,6 +955,17 @@ public class BlaaizWebhookService : IBlaaizWebhookService
             _ => PayoutStatus.Initiated
         };
     }
+
+    private static KybStatus MapProviderKybStatus(string providerStatus) =>
+        providerStatus.Trim().ToUpperInvariant() switch
+        {
+            "VERIFIED" => KybStatus.Approved,
+            "REJECTED" => KybStatus.Rejected,
+            "PROCESSING" => KybStatus.UnderReview,
+            "PENDING" => KybStatus.Pending,
+            _ => throw new InvalidOperationException(
+                $"Unsupported Blaaiz business customer status '{providerStatus}'.")
+        };
 
     private static KycStatus MapProviderKycStatus(string providerStatus) => providerStatus switch
     {

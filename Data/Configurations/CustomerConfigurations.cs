@@ -1,4 +1,4 @@
-﻿using KorridorX.Models.Customers;
+using KorridorX.Models.Customers;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -41,17 +41,32 @@ public class BusinessProfileConfiguration : IEntityTypeConfiguration<BusinessPro
         builder.HasIndex(x => x.KybStatus);
 
         builder.Property(x => x.BusinessName).HasMaxLength(200);
+        builder.Property(x => x.TradingName).HasMaxLength(200);
+        builder.Property(x => x.BusinessType).HasMaxLength(100);
         builder.Property(x => x.RegistrationNumber).HasMaxLength(100);
         builder.Property(x => x.TaxIdentificationNumber).HasMaxLength(100);
+        builder.Property(x => x.IndustryType).HasMaxLength(150);
+        builder.Property(x => x.BusinessDescription).HasMaxLength(2000);
+        builder.Property(x => x.Website).HasMaxLength(500);
+        builder.Property(x => x.SourceOfFunds).HasMaxLength(150);
+        builder.Property(x => x.EstimatedAnnualRevenue).HasMaxLength(100);
+        builder.Property(x => x.AccountPurpose).HasMaxLength(200);
         builder.Property(x => x.CountryCode).HasMaxLength(10);
         builder.Property(x => x.StateOrProvince).HasMaxLength(100);
         builder.Property(x => x.City).HasMaxLength(100);
         builder.Property(x => x.AddressLine1).HasMaxLength(250);
         builder.Property(x => x.AddressLine2).HasMaxLength(250);
         builder.Property(x => x.PostalCode).HasMaxLength(50);
+        builder.Property(x => x.OperatingCountryCode).HasMaxLength(10);
+        builder.Property(x => x.OperatingStateOrProvince).HasMaxLength(100);
+        builder.Property(x => x.OperatingCity).HasMaxLength(100);
+        builder.Property(x => x.OperatingAddressLine1).HasMaxLength(250);
+        builder.Property(x => x.OperatingAddressLine2).HasMaxLength(250);
+        builder.Property(x => x.OperatingPostalCode).HasMaxLength(50);
         builder.Property(x => x.ContactEmail).HasMaxLength(255);
         builder.Property(x => x.ContactPhone).HasMaxLength(50);
         builder.Property(x => x.BlaaizBusinessCustomerId).HasMaxLength(150);
+        builder.Property(x => x.KybRejectionReason).HasMaxLength(2000);
 
         builder.HasOne(x => x.OwnerUser)
             .WithMany()

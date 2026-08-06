@@ -8,6 +8,7 @@ using KorridorX.Models.Identity;
 using KorridorX.Providers.Remittance;
 using KorridorX.Providers.Remittance.Blaaiz;
 using KorridorX.Services.Auth;
+using KorridorX.Services.BusinessBeneficiaries;
 using KorridorX.Services.Compliance;
 using KorridorX.Services.Fx;
 using KorridorX.Services.Payments;
@@ -18,6 +19,7 @@ using KorridorX.Services.Providers;
 using KorridorX.Services.Reconciliation;
 using KorridorX.Services.Webhooks;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -34,6 +36,7 @@ builder.Services
     .ValidateOnStart();
 builder.Services.AddSingleton<IValidateOptions<BlaaizOptions>, BlaaizOptionsValidator>();
 builder.Services.AddMemoryCache();
+builder.Services.AddDataProtection();
 
 builder.Services.AddControllers();
 
@@ -45,8 +48,10 @@ builder.Services.AddScoped<IProviderCustomerService, ProviderCustomerService>();
 builder.Services.AddScoped<IBankDirectoryService, BankDirectoryService>();
 builder.Services.AddScoped<IProviderOperationsQueryService, ProviderOperationsQueryService>();
 builder.Services.AddScoped<IKycService, KycService>();
+builder.Services.AddScoped<IBusinessKybService, BusinessKybService>();
 builder.Services.AddScoped<IComplianceGateService, ComplianceGateService>();
 builder.Services.AddScoped<IAdminKycService, AdminKycService>();
+builder.Services.AddScoped<IAdminBusinessKybService, AdminBusinessKybService>();
 builder.Services.AddScoped<IBlaaizWebhookService, BlaaizWebhookService>();
 
 builder.Services.AddHttpClient("BlaaizAuth", (serviceProvider, client) =>
@@ -67,6 +72,7 @@ builder.Services.AddScoped<IJwtTokenService, JwtTokenService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 
 builder.Services.AddScoped<IRecipientService, RecipientService>();
+builder.Services.AddScoped<IBusinessBeneficiaryService, BusinessBeneficiaryService>();
 builder.Services.AddScoped<ITransferQuoteService, TransferQuoteService>();
 builder.Services.AddScoped<ITransferStatusService, TransferStatusService>();
 builder.Services.AddScoped<ITransferService, TransferService>();

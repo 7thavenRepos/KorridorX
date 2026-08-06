@@ -1,4 +1,5 @@
-﻿using KorridorX.Models.Audit;
+using KorridorX.Models.Audit;
+using KorridorX.Models.BusinessBeneficiaries;
 using KorridorX.Models.Compliance;
 using KorridorX.Models.Customers;
 using KorridorX.Models.Fx;
@@ -49,6 +50,12 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<Guid
     public DbSet<KycProfile> KycProfiles => Set<KycProfile>();
     public DbSet<KycApplication> KycApplications => Set<KycApplication>();
     public DbSet<KycDocument> KycDocuments => Set<KycDocument>();
+    public DbSet<BusinessKybApplication> BusinessKybApplications => Set<BusinessKybApplication>();
+    public DbSet<BusinessBeneficialOwner> BusinessBeneficialOwners => Set<BusinessBeneficialOwner>();
+    public DbSet<BusinessKybDocument> BusinessKybDocuments => Set<BusinessKybDocument>();
+    public DbSet<BusinessBeneficiary> BusinessBeneficiaries => Set<BusinessBeneficiary>();
+    public DbSet<BusinessBeneficiaryBankAccount> BusinessBeneficiaryBankAccounts => Set<BusinessBeneficiaryBankAccount>();
+    public DbSet<BusinessBeneficiaryMobileWallet> BusinessBeneficiaryMobileWallets => Set<BusinessBeneficiaryMobileWallet>();
     public DbSet<ComplianceLimit> ComplianceLimits => Set<ComplianceLimit>();
     public DbSet<ComplianceCheck> ComplianceChecks => Set<ComplianceCheck>();
     public DbSet<AmlFlag> AmlFlags => Set<AmlFlag>();

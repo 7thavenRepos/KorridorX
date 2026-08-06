@@ -8,6 +8,11 @@ public interface IComplianceGateService
         Guid customerProfileId,
         ProviderCode providerCode,
         CancellationToken ct = default);
+
+    Task<ComplianceGateResult> EnsureBusinessCanInitiateMoneyMovementAsync(
+        Guid businessProfileId,
+        ProviderCode providerCode,
+        CancellationToken ct = default);
 }
 
 public record ComplianceGateResult(

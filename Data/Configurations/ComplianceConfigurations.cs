@@ -144,3 +144,79 @@ public class AmlFlagConfiguration : IEntityTypeConfiguration<AmlFlag>
             .OnDelete(DeleteBehavior.Restrict);
     }
 }
+public class BusinessKybApplicationConfiguration : IEntityTypeConfiguration<BusinessKybApplication>
+{
+    public void Configure(EntityTypeBuilder<BusinessKybApplication> builder)
+    {
+        builder.HasIndex(x => x.BusinessProfileId);
+        builder.HasIndex(x => x.Status);
+        builder.HasIndex(x => x.ProviderApplicationId);
+
+        builder.Property(x => x.ProviderApplicationId).HasMaxLength(150);
+        builder.Property(x => x.ReviewNote).HasMaxLength(2000);
+
+        builder.HasOne(x => x.BusinessProfile)
+            .WithMany()
+            .HasForeignKey(x => x.BusinessProfileId)
+            .OnDelete(DeleteBehavior.Restrict);
+    }
+}
+
+public class BusinessBeneficialOwnerConfiguration : IEntityTypeConfiguration<BusinessBeneficialOwner>
+{
+    public void Configure(EntityTypeBuilder<BusinessBeneficialOwner> builder)
+    {
+        builder.HasIndex(x => x.BusinessKybApplicationId);
+        builder.HasIndex(x => x.ProviderOwnerId);
+        builder.HasIndex(x => new { x.BusinessKybApplicationId, x.Email }).IsUnique();
+
+        builder.Property(x => x.ProviderOwnerId).HasMaxLength(150);
+        builder.Property(x => x.FirstName).HasMaxLength(100);
+        builder.Property(x => x.LastName).HasMaxLength(100);
+        builder.Property(x => x.Email).HasMaxLength(255);
+        builder.Property(x => x.Nationality).HasMaxLength(10);
+        builder.Property(x => x.CountryCode).HasMaxLength(10);
+        builder.Property(x => x.Title).HasMaxLength(150);
+        builder.Property(x => x.OwnershipPercentage).HasPrecision(7, 4);
+        builder.Property(x => x.IdDocumentType).HasMaxLength(50);
+        builder.Property(x => x.IdentityNumberLastFour).HasMaxLength(4);
+        builder.Property(x => x.IdentityNumberEncrypted).HasMaxLength(2000);
+        builder.Property(x => x.IdDocumentCountry).HasMaxLength(10);
+        builder.Property(x => x.IdentityFrontProviderFileId).HasMaxLength(150);
+        builder.Property(x => x.IdentityBackProviderFileId).HasMaxLength(150);
+        builder.Property(x => x.ProviderStatus).HasMaxLength(50);
+        builder.Property(x => x.RejectionReason).HasMaxLength(2000);
+
+        builder.HasOne(x => x.BusinessKybApplication)
+            .WithMany(x => x.Owners)
+            .HasForeignKey(x => x.BusinessKybApplicationId)
+            .OnDelete(DeleteBehavior.Cascade);
+    }
+}
+
+public class BusinessKybDocumentConfiguration : IEntityTypeConfiguration<BusinessKybDocument>
+{
+    public void Configure(EntityTypeBuilder<BusinessKybDocument> builder)
+    {
+        builder.HasIndex(x => x.BusinessKybApplicationId);
+        builder.HasIndex(x => x.ProviderFileId);
+        builder.HasIndex(x => x.ProviderDocumentId);
+        builder.HasIndex(x => new { x.BusinessKybApplicationId, x.DocumentType, x.Name });
+
+        builder.Property(x => x.Name).HasMaxLength(255);
+        builder.Property(x => x.Description).HasMaxLength(1000);
+        builder.Property(x => x.FileName).HasMaxLength(255);
+        builder.Property(x => x.MimeType).HasMaxLength(100);
+        builder.Property(x => x.StorageProvider).HasMaxLength(50);
+        builder.Property(x => x.StorageKey).HasMaxLength(500);
+        builder.Property(x => x.ProviderFileId).HasMaxLength(150);
+        builder.Property(x => x.ProviderDocumentId).HasMaxLength(150);
+        builder.Property(x => x.ProviderStatus).HasMaxLength(50);
+        builder.Property(x => x.RejectionReason).HasMaxLength(2000);
+
+        builder.HasOne(x => x.BusinessKybApplication)
+            .WithMany(x => x.Documents)
+            .HasForeignKey(x => x.BusinessKybApplicationId)
+            .OnDelete(DeleteBehavior.Cascade);
+    }
+}

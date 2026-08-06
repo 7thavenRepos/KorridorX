@@ -50,6 +50,52 @@ public interface IBlaaizApiClient
         Guid customerProfileId,
         CancellationToken ct = default);
 
+    Task<BlaaizApiResult<BlaaizCustomerEnvelope>> CreateBusinessCustomerAsync(
+        BlaaizCreateCustomerRequest request,
+        Guid businessProfileId,
+        CancellationToken ct = default);
+
+    Task<BlaaizApiResult<BlaaizCustomerEnvelope>> UpdateBusinessCustomerAsync(
+        string providerCustomerId,
+        BlaaizCreateCustomerRequest request,
+        Guid businessProfileId,
+        CancellationToken ct = default);
+
+    Task<BlaaizApiResult<BlaaizCustomerEnvelope>> GetBusinessCustomerAsync(
+        string providerCustomerId,
+        Guid businessProfileId,
+        CancellationToken ct = default);
+
+    Task<BlaaizApiResult<BlaaizUploadUrlEnvelope>> RequestBusinessOwnerUploadUrlAsync(
+        string providerCustomerId,
+        string providerOwnerId,
+        BlaaizOwnerUploadUrlRequest request,
+        Guid businessProfileId,
+        CancellationToken ct = default);
+
+    Task<BlaaizApiResult<BlaaizBusinessOwnerEnvelope>> AttachBusinessOwnerFilesAsync(
+        string providerCustomerId,
+        string providerOwnerId,
+        BlaaizOwnerFilesRequest request,
+        Guid businessProfileId,
+        CancellationToken ct = default);
+
+    Task<BlaaizApiResult<BlaaizUploadUrlEnvelope>> RequestBusinessDocumentUploadUrlAsync(
+        string providerCustomerId,
+        Guid businessProfileId,
+        CancellationToken ct = default);
+
+    Task<BlaaizApiResult<BlaaizBusinessDocumentEnvelope>> RegisterBusinessDocumentAsync(
+        string providerCustomerId,
+        BlaaizBusinessDocumentRequest request,
+        Guid businessProfileId,
+        CancellationToken ct = default);
+
+    Task<BlaaizApiResult<BlaaizCustomerEnvelope>> SubmitBusinessCustomerAsync(
+        string providerCustomerId,
+        Guid businessProfileId,
+        CancellationToken ct = default);
+
     Task<BlaaizApiResult<BlaaizCardCollectionResponse>> InitiateCardCollectionAsync(
         BlaaizCardCollectionRequest request,
         Guid transferId,

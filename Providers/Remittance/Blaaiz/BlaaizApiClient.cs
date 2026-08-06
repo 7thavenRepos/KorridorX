@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using KorridorX.Exceptions;
 using KorridorX.Models.Enums;
 using KorridorX.Providers.Remittance.Blaaiz.Models;
@@ -155,7 +156,7 @@ public class BlaaizApiClient : IBlaaizApiClient
             request.Email,
             request.Country,
             request.IdType,
-            id_number = MaskSensitive(request.IdNumber),
+            id_number = MaskSensitive(request.IdNumber ?? ""),
             request.Phone,
             request.DateOfBirth,
             request.Street,
@@ -248,6 +249,186 @@ public class BlaaizApiClient : IBlaaizApiClient
             null,
             null,
             null,
+            ct);
+    }
+
+    public Task<BlaaizApiResult<BlaaizCustomerEnvelope>> CreateBusinessCustomerAsync(
+        BlaaizCreateCustomerRequest request,
+        Guid businessProfileId,
+        CancellationToken ct = default)
+    {
+        var auditBody = CreateBusinessCustomerAuditBody(request, businessProfileId);
+
+        return SendAsync<BlaaizCreateCustomerRequest, BlaaizCustomerEnvelope>(
+            HttpMethod.Post,
+            "/api/external/customer",
+            request,
+            auditBody,
+            null,
+            null,
+            null,
+            RedactCustomerResponse,
+            ct);
+    }
+
+    public Task<BlaaizApiResult<BlaaizCustomerEnvelope>> UpdateBusinessCustomerAsync(
+        string providerCustomerId,
+        BlaaizCreateCustomerRequest request,
+        Guid businessProfileId,
+        CancellationToken ct = default)
+    {
+        var endpoint = $"/api/external/customer/{Uri.EscapeDataString(providerCustomerId)}";
+        var auditBody = CreateBusinessCustomerAuditBody(request, businessProfileId);
+
+        return SendAsync<BlaaizCreateCustomerRequest, BlaaizCustomerEnvelope>(
+            HttpMethod.Put,
+            endpoint,
+            request,
+            auditBody,
+            null,
+            null,
+            null,
+            RedactCustomerResponse,
+            ct);
+    }
+
+    public Task<BlaaizApiResult<BlaaizCustomerEnvelope>> GetBusinessCustomerAsync(
+        string providerCustomerId,
+        Guid businessProfileId,
+        CancellationToken ct = default)
+    {
+        var endpoint = $"/api/external/customer/{Uri.EscapeDataString(providerCustomerId)}";
+
+        return SendAsync<object, BlaaizCustomerEnvelope>(
+            HttpMethod.Get,
+            endpoint,
+            null,
+            JsonSerializer.Serialize(new { businessProfileId, providerCustomerId }),
+            null,
+            null,
+            null,
+            RedactCustomerResponse,
+            ct);
+    }
+
+    public Task<BlaaizApiResult<BlaaizUploadUrlEnvelope>> RequestBusinessOwnerUploadUrlAsync(
+        string providerCustomerId,
+        string providerOwnerId,
+        BlaaizOwnerUploadUrlRequest request,
+        Guid businessProfileId,
+        CancellationToken ct = default)
+    {
+        var endpoint = $"/api/external/customer/{Uri.EscapeDataString(providerCustomerId)}/owner/{Uri.EscapeDataString(providerOwnerId)}/file/presigned-url";
+
+        return SendAsync<BlaaizOwnerUploadUrlRequest, BlaaizUploadUrlEnvelope>(
+            HttpMethod.Post,
+            endpoint,
+            request,
+            JsonSerializer.Serialize(new
+            {
+                businessProfileId,
+                providerCustomerId,
+                providerOwnerId,
+                file_category = request.FileCategory
+            }),
+            null,
+            null,
+            null,
+            RedactUploadUrlResponse,
+            ct);
+    }
+
+    public Task<BlaaizApiResult<BlaaizBusinessOwnerEnvelope>> AttachBusinessOwnerFilesAsync(
+        string providerCustomerId,
+        string providerOwnerId,
+        BlaaizOwnerFilesRequest request,
+        Guid businessProfileId,
+        CancellationToken ct = default)
+    {
+        var endpoint = $"/api/external/customer/{Uri.EscapeDataString(providerCustomerId)}/owner/{Uri.EscapeDataString(providerOwnerId)}/files";
+
+        return SendAsync<BlaaizOwnerFilesRequest, BlaaizBusinessOwnerEnvelope>(
+            HttpMethod.Post,
+            endpoint,
+            request,
+            JsonSerializer.Serialize(new
+            {
+                businessProfileId,
+                providerCustomerId,
+                providerOwnerId,
+                id_document_front = request.IdDocumentFront,
+                id_document_back = request.IdDocumentBack
+            }),
+            null,
+            null,
+            null,
+            RedactCustomerResponse,
+            ct);
+    }
+
+    public Task<BlaaizApiResult<BlaaizUploadUrlEnvelope>> RequestBusinessDocumentUploadUrlAsync(
+        string providerCustomerId,
+        Guid businessProfileId,
+        CancellationToken ct = default)
+    {
+        var endpoint = $"/api/external/customer/{Uri.EscapeDataString(providerCustomerId)}/document/presigned-url";
+
+        return SendAsync<object, BlaaizUploadUrlEnvelope>(
+            HttpMethod.Post,
+            endpoint,
+            null,
+            JsonSerializer.Serialize(new { businessProfileId, providerCustomerId }),
+            null,
+            null,
+            null,
+            RedactUploadUrlResponse,
+            ct);
+    }
+
+    public Task<BlaaizApiResult<BlaaizBusinessDocumentEnvelope>> RegisterBusinessDocumentAsync(
+        string providerCustomerId,
+        BlaaizBusinessDocumentRequest request,
+        Guid businessProfileId,
+        CancellationToken ct = default)
+    {
+        var endpoint = $"/api/external/customer/{Uri.EscapeDataString(providerCustomerId)}/document";
+
+        return SendAsync<BlaaizBusinessDocumentRequest, BlaaizBusinessDocumentEnvelope>(
+            HttpMethod.Post,
+            endpoint,
+            request,
+            JsonSerializer.Serialize(new
+            {
+                businessProfileId,
+                providerCustomerId,
+                type = request.Type,
+                name = request.Name,
+                file_id = request.FileId,
+                description = request.Description
+            }),
+            null,
+            null,
+            null,
+            null,
+            ct);
+    }
+
+    public Task<BlaaizApiResult<BlaaizCustomerEnvelope>> SubmitBusinessCustomerAsync(
+        string providerCustomerId,
+        Guid businessProfileId,
+        CancellationToken ct = default)
+    {
+        var endpoint = $"/api/external/customer/{Uri.EscapeDataString(providerCustomerId)}/submit";
+
+        return SendAsync<object, BlaaizCustomerEnvelope>(
+            HttpMethod.Post,
+            endpoint,
+            null,
+            JsonSerializer.Serialize(new { businessProfileId, providerCustomerId }),
+            null,
+            null,
+            null,
+            RedactCustomerResponse,
             ct);
     }
 
@@ -377,6 +558,64 @@ public class BlaaizApiClient : IBlaaizApiClient
             payoutId,
             null,
             ct);
+    }
+
+    private static string CreateBusinessCustomerAuditBody(
+        BlaaizCreateCustomerRequest request,
+        Guid businessProfileId)
+    {
+        return JsonSerializer.Serialize(new
+        {
+            businessProfileId,
+            request.Type,
+            request.BusinessName,
+            request.TradingName,
+            request.BusinessType,
+            request.RegistrationNumber,
+            request.IncorporationCountry,
+            request.IncorporationDate,
+            request.IndustryType,
+            request.BusinessDescription,
+            request.Website,
+            request.SourceOfFunds,
+            request.EstimatedAnnualRevenue,
+            request.ExpectedMonthlyPayments,
+            request.AccountPurpose,
+            request.KybScope,
+            request.Email,
+            request.Country,
+            request.Phone,
+            tin = MaskSensitive(request.Tin ?? ""),
+            request.Street,
+            request.City,
+            request.State,
+            request.ZipCode,
+            request.OperatingCountry,
+            request.OperatingStreet,
+            request.OperatingCity,
+            request.OperatingState,
+            request.OperatingZipCode,
+            owners = request.Owners?.Select(x => new
+            {
+                x.Id,
+                x.FirstName,
+                x.LastName,
+                x.Email,
+                x.DateOfBirth,
+                x.Nationality,
+                x.Country,
+                x.Title,
+                x.OwnershipPercentage,
+                x.HasControl,
+                x.IsSigner,
+                x.IsBeneficialOwner,
+                x.IdDocumentType,
+                id_document_number = MaskSensitive(x.IdDocumentNumber),
+                x.IdDocumentCountry,
+                x.IdExpiryDate,
+                x.IsPep
+            })
+        }, SerializerOptions);
     }
 
     private async Task<BlaaizApiResult<TResponse>> SendAsync<TRequest, TResponse>(
@@ -528,58 +767,76 @@ public class BlaaizApiClient : IBlaaizApiClient
         return fallback;
     }
 
-    private static string RedactCustomerResponse(string rawResponse)
+    private static string RedactCustomerResponse(string rawResponse) =>
+        RedactJsonProperties(
+            rawResponse,
+            new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            {
+                "id_number",
+                "id_document_number",
+                "tin",
+                "tax_identification_number"
+            },
+            "***REDACTED***");
+
+    private static string RedactUploadUrlResponse(string rawResponse) =>
+        RedactJsonProperties(
+            rawResponse,
+            new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "url" },
+            "***PRESIGNED_URL_REDACTED***");
+
+    private static string RedactJsonProperties(
+        string rawJson,
+        IReadOnlySet<string> propertyNames,
+        string replacement)
     {
         try
         {
-            using var document = JsonDocument.Parse(rawResponse);
-            var root = document.RootElement;
+            var node = JsonNode.Parse(rawJson);
+            if (node is null) return rawJson;
 
-            if (!root.TryGetProperty("data", out var data) || data.ValueKind != JsonValueKind.Object)
-            {
-                return rawResponse;
-            }
-
-            var sanitized = new Dictionary<string, object?>();
-            foreach (var property in data.EnumerateObject())
-            {
-                sanitized[property.Name] = property.NameEquals("id_number")
-                    ? "***REDACTED***"
-                    : JsonSerializer.Deserialize<object?>(property.Value.GetRawText(), SerializerOptions);
-            }
-
-            var message = root.TryGetProperty("message", out var messageProperty)
-                ? messageProperty.GetString()
-                : null;
-
-            return JsonSerializer.Serialize(new { message, data = sanitized }, SerializerOptions);
+            RedactNode(node, propertyNames, replacement);
+            return node.ToJsonString(SerializerOptions);
         }
         catch (JsonException)
         {
-            return rawResponse;
+            return rawJson;
         }
     }
 
-    private static string RedactUploadUrlResponse(string rawResponse)
+    private static void RedactNode(
+        JsonNode node,
+        IReadOnlySet<string> propertyNames,
+        string replacement)
     {
-        try
+        if (node is JsonObject obj)
         {
-            using var document = JsonDocument.Parse(rawResponse);
-            var root = document.RootElement;
-
-            return JsonSerializer.Serialize(new
+            foreach (var key in obj.Select(x => x.Key).ToList())
             {
-                message = root.TryGetProperty("message", out var message) ? message.GetString() : null,
-                file_id = root.TryGetProperty("file_id", out var fileId) ? fileId.GetString() : null,
-                url = root.TryGetProperty("url", out _) ? "***PRESIGNED_URL_REDACTED***" : null,
-                headers = root.TryGetProperty("headers", out var headers)
-                    ? JsonSerializer.Deserialize<object?>(headers.GetRawText(), SerializerOptions)
-                    : null
-            }, SerializerOptions);
+                if (propertyNames.Contains(key))
+                {
+                    obj[key] = replacement;
+                    continue;
+                }
+
+                if (obj[key] is JsonNode child)
+                {
+                    RedactNode(child, propertyNames, replacement);
+                }
+            }
+
+            return;
         }
-        catch (JsonException)
+
+        if (node is JsonArray array)
         {
-            return rawResponse;
+            foreach (var child in array)
+            {
+                if (child is not null)
+                {
+                    RedactNode(child, propertyNames, replacement);
+                }
+            }
         }
     }
 

@@ -1,4 +1,4 @@
-﻿using KorridorX.Models.Providers;
+using KorridorX.Models.Providers;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -23,6 +23,7 @@ public class ProviderCustomerConfiguration : IEntityTypeConfiguration<ProviderCu
         builder.HasIndex(x => x.BusinessProfileId);
         builder.HasIndex(x => new { x.ProviderCode, x.ProviderCustomerId }).IsUnique();
         builder.HasIndex(x => new { x.ProviderCode, x.CustomerProfileId }).IsUnique();
+        builder.HasIndex(x => new { x.ProviderCode, x.BusinessProfileId }).IsUnique();
 
         builder.Property(x => x.ProviderCustomerId).HasMaxLength(150);
         builder.Property(x => x.ProviderStatus).HasMaxLength(100);

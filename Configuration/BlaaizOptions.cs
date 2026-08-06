@@ -20,4 +20,5 @@ public class BlaaizOptions
     public int ReconciliationBatchSize { get; set; } = 50;
     public bool AutomaticPayoutDispatchEnabled { get; set; } = false;
     public int PayoutDispatchIntervalSeconds { get; set; } = 30;
+    public bool MinimalBusinessKybEnabled { get; set; } = false;
 }

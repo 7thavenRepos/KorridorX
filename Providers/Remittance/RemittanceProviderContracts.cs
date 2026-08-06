@@ -166,3 +166,120 @@ public sealed record RemittanceRefundResult(
     DateTime? ProviderUpdatedAt,
     string RawResponseJson,
     Guid ProviderRequestLogId);
+
+public sealed record RemittanceBusinessOwnerRequest(
+    Guid LocalOwnerId,
+    string? ProviderOwnerId,
+    string FirstName,
+    string LastName,
+    string Email,
+    DateTime DateOfBirth,
+    string Nationality,
+    string CountryCode,
+    string? Title,
+    decimal OwnershipPercentage,
+    bool HasControl,
+    bool IsSigner,
+    bool IsBeneficialOwner,
+    string IdDocumentType,
+    string? IdDocumentNumber,
+    string IdDocumentCountry,
+    DateTime IdExpiryDate,
+    bool IsPep);
+
+public sealed record RemittanceBusinessCustomerRequest(
+    Guid BusinessProfileId,
+    string? ExistingProviderCustomerId,
+    string BusinessName,
+    string? TradingName,
+    string? BusinessType,
+    string RegistrationNumber,
+    string IncorporationCountry,
+    DateTime? IncorporationDate,
+    string? IndustryType,
+    string? BusinessDescription,
+    string? Website,
+    string? SourceOfFunds,
+    string? EstimatedAnnualRevenue,
+    int? ExpectedMonthlyPayments,
+    string? AccountPurpose,
+    string KybScope,
+    string Email,
+    string? Phone,
+    string? Tin,
+    string CountryCode,
+    string? Street,
+    string? City,
+    string? State,
+    string? PostalCode,
+    string? OperatingCountry,
+    string? OperatingStreet,
+    string? OperatingCity,
+    string? OperatingState,
+    string? OperatingPostalCode,
+    IReadOnlyList<RemittanceBusinessOwnerRequest> Owners);
+
+public sealed record RemittanceBusinessOwnerResult(
+    Guid LocalOwnerId,
+    string ProviderOwnerId,
+    string ProviderStatus,
+    string? AdminCommentsJson);
+
+public sealed record RemittanceBusinessCustomerResult(
+    string ProviderCustomerId,
+    string ProviderStatus,
+    string? KybScope,
+    IReadOnlyList<RemittanceBusinessOwnerResult> Owners,
+    IReadOnlyList<RemittanceBusinessDocumentResult> Documents,
+    string RawResponseJson,
+    Guid ProviderRequestLogId);
+
+public sealed record RemittanceBusinessOwnerUploadUrlRequest(
+    Guid BusinessProfileId,
+    string ProviderCustomerId,
+    string ProviderOwnerId,
+    BusinessOwnerDocumentSide Side);
+
+public sealed record RemittanceBusinessUploadUrlResult(
+    string ProviderFileId,
+    string UploadUrl,
+    IReadOnlyDictionary<string, string> UploadHeaders,
+    string RawResponseJson,
+    Guid ProviderRequestLogId);
+
+public sealed record RemittanceBusinessOwnerFilesRequest(
+    Guid BusinessProfileId,
+    string ProviderCustomerId,
+    string ProviderOwnerId,
+    string? IdentityFrontFileId,
+    string? IdentityBackFileId);
+
+public sealed record RemittanceBusinessOwnerFilesResult(
+    string ProviderOwnerId,
+    string ProviderStatus,
+    string RawResponseJson,
+    Guid ProviderRequestLogId);
+
+public sealed record RemittanceBusinessDocumentUploadUrlRequest(
+    Guid BusinessProfileId,
+    string ProviderCustomerId);
+
+public sealed record RemittanceBusinessDocumentRegistrationRequest(
+    Guid BusinessProfileId,
+    string ProviderCustomerId,
+    BusinessKybDocumentType DocumentType,
+    string Name,
+    string ProviderFileId,
+    string? Description);
+
+public sealed record RemittanceBusinessDocumentResult(
+    string ProviderDocumentId,
+    string DocumentType,
+    string Name,
+    string ProviderStatus,
+    string? AdminCommentsJson);
+
+public sealed record RemittanceBusinessKybSubmissionResult(
+    string ProviderStatus,
+    string RawResponseJson,
+    Guid ProviderRequestLogId);

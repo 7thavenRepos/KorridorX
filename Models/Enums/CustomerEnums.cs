@@ -33,3 +33,35 @@ public enum KycDocumentType
     ProofOfAddress = 3,
     LivenessCheck = 4
 }
+
+public enum BusinessKybScope
+{
+    Full = 1,
+    Minimal = 2
+}
+
+public enum BusinessKybDocumentType
+{
+    CertificateOfIncorporation = 1,
+    ArticlesOfIncorporation = 2,
+    BeneficialOwnershipCertificate = 3,
+    IncorporationDocuments = 4,
+    CacStatusReport = 5,
+    ShareRegister = 6,
+    BankStatement = 7,
+    ProofOfBusinessAddress = 8,
+    TaxDocument = 9,
+    Other = 10
+}
+
+public enum BusinessOwnerDocumentSide
+{
+    Front = 1,
+    Back = 2
+}
+
+public enum BusinessBeneficiaryType
+{
+    Individual = 1,
+    Business = 2
+}

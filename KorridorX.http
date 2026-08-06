@@ -214,3 +214,181 @@ Content-Type: application/json
 ### Refresh provider refund status
 POST {{KorridorX_HostAddress}}/api/admin/collections/{{collectionId}}/refund/refresh
 Authorization: Bearer {{accessToken}}
+
+### Start FULL business KYB and create/update the provider business customer
+POST {{KorridorX_HostAddress}}/api/business-kyb/applications/start
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "businessName": "KorridorX Test Trading Inc.",
+  "tradingName": "KorridorX Test",
+  "businessType": "corporation",
+  "registrationNumber": "TEST-RC-10001",
+  "taxIdentificationNumber": "TEST-TIN-10001",
+  "countryCode": "CA",
+  "incorporationDate": "2022-01-15",
+  "industryType": "financial_services",
+  "businessDescription": "Sandbox remittance platform test business.",
+  "website": "https://example.com",
+  "sourceOfFunds": "business_revenue",
+  "estimatedAnnualRevenue": "1000000-5000000",
+  "expectedMonthlyPayments": 100,
+  "accountPurpose": "supplier_and_customer_payments",
+  "kybScope": 1,
+  "stateOrProvince": "Ontario",
+  "city": "Toronto",
+  "addressLine1": "100 Test Street",
+  "addressLine2": null,
+  "postalCode": "M5V 1A1",
+  "operatingCountryCode": "CA",
+  "operatingStateOrProvince": "Ontario",
+  "operatingCity": "Toronto",
+  "operatingAddressLine1": "100 Test Street",
+  "operatingAddressLine2": null,
+  "operatingPostalCode": "M5V 1A1",
+  "contactEmail": "business@example.com",
+  "contactPhone": "+14165550100"
+}
+
+### Get current business KYB status
+GET {{KorridorX_HostAddress}}/api/business-kyb/status
+Authorization: Bearer {{accessToken}}
+Accept: application/json
+
+### Add a beneficial owner to a FULL KYB application
+POST {{KorridorX_HostAddress}}/api/business-kyb/applications/{{businessKybApplicationId}}/owners
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "firstName": "Jane",
+  "lastName": "Doe",
+  "email": "jane.owner@example.com",
+  "dateOfBirth": "1988-04-15",
+  "nationality": "CA",
+  "countryCode": "CA",
+  "title": "Director",
+  "ownershipPercentage": 100,
+  "hasControl": true,
+  "isSigner": true,
+  "isBeneficialOwner": true,
+  "idDocumentType": "passport",
+  "idDocumentNumber": "REPLACE_WITH_PROVIDER_TEST_ID",
+  "idDocumentCountry": "CA",
+  "idExpiryDate": "2030-04-15",
+  "isPep": false
+}
+
+### Request an owner identity-front upload URL
+POST {{KorridorX_HostAddress}}/api/business-kyb/applications/{{businessKybApplicationId}}/owners/{{businessOwnerId}}/documents/upload-url
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "side": 1,
+  "fileName": "owner-passport.jpg",
+  "mimeType": "image/jpeg"
+}
+
+### Upload the owner file directly to the returned uploadUrl
+# Use every header returned by the upload-url endpoint.
+# PUT {{providerUploadUrl}}
+# Content-Type: image/jpeg
+#
+# < ./owner-passport.jpg
+
+### Confirm and attach the uploaded owner file
+POST {{KorridorX_HostAddress}}/api/business-kyb/applications/{{businessKybApplicationId}}/owners/{{businessOwnerId}}/documents/confirm
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "side": 1,
+  "providerFileId": "{{providerFileId}}"
+}
+
+### Request a business formation-document upload URL
+POST {{KorridorX_HostAddress}}/api/business-kyb/applications/{{businessKybApplicationId}}/documents/upload-url
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "documentType": 1,
+  "name": "Certificate of Incorporation",
+  "fileName": "certificate-of-incorporation.pdf",
+  "mimeType": "application/pdf",
+  "description": "Current company formation document"
+}
+
+### Confirm and register the business formation document
+POST {{KorridorX_HostAddress}}/api/business-kyb/applications/{{businessKybApplicationId}}/documents/{{businessKybDocumentId}}/confirm
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "providerFileId": "{{providerFileId}}"
+}
+
+### Submit the business KYB application
+POST {{KorridorX_HostAddress}}/api/business-kyb/applications/{{businessKybApplicationId}}/submit
+Authorization: Bearer {{accessToken}}
+Accept: application/json
+
+### Admin: list business KYB applications
+GET {{KorridorX_HostAddress}}/api/admin/business-kyb/applications?status=UnderReview&page=1&pageSize=20
+Authorization: Bearer {{adminAccessToken}}
+Accept: application/json
+
+### Admin: get business KYB application details
+GET {{KorridorX_HostAddress}}/api/admin/business-kyb/applications/{{businessKybApplicationId}}
+Authorization: Bearer {{adminAccessToken}}
+Accept: application/json
+
+### Create a business beneficiary
+POST {{KorridorX_HostAddress}}/api/business-beneficiaries
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "beneficiaryType": 2,
+  "name": "Example Supplier Limited",
+  "contactFirstName": "Sam",
+  "contactLastName": "Supplier",
+  "nickname": "Primary supplier",
+  "countryCode": "NG",
+  "phoneNumber": "+2348000000000",
+  "email": "payments@example-supplier.com",
+  "relationshipOrPurpose": "Supplier payments"
+}
+
+### Add a bank account to a business beneficiary
+POST {{KorridorX_HostAddress}}/api/business-beneficiaries/{{businessBeneficiaryId}}/bank-accounts
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "countryCode": "NG",
+  "currencyCode": "NGN",
+  "bankName": "Provider bank name",
+  "bankCode": "Provider bank code",
+  "branchCode": null,
+  "accountName": "Example Supplier Limited",
+  "accountNumber": "0123456789",
+  "iban": null,
+  "swiftBic": null,
+  "routingNumber": null,
+  "sortCode": null,
+  "providerBankId": "{{providerBankId}}",
+  "isDefault": true
+}
+
+### Verify a business beneficiary bank account
+POST {{KorridorX_HostAddress}}/api/business-beneficiaries/{{businessBeneficiaryId}}/bank-accounts/{{businessBeneficiaryBankAccountId}}/verify
+Authorization: Bearer {{accessToken}}
+Accept: application/json
+
+### List business beneficiaries
+GET {{KorridorX_HostAddress}}/api/business-beneficiaries?page=1&pageSize=20
+Authorization: Bearer {{accessToken}}
+Accept: application/json

@@ -41,6 +41,36 @@ public interface IRemittanceProvider
         RemittanceProviderCustomerRequest request,
         CancellationToken ct = default);
 
+    Task<RemittanceBusinessCustomerResult> SyncBusinessCustomerAsync(
+        RemittanceBusinessCustomerRequest request,
+        CancellationToken ct = default);
+
+    Task<RemittanceBusinessUploadUrlResult> RequestBusinessOwnerUploadUrlAsync(
+        RemittanceBusinessOwnerUploadUrlRequest request,
+        CancellationToken ct = default);
+
+    Task<RemittanceBusinessOwnerFilesResult> SubmitBusinessOwnerFilesAsync(
+        RemittanceBusinessOwnerFilesRequest request,
+        CancellationToken ct = default);
+
+    Task<RemittanceBusinessUploadUrlResult> RequestBusinessDocumentUploadUrlAsync(
+        RemittanceBusinessDocumentUploadUrlRequest request,
+        CancellationToken ct = default);
+
+    Task<RemittanceBusinessDocumentResult> RegisterBusinessDocumentAsync(
+        RemittanceBusinessDocumentRegistrationRequest request,
+        CancellationToken ct = default);
+
+    Task<RemittanceBusinessKybSubmissionResult> SubmitBusinessKybAsync(
+        Guid businessProfileId,
+        string providerCustomerId,
+        CancellationToken ct = default);
+
+    Task<RemittanceBusinessCustomerResult> GetBusinessCustomerAsync(
+        Guid businessProfileId,
+        string providerCustomerId,
+        CancellationToken ct = default);
+
     Task<RemittanceCollectionResult> InitiateCollectionAsync(
         RemittanceCollectionRequest request,
         CancellationToken ct = default);

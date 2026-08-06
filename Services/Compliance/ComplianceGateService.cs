@@ -78,4 +78,70 @@ public class ComplianceGateService : IComplianceGateService
             providerCustomer.ProviderCustomerId,
             providerCustomer.ProviderStatus ?? "VERIFIED");
     }
+
+    public async Task<ComplianceGateResult> EnsureBusinessCanInitiateMoneyMovementAsync(
+        Guid businessProfileId,
+        ProviderCode providerCode,
+        CancellationToken ct = default)
+    {
+        var business = await _db.BusinessProfiles
+            .AsNoTracking()
+            .Where(x => x.Id == businessProfileId && !x.IsDeleted)
+            .Select(x => new { x.KybStatus })
+            .FirstOrDefaultAsync(ct);
+
+        if (business is null)
+        {
+            throw new InvalidOperationException("Business profile not found.");
+        }
+
+        if (business.KybStatus != KybStatus.Approved)
+        {
+            throw new InvalidOperationException(
+                "KYB approval is required before the business can initiate money movement.");
+        }
+
+        var applicationApproved = await _db.BusinessKybApplications
+            .AsNoTracking()
+            .AnyAsync(x =>
+                x.BusinessProfileId == businessProfileId &&
+                x.Status == KybStatus.Approved &&
+                !x.IsDeleted,
+                ct);
+
+        if (!applicationApproved)
+        {
+            throw new InvalidOperationException(
+                "An approved business compliance application is required before initiating money movement.");
+        }
+
+        var providerCustomer = await _db.ProviderCustomers
+            .AsNoTracking()
+            .Where(x =>
+                x.BusinessProfileId == businessProfileId &&
+                x.ProviderCode == providerCode &&
+                !x.IsDeleted)
+            .Select(x => new
+            {
+                x.ProviderCustomerId,
+                x.ProviderStatus
+            })
+            .FirstOrDefaultAsync(ct);
+
+        if (providerCustomer is null)
+        {
+            throw new InvalidOperationException(
+                "A provider business customer record is required before initiating money movement.");
+        }
+
+        if (!string.Equals(providerCustomer.ProviderStatus, "VERIFIED", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                "The provider business customer must be VERIFIED before initiating money movement.");
+        }
+
+        return new ComplianceGateResult(
+            providerCustomer.ProviderCustomerId,
+            providerCustomer.ProviderStatus ?? "VERIFIED");
+    }
 }

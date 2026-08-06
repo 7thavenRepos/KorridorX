@@ -277,6 +277,277 @@ public class BlaaizRemittanceProvider : IRemittanceProvider
             response.RequestLogId);
     }
 
+    public async Task<RemittanceBusinessCustomerResult> SyncBusinessCustomerAsync(
+        RemittanceBusinessCustomerRequest request,
+        CancellationToken ct = default)
+    {
+        var providerRequest = new BlaaizCreateCustomerRequest
+        {
+            Type = "business",
+            BusinessName = NormalizeRequired(request.BusinessName, "Business name"),
+            TradingName = NormalizeOptional(request.TradingName),
+            BusinessType = NormalizeOptional(request.BusinessType),
+            RegistrationNumber = NormalizeRequired(request.RegistrationNumber, "Registration number"),
+            IncorporationCountry = NormalizeRequired(request.IncorporationCountry, "Incorporation country").ToUpperInvariant(),
+            IncorporationDate = FormatDate(request.IncorporationDate),
+            IndustryType = NormalizeOptional(request.IndustryType),
+            BusinessDescription = NormalizeOptional(request.BusinessDescription),
+            Website = NormalizeOptional(request.Website),
+            SourceOfFunds = NormalizeOptional(request.SourceOfFunds),
+            EstimatedAnnualRevenue = NormalizeOptional(request.EstimatedAnnualRevenue),
+            ExpectedMonthlyPayments = request.ExpectedMonthlyPayments,
+            AccountPurpose = NormalizeOptional(request.AccountPurpose),
+            KybScope = NormalizeRequired(request.KybScope, "KYB scope").ToUpperInvariant(),
+            Email = NormalizeRequired(request.Email, "Business email").ToLowerInvariant(),
+            Country = NormalizeRequired(request.CountryCode, "Registered country").ToUpperInvariant(),
+            Phone = NormalizeOptional(request.Phone),
+            Tin = NormalizeOptional(request.Tin),
+            Street = NormalizeOptional(request.Street),
+            City = NormalizeOptional(request.City),
+            State = NormalizeOptional(request.State),
+            ZipCode = NormalizeOptional(request.PostalCode),
+            OperatingCountry = NormalizeOptional(request.OperatingCountry)?.ToUpperInvariant(),
+            OperatingStreet = NormalizeOptional(request.OperatingStreet),
+            OperatingCity = NormalizeOptional(request.OperatingCity),
+            OperatingState = NormalizeOptional(request.OperatingState),
+            OperatingZipCode = NormalizeOptional(request.OperatingPostalCode),
+            Owners = request.Owners.Select(MapBusinessOwner).ToList()
+        };
+
+        if (!string.Equals(providerRequest.Country, providerRequest.IncorporationCountry, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException("Registered country must match incorporation country.");
+        }
+
+        BlaaizApiResult<BlaaizCustomerEnvelope> response;
+        if (string.IsNullOrWhiteSpace(request.ExistingProviderCustomerId))
+        {
+            response = await _apiClient.CreateBusinessCustomerAsync(
+                providerRequest,
+                request.BusinessProfileId,
+                ct);
+        }
+        else
+        {
+            response = await _apiClient.UpdateBusinessCustomerAsync(
+                request.ExistingProviderCustomerId,
+                providerRequest,
+                request.BusinessProfileId,
+                ct);
+        }
+
+        return MapBusinessCustomerResult(response, request.Owners);
+    }
+
+    public async Task<RemittanceBusinessUploadUrlResult> RequestBusinessOwnerUploadUrlAsync(
+        RemittanceBusinessOwnerUploadUrlRequest request,
+        CancellationToken ct = default)
+    {
+        var response = await _apiClient.RequestBusinessOwnerUploadUrlAsync(
+            NormalizeRequired(request.ProviderCustomerId, "Provider customer ID"),
+            NormalizeRequired(request.ProviderOwnerId, "Provider owner ID"),
+            new BlaaizOwnerUploadUrlRequest
+            {
+                FileCategory = request.Side == BusinessOwnerDocumentSide.Front
+                    ? "id_document_front"
+                    : "id_document_back"
+            },
+            request.BusinessProfileId,
+            ct);
+
+        return new RemittanceBusinessUploadUrlResult(
+            response.Data.Data.FileId,
+            response.Data.Data.Url,
+            response.Data.Data.Headers,
+            response.RawResponseJson,
+            response.RequestLogId);
+    }
+
+    public async Task<RemittanceBusinessOwnerFilesResult> SubmitBusinessOwnerFilesAsync(
+        RemittanceBusinessOwnerFilesRequest request,
+        CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(request.IdentityFrontFileId) &&
+            string.IsNullOrWhiteSpace(request.IdentityBackFileId))
+        {
+            throw new InvalidOperationException("At least one owner identity file is required.");
+        }
+
+        var response = await _apiClient.AttachBusinessOwnerFilesAsync(
+            NormalizeRequired(request.ProviderCustomerId, "Provider customer ID"),
+            NormalizeRequired(request.ProviderOwnerId, "Provider owner ID"),
+            new BlaaizOwnerFilesRequest
+            {
+                IdDocumentFront = NormalizeOptional(request.IdentityFrontFileId),
+                IdDocumentBack = NormalizeOptional(request.IdentityBackFileId)
+            },
+            request.BusinessProfileId,
+            ct);
+
+        return new RemittanceBusinessOwnerFilesResult(
+            request.ProviderOwnerId,
+            response.Data.Data.Status,
+            response.RawResponseJson,
+            response.RequestLogId);
+    }
+
+    public async Task<RemittanceBusinessUploadUrlResult> RequestBusinessDocumentUploadUrlAsync(
+        RemittanceBusinessDocumentUploadUrlRequest request,
+        CancellationToken ct = default)
+    {
+        var response = await _apiClient.RequestBusinessDocumentUploadUrlAsync(
+            NormalizeRequired(request.ProviderCustomerId, "Provider customer ID"),
+            request.BusinessProfileId,
+            ct);
+
+        return new RemittanceBusinessUploadUrlResult(
+            response.Data.Data.FileId,
+            response.Data.Data.Url,
+            response.Data.Data.Headers,
+            response.RawResponseJson,
+            response.RequestLogId);
+    }
+
+    public async Task<RemittanceBusinessDocumentResult> RegisterBusinessDocumentAsync(
+        RemittanceBusinessDocumentRegistrationRequest request,
+        CancellationToken ct = default)
+    {
+        var response = await _apiClient.RegisterBusinessDocumentAsync(
+            NormalizeRequired(request.ProviderCustomerId, "Provider customer ID"),
+            new BlaaizBusinessDocumentRequest
+            {
+                Type = MapBusinessDocumentType(request.DocumentType),
+                Name = NormalizeRequired(request.Name, "Document name"),
+                FileId = NormalizeRequired(request.ProviderFileId, "Provider file ID"),
+                Description = NormalizeOptional(request.Description)
+            },
+            request.BusinessProfileId,
+            ct);
+
+        return new RemittanceBusinessDocumentResult(
+            response.Data.Data.Id,
+            response.Data.Data.Type,
+            response.Data.Data.Name,
+            response.Data.Data.Status,
+            SerializeOptional(response.Data.Data.AdminComments));
+    }
+
+    public async Task<RemittanceBusinessKybSubmissionResult> SubmitBusinessKybAsync(
+        Guid businessProfileId,
+        string providerCustomerId,
+        CancellationToken ct = default)
+    {
+        var response = await _apiClient.SubmitBusinessCustomerAsync(
+            NormalizeRequired(providerCustomerId, "Provider customer ID"),
+            businessProfileId,
+            ct);
+
+        return new RemittanceBusinessKybSubmissionResult(
+            response.Data.Data.VerificationStatus,
+            response.RawResponseJson,
+            response.RequestLogId);
+    }
+
+    public async Task<RemittanceBusinessCustomerResult> GetBusinessCustomerAsync(
+        Guid businessProfileId,
+        string providerCustomerId,
+        CancellationToken ct = default)
+    {
+        var response = await _apiClient.GetBusinessCustomerAsync(
+            NormalizeRequired(providerCustomerId, "Provider customer ID"),
+            businessProfileId,
+            ct);
+
+        return MapBusinessCustomerResult(response, []);
+    }
+
+    private static BlaaizBusinessOwnerRequest MapBusinessOwner(RemittanceBusinessOwnerRequest owner)
+    {
+        var idType = NormalizeRequired(owner.IdDocumentType, "Owner identity document type").ToLowerInvariant();
+        if (idType is not ("passport" or "drivers_license" or "resident_permit" or "id_card"))
+        {
+            throw new InvalidOperationException(
+                "Owner identity document type must be passport, drivers_license, resident_permit, or id_card.");
+        }
+
+        return new BlaaizBusinessOwnerRequest
+        {
+            Id = NormalizeOptional(owner.ProviderOwnerId),
+            FirstName = NormalizeRequired(owner.FirstName, "Owner first name"),
+            LastName = NormalizeRequired(owner.LastName, "Owner last name"),
+            Email = NormalizeRequired(owner.Email, "Owner email").ToLowerInvariant(),
+            DateOfBirth = owner.DateOfBirth.ToString("yyyy-MM-dd"),
+            Nationality = NormalizeRequired(owner.Nationality, "Owner nationality").ToUpperInvariant(),
+            Country = NormalizeRequired(owner.CountryCode, "Owner country").ToUpperInvariant(),
+            Title = NormalizeOptional(owner.Title),
+            OwnershipPercentage = owner.OwnershipPercentage,
+            HasControl = owner.HasControl,
+            IsSigner = owner.IsSigner,
+            IsBeneficialOwner = owner.IsBeneficialOwner,
+            IdDocumentType = idType,
+            IdDocumentNumber = NormalizeRequired(owner.IdDocumentNumber, "Owner identity document number"),
+            IdDocumentCountry = NormalizeRequired(owner.IdDocumentCountry, "Owner identity document country").ToUpperInvariant(),
+            IdExpiryDate = owner.IdExpiryDate.ToString("yyyy-MM-dd"),
+            IsPep = owner.IsPep
+        };
+    }
+
+    private static RemittanceBusinessCustomerResult MapBusinessCustomerResult(
+        BlaaizApiResult<BlaaizCustomerEnvelope> response,
+        IReadOnlyList<RemittanceBusinessOwnerRequest> requestedOwners)
+    {
+        var customer = response.Data.Data;
+        var owners = customer.Owners.Select(providerOwner =>
+        {
+            var local = requestedOwners.FirstOrDefault(x =>
+                (!string.IsNullOrWhiteSpace(providerOwner.Email) &&
+                 string.Equals(x.Email, providerOwner.Email, StringComparison.OrdinalIgnoreCase)) ||
+                (string.Equals(x.FirstName, providerOwner.FirstName, StringComparison.OrdinalIgnoreCase) &&
+                 string.Equals(x.LastName, providerOwner.LastName, StringComparison.OrdinalIgnoreCase) &&
+                 x.OwnershipPercentage == providerOwner.OwnershipPercentage));
+
+            return new RemittanceBusinessOwnerResult(
+                local?.LocalOwnerId ?? Guid.Empty,
+                providerOwner.Id,
+                providerOwner.Status,
+                SerializeOptional(providerOwner.AdminComments));
+        }).ToList();
+
+        var documents = customer.Documents.Select(x => new RemittanceBusinessDocumentResult(
+            x.Id,
+            x.Type,
+            x.Name,
+            x.Status,
+            SerializeOptional(x.AdminComments))).ToList();
+
+        return new RemittanceBusinessCustomerResult(
+            customer.Id,
+            customer.VerificationStatus,
+            customer.KybScope,
+            owners,
+            documents,
+            response.RawResponseJson,
+            response.RequestLogId);
+    }
+
+    private static string MapBusinessDocumentType(BusinessKybDocumentType type) => type switch
+    {
+        BusinessKybDocumentType.CertificateOfIncorporation => "CERTIFICATE_OF_INCORPORATION",
+        BusinessKybDocumentType.ArticlesOfIncorporation => "ARTICLES_OF_INCORPORATION",
+        BusinessKybDocumentType.BeneficialOwnershipCertificate => "BENEFICIAL_OWNERSHIP_CERTIFICATE",
+        BusinessKybDocumentType.IncorporationDocuments => "INCORPORATION_DOCUMENTS",
+        BusinessKybDocumentType.CacStatusReport => "CAC_STATUS_REPORT",
+        BusinessKybDocumentType.ShareRegister => "SHARE_REGISTER",
+        BusinessKybDocumentType.BankStatement => "BANK_STATEMENT",
+        BusinessKybDocumentType.ProofOfBusinessAddress => "PROOF_OF_ADDRESS",
+        BusinessKybDocumentType.TaxDocument => "TAX_DOCUMENT",
+        BusinessKybDocumentType.Other => "OTHER",
+        _ => throw new InvalidOperationException("Unsupported business KYB document type.")
+    };
+
+    private static string? SerializeOptional(object? value) =>
+        value is null ? null : System.Text.Json.JsonSerializer.Serialize(value);
+
     public async Task<RemittanceCollectionResult> InitiateCollectionAsync(
         RemittanceCollectionRequest request,
         CancellationToken ct = default)
