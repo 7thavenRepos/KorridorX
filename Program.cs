@@ -1,12 +1,16 @@
 using KorridorX.Configuration;
 using KorridorX.Data;
 using KorridorX.Data.Seed;
+using KorridorX.Infrastructure;
 using KorridorX.Middleware;
 using KorridorX.Models.Identity;
 using KorridorX.Providers.Remittance;
 using KorridorX.Providers.Remittance.Blaaiz;
 using KorridorX.Services.Auth;
+using KorridorX.Services.Fx;
+using KorridorX.Services.Recipients;
 using KorridorX.Services.References;
+using KorridorX.Services.Transfers;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -26,6 +30,10 @@ builder.Services.AddScoped<IRemittanceProvider, BlaaizRemittanceProvider>();
 
 builder.Services.AddScoped<IJwtTokenService, JwtTokenService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
+
+builder.Services.AddScoped<IRecipientService, RecipientService>();
+builder.Services.AddScoped<ITransferQuoteService, TransferQuoteService>();
+builder.Services.AddScoped<ITransferService, TransferService>();
 
 builder.Services.AddDbContext<AppDbContext>(options =>
 {
@@ -81,6 +89,56 @@ builder.Services
 
             ValidateLifetime = true,
             ClockSkew = TimeSpan.FromMinutes(1)
+        };
+
+        options.Events = new JwtBearerEvents
+        {
+            OnChallenge = async context =>
+            {
+                context.HandleResponse();
+
+                context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+                context.Response.ContentType = "application/json";
+
+                var response = ApiResponses.Fail(
+                    "Authentication required.",
+                    "UNAUTHORIZED",
+                    "A valid Bearer access token was not supplied.");
+
+                await context.Response.WriteAsJsonAsync(response);
+            },
+
+            OnForbidden = async context =>
+            {
+                context.Response.StatusCode = StatusCodes.Status403Forbidden;
+                context.Response.ContentType = "application/json";
+
+                var response = ApiResponses.Fail(
+                    "You do not have permission to perform this action.",
+                    "FORBIDDEN",
+                    "Your account is authenticated but does not have the required permission.");
+
+                await context.Response.WriteAsJsonAsync(response);
+            },
+
+            OnAuthenticationFailed = async context =>
+            {
+                context.NoResult();
+
+                context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+                context.Response.ContentType = "application/json";
+
+                var isExpired = context.Exception is SecurityTokenExpiredException;
+
+                var response = ApiResponses.Fail(
+                    isExpired ? "Your session has expired." : "Invalid access token.",
+                    isExpired ? "TOKEN_EXPIRED" : "INVALID_TOKEN",
+                    isExpired
+                        ? "Please refresh your access token or log in again."
+                        : "The supplied JWT could not be validated.");
+
+                await context.Response.WriteAsJsonAsync(response);
+            }
         };
     });
 

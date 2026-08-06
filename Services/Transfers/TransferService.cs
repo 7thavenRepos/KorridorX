@@ -1,0 +1,380 @@
+﻿using KorridorX.Data;
+using KorridorX.Dtos.Transfers;
+using KorridorX.Extensions;
+using KorridorX.Infrastructure;
+using KorridorX.Models.Enums;
+using KorridorX.Models.Transfers;
+using KorridorX.Services.References;
+using Microsoft.EntityFrameworkCore;
+
+namespace KorridorX.Services.Transfers;
+
+public class TransferService : ITransferService
+{
+    private readonly AppDbContext _db;
+    private readonly IReferenceGenerator _referenceGenerator;
+
+    public TransferService(
+        AppDbContext db,
+        IReferenceGenerator referenceGenerator)
+    {
+        _db = db;
+        _referenceGenerator = referenceGenerator;
+    }
+
+    public async Task<TransferDetailsDto> CreateTransferAsync(
+        Guid userId,
+        CreateTransferRequestDto request,
+        CancellationToken ct = default)
+    {
+        if (request.RecipientBankAccountId is null && request.RecipientMobileWalletId is null)
+        {
+            throw new InvalidOperationException("Either a recipient bank account or mobile wallet is required.");
+        }
+
+        if (request.RecipientBankAccountId is not null && request.RecipientMobileWalletId is not null)
+        {
+            throw new InvalidOperationException("Select either a recipient bank account or mobile wallet, not both.");
+        }
+
+        await using var tx = await _db.Database.BeginTransactionAsync(ct);
+
+        var customerProfile = await _db.CustomerProfiles
+            .FirstOrDefaultAsync(x =>
+                x.UserId == userId &&
+                !x.IsDeleted,
+                ct);
+
+        if (customerProfile is null)
+        {
+            throw new InvalidOperationException("Customer profile not found.");
+        }
+
+        var quote = await _db.TransferQuotes
+            .FirstOrDefaultAsync(x =>
+                x.Id == request.TransferQuoteId &&
+                x.CustomerProfileId == customerProfile.Id &&
+                !x.IsDeleted,
+                ct);
+
+        if (quote is null)
+        {
+            throw new InvalidOperationException("Transfer quote not found.");
+        }
+
+        if (quote.IsUsed)
+        {
+            throw new InvalidOperationException("Transfer quote has already been used.");
+        }
+
+        if (quote.IsExpired)
+        {
+            throw new InvalidOperationException("Transfer quote has expired. Please create a new quote.");
+        }
+
+        var recipient = await _db.Recipients
+            .FirstOrDefaultAsync(x =>
+                x.Id == request.RecipientId &&
+                x.CustomerProfileId == customerProfile.Id &&
+                x.IsActive &&
+                !x.IsDeleted,
+                ct);
+
+        if (recipient is null)
+        {
+            throw new InvalidOperationException("Recipient not found.");
+        }
+
+        if (request.RecipientBankAccountId is not null)
+        {
+            var bankAccountExists = await _db.RecipientBankAccounts
+                .AnyAsync(x =>
+                    x.Id == request.RecipientBankAccountId.Value &&
+                    x.RecipientId == recipient.Id &&
+                    x.CountryCode == recipient.CountryCode &&
+                    x.CurrencyCode == quote.DestinationCurrencyCode &&
+                    x.IsActive &&
+                    !x.IsDeleted,
+                    ct);
+
+            if (!bankAccountExists)
+            {
+                throw new InvalidOperationException("Recipient bank account is not valid for this transfer.");
+            }
+        }
+
+        if (request.RecipientMobileWalletId is not null)
+        {
+            var mobileWalletExists = await _db.RecipientMobileWallets
+                .AnyAsync(x =>
+                    x.Id == request.RecipientMobileWalletId.Value &&
+                    x.RecipientId == recipient.Id &&
+                    x.CountryCode == recipient.CountryCode &&
+                    x.CurrencyCode == quote.DestinationCurrencyCode &&
+                    x.IsActive &&
+                    !x.IsDeleted,
+                    ct);
+
+            if (!mobileWalletExists)
+            {
+                throw new InvalidOperationException("Recipient mobile wallet is not valid for this transfer.");
+            }
+        }
+
+        var reference = await GenerateUniqueTransferReferenceAsync(ct);
+
+        var transfer = new Transfer
+        {
+            Reference = reference,
+
+            CustomerProfileId = customerProfile.Id,
+            RecipientId = recipient.Id,
+            RecipientBankAccountId = request.RecipientBankAccountId,
+            RecipientMobileWalletId = request.RecipientMobileWalletId,
+            TransferQuoteId = quote.Id,
+
+            TransferType = TransferType.ConsumerToConsumer,
+            Purpose = request.Purpose,
+            PurposeNote = request.PurposeNote,
+
+            SourceCountryCode = customerProfile.CountryCode,
+            DestinationCountryCode = recipient.CountryCode,
+
+            SourceCurrencyCode = quote.SourceCurrencyCode,
+            DestinationCurrencyCode = quote.DestinationCurrencyCode,
+
+            SourceAmount = quote.SourceAmount,
+            DestinationAmount = quote.DestinationAmount,
+
+            FeeAmount = quote.FeeAmount,
+            FeeCurrencyCode = quote.FeeCurrencyCode,
+            TotalPayableAmount = quote.TotalPayableAmount,
+
+            CustomerRate = quote.CustomerRate,
+            ProviderRate = quote.ProviderRate,
+
+            ProviderCode = quote.ProviderCode,
+            Status = TransferStatus.PendingPayment,
+
+            CreatedByUserId = userId
+        };
+
+        quote.IsUsed = true;
+        quote.UsedAt = DateTime.UtcNow;
+        quote.LastUpdatedAt = DateTime.UtcNow;
+        quote.LastUpdatedByUserId = userId;
+
+        var statusHistory = new TransferStatusHistory
+        {
+            TransferId = transfer.Id,
+            OldStatus = TransferStatus.Draft,
+            NewStatus = TransferStatus.PendingPayment,
+            Reason = "Transfer created from accepted quote.",
+            Source = "Customer",
+            ChangedByUserId = userId
+        };
+
+        var timelineEvent = new TransferTimelineEvent
+        {
+            TransferId = transfer.Id,
+            EventType = "TRANSFER_CREATED",
+            Title = "Transfer created",
+            Description = "Your transfer has been created and is pending payment."
+        };
+
+        _db.Transfers.Add(transfer);
+        _db.TransferStatusHistories.Add(statusHistory);
+        _db.TransferTimelineEvents.Add(timelineEvent);
+
+        await _db.SaveChangesAsync(ct);
+        await tx.CommitAsync(ct);
+
+        return await GetTransferByIdAsync(userId, transfer.Id, ct);
+    }
+
+    public async Task<TransferDetailsDto> GetTransferByIdAsync(
+        Guid userId,
+        Guid transferId,
+        CancellationToken ct = default)
+    {
+        var transfer = await _db.Transfers
+            .AsNoTracking()
+            .Include(x => x.CustomerProfile)
+            .Include(x => x.StatusHistories)
+            .Include(x => x.TimelineEvents)
+            .FirstOrDefaultAsync(x =>
+                x.Id == transferId &&
+                x.CustomerProfile.UserId == userId &&
+                !x.IsDeleted,
+                ct);
+
+        if (transfer is null)
+        {
+            throw new InvalidOperationException("Transfer not found.");
+        }
+
+        return ToDetailsDto(transfer);
+    }
+
+    public async Task<PagedResult<TransferDto>> GetMyTransfersAsync(
+        Guid userId,
+        int page,
+        int pageSize,
+        CancellationToken ct = default)
+    {
+        var customerProfileId = await _db.CustomerProfiles
+            .AsNoTracking()
+            .Where(x =>
+                x.UserId == userId &&
+                !x.IsDeleted)
+            .Select(x => (Guid?)x.Id)
+            .FirstOrDefaultAsync(ct);
+
+        if (customerProfileId is null)
+        {
+            throw new InvalidOperationException("Customer profile not found.");
+        }
+
+        return await _db.Transfers
+            .AsNoTracking()
+            .Where(x =>
+                x.CustomerProfileId == customerProfileId.Value &&
+                !x.IsDeleted)
+            .OrderByDescending(x => x.CreatedAt)
+            .Select(x => new TransferDto(
+                x.Id,
+                x.Reference,
+                x.CustomerProfileId,
+                x.RecipientId,
+                x.RecipientBankAccountId,
+                x.RecipientMobileWalletId,
+                x.TransferQuoteId,
+                x.TransferType,
+                x.Purpose,
+                x.PurposeNote,
+                x.SourceCountryCode,
+                x.DestinationCountryCode,
+                x.SourceCurrencyCode,
+                x.DestinationCurrencyCode,
+                x.SourceAmount,
+                x.DestinationAmount,
+                x.FeeAmount,
+                x.FeeCurrencyCode,
+                x.TotalPayableAmount,
+                x.CustomerRate,
+                x.ProviderRate,
+                x.Status,
+                x.ProviderCode,
+                x.ProviderTransferId,
+                x.ProviderReference,
+                x.PaymentReceivedAt,
+                x.PayoutInitiatedAt,
+                x.CompletedAt,
+                x.FailedAt,
+                x.CancelledAt,
+                x.FailureReason,
+                x.CreatedAt,
+                x.LastUpdatedAt))
+            .PaginateAsync(page, pageSize, ct);
+    }
+
+    private async Task<string> GenerateUniqueTransferReferenceAsync(CancellationToken ct)
+    {
+        for (var i = 0; i < 5; i++)
+        {
+            var reference = _referenceGenerator.GenerateTransferReference();
+
+            var exists = await _db.Transfers
+                .AsNoTracking()
+                .AnyAsync(x => x.Reference == reference, ct);
+
+            if (!exists)
+            {
+                return reference;
+            }
+        }
+
+        throw new InvalidOperationException("Unable to generate a unique transfer reference.");
+    }
+
+    private static TransferDetailsDto ToDetailsDto(Transfer transfer)
+    {
+        return new TransferDetailsDto(
+            ToDto(transfer),
+            transfer.StatusHistories
+                .OrderByDescending(x => x.ChangedAt)
+                .Select(ToStatusHistoryDto)
+                .ToList(),
+            transfer.TimelineEvents
+                .OrderByDescending(x => x.OccurredAt)
+                .Select(ToTimelineEventDto)
+                .ToList()
+        );
+    }
+
+    private static TransferDto ToDto(Transfer transfer)
+    {
+        return new TransferDto(
+            transfer.Id,
+            transfer.Reference,
+            transfer.CustomerProfileId,
+            transfer.RecipientId,
+            transfer.RecipientBankAccountId,
+            transfer.RecipientMobileWalletId,
+            transfer.TransferQuoteId,
+            transfer.TransferType,
+            transfer.Purpose,
+            transfer.PurposeNote,
+            transfer.SourceCountryCode,
+            transfer.DestinationCountryCode,
+            transfer.SourceCurrencyCode,
+            transfer.DestinationCurrencyCode,
+            transfer.SourceAmount,
+            transfer.DestinationAmount,
+            transfer.FeeAmount,
+            transfer.FeeCurrencyCode,
+            transfer.TotalPayableAmount,
+            transfer.CustomerRate,
+            transfer.ProviderRate,
+            transfer.Status,
+            transfer.ProviderCode,
+            transfer.ProviderTransferId,
+            transfer.ProviderReference,
+            transfer.PaymentReceivedAt,
+            transfer.PayoutInitiatedAt,
+            transfer.CompletedAt,
+            transfer.FailedAt,
+            transfer.CancelledAt,
+            transfer.FailureReason,
+            transfer.CreatedAt,
+            transfer.LastUpdatedAt
+        );
+    }
+
+    private static TransferStatusHistoryDto ToStatusHistoryDto(TransferStatusHistory history)
+    {
+        return new TransferStatusHistoryDto(
+            history.Id,
+            history.TransferId,
+            history.OldStatus,
+            history.NewStatus,
+            history.Reason,
+            history.Source,
+            history.ChangedByUserId,
+            history.ChangedAt
+        );
+    }
+
+    private static TransferTimelineEventDto ToTimelineEventDto(TransferTimelineEvent timelineEvent)
+    {
+        return new TransferTimelineEventDto(
+            timelineEvent.Id,
+            timelineEvent.TransferId,
+            timelineEvent.EventType,
+            timelineEvent.Title,
+            timelineEvent.Description,
+            timelineEvent.MetadataJson,
+            timelineEvent.OccurredAt
+        );
+    }
+}
