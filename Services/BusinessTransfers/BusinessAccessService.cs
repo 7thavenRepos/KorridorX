@@ -1,7 +1,9 @@
 using KorridorX.Data;
+using KorridorX.Dtos.BusinessContext;
 using KorridorX.Exceptions;
 using KorridorX.Models.Customers;
 using KorridorX.Models.Enums;
+using KorridorX.Services.BusinessContext;
 using Microsoft.EntityFrameworkCore;
 
 namespace KorridorX.Services.BusinessTransfers;
@@ -9,20 +11,29 @@ namespace KorridorX.Services.BusinessTransfers;
 public class BusinessAccessService : IBusinessAccessService
 {
     private readonly AppDbContext _db;
+    private readonly IBusinessContextAccessor _contextAccessor;
 
-    public BusinessAccessService(AppDbContext db)
+    public BusinessAccessService(
+        AppDbContext db,
+        IBusinessContextAccessor contextAccessor)
     {
         _db = db;
+        _contextAccessor = contextAccessor;
     }
 
     public async Task<BusinessAccessContext> GetAccessAsync(
         Guid userId,
         CancellationToken ct = default)
     {
+        var selectedBusinessId = _contextAccessor.GetSelectedBusinessProfileId()
+            ?? await ResolveSingleBusinessAsync(userId, ct);
+
         var owned = await _db.BusinessProfiles
             .AsNoTracking()
-            .Where(x => x.OwnerUserId == userId && !x.IsDeleted)
-            .OrderBy(x => x.CreatedAt)
+            .Where(x =>
+                x.Id == selectedBusinessId &&
+                x.OwnerUserId == userId &&
+                !x.IsDeleted)
             .Select(x => new
             {
                 x.Id,
@@ -50,8 +61,12 @@ public class BusinessAccessService : IBusinessAccessService
 
         var membership = await _db.BusinessUsers
             .AsNoTracking()
-            .Where(x => x.UserId == userId && x.IsActive && !x.IsDeleted && !x.BusinessProfile.IsDeleted)
-            .OrderBy(x => x.BusinessProfile.CreatedAt)
+            .Where(x =>
+                x.BusinessProfileId == selectedBusinessId &&
+                x.UserId == userId &&
+                x.IsActive &&
+                !x.IsDeleted &&
+                !x.BusinessProfile.IsDeleted)
             .Select(x => new
             {
                 x.BusinessProfileId,
@@ -67,7 +82,8 @@ public class BusinessAccessService : IBusinessAccessService
 
         if (membership is null)
         {
-            throw new InvalidOperationException("The authenticated user is not attached to an active business profile.");
+            throw new ForbiddenException(
+                "The authenticated user does not have access to the selected business profile.");
         }
 
         var permissions = membership.Permissions == BusinessPermission.None
@@ -102,6 +118,94 @@ public class BusinessAccessService : IBusinessAccessService
         return access;
     }
 
+    public async Task<IReadOnlyList<AvailableBusinessContextDto>> GetAvailableBusinessesAsync(
+        Guid userId,
+        CancellationToken ct = default)
+    {
+        var selected = _contextAccessor.GetSelectedBusinessProfileId();
+
+        var owned = await _db.BusinessProfiles
+            .AsNoTracking()
+            .Where(x => x.OwnerUserId == userId && !x.IsDeleted)
+            .Select(x => new AvailableBusinessContextDto(
+                x.Id,
+                x.BusinessName,
+                BusinessUserRole.Owner,
+                BusinessPermission.All,
+                true,
+                x.KybStatus,
+                selected == x.Id))
+            .ToListAsync(ct);
+
+        var memberships = await _db.BusinessUsers
+            .AsNoTracking()
+            .Where(x =>
+                x.UserId == userId &&
+                x.IsActive &&
+                !x.IsDeleted &&
+                !x.BusinessProfile.IsDeleted &&
+                x.BusinessProfile.OwnerUserId != userId)
+            .Select(x => new
+            {
+                x.BusinessProfileId,
+                x.BusinessProfile.BusinessName,
+                x.Role,
+                x.Permissions,
+                x.BusinessProfile.KybStatus
+            })
+            .ToListAsync(ct);
+
+        var results = new List<AvailableBusinessContextDto>(owned);
+        results.AddRange(memberships.Select(x => new AvailableBusinessContextDto(
+            x.BusinessProfileId,
+            x.BusinessName,
+            x.Role,
+            x.Permissions == BusinessPermission.None ? DefaultPermissions(x.Role) : x.Permissions,
+            false,
+            x.KybStatus,
+            selected == x.BusinessProfileId)));
+
+        return results
+            .OrderByDescending(x => x.IsSelected)
+            .ThenBy(x => x.BusinessName)
+            .ToList();
+    }
+
+    private async Task<Guid> ResolveSingleBusinessAsync(
+        Guid userId,
+        CancellationToken ct)
+    {
+        var ownedIds = await _db.BusinessProfiles
+            .AsNoTracking()
+            .Where(x => x.OwnerUserId == userId && !x.IsDeleted)
+            .Select(x => x.Id)
+            .ToListAsync(ct);
+
+        var memberIds = await _db.BusinessUsers
+            .AsNoTracking()
+            .Where(x =>
+                x.UserId == userId &&
+                x.IsActive &&
+                !x.IsDeleted &&
+                !x.BusinessProfile.IsDeleted)
+            .Select(x => x.BusinessProfileId)
+            .ToListAsync(ct);
+
+        var available = ownedIds
+            .Concat(memberIds)
+            .Distinct()
+            .ToList();
+
+        return available.Count switch
+        {
+            0 => throw new InvalidOperationException(
+                "The authenticated user is not attached to an active business profile."),
+            1 => available[0],
+            _ => throw new InvalidOperationException(
+                $"Multiple business profiles are available. Supply the {HttpBusinessContextAccessor.HeaderName} header.")
+        };
+    }
+
     public static BusinessPermission DefaultPermissions(BusinessUserRole role) =>
         role switch
         {
@@ -114,17 +218,21 @@ public class BusinessAccessService : IBusinessAccessService
                 BusinessPermission.CreateTransfers |
                 BusinessPermission.ViewBatches |
                 BusinessPermission.ManageBatches |
-                BusinessPermission.ViewReports,
+                BusinessPermission.ViewReports |
+                BusinessPermission.ViewWallets |
+                BusinessPermission.ManageFunding,
             BusinessUserRole.Compliance =>
                 BusinessPermission.ViewBeneficiaries |
                 BusinessPermission.ViewTransfers |
                 BusinessPermission.ApproveTransfers |
                 BusinessPermission.ViewBatches |
                 BusinessPermission.ApproveBatches |
-                BusinessPermission.ViewReports,
+                BusinessPermission.ViewReports |
+                BusinessPermission.ViewWallets,
             _ =>
                 BusinessPermission.ViewBeneficiaries |
                 BusinessPermission.ViewTransfers |
-                BusinessPermission.ViewBatches
+                BusinessPermission.ViewBatches |
+                BusinessPermission.ViewWallets
         };
 }

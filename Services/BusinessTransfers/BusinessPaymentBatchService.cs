@@ -10,6 +10,8 @@ using KorridorX.Models.Enums;
 using KorridorX.Models.Fx;
 using KorridorX.Models.Transfers;
 using KorridorX.Services.References;
+using KorridorX.Services.BusinessFunding;
+using KorridorX.Services.Notifications;
 using KorridorX.Services.Transfers;
 using Microsoft.EntityFrameworkCore;
 
@@ -29,17 +31,23 @@ public class BusinessPaymentBatchService : IBusinessPaymentBatchService
     private readonly IBusinessAccessService _accessService;
     private readonly IReferenceGenerator _referenceGenerator;
     private readonly ITransferStatusService _transferStatusService;
+    private readonly IBusinessFundingService _fundingService;
+    private readonly INotificationQueueService _notifications;
 
     public BusinessPaymentBatchService(
         AppDbContext db,
         IBusinessAccessService accessService,
         IReferenceGenerator referenceGenerator,
-        ITransferStatusService transferStatusService)
+        ITransferStatusService transferStatusService,
+        IBusinessFundingService fundingService,
+        INotificationQueueService notifications)
     {
         _db = db;
         _accessService = accessService;
         _referenceGenerator = referenceGenerator;
         _transferStatusService = transferStatusService;
+        _fundingService = fundingService;
+        _notifications = notifications;
     }
 
     public async Task<BusinessPaymentBatchDetailsDto> ImportAsync(
@@ -182,6 +190,17 @@ public class BusinessPaymentBatchService : IBusinessPaymentBatchService
             batch.Status = BusinessPaymentBatchStatus.Approved;
             batch.RequiredApprovals = 0;
             batch.ApprovedAt = DateTime.UtcNow;
+
+            if (batch.FundingSource == BusinessFundingSource.BusinessWallet)
+            {
+                await _fundingService.EnsureAvailableBalanceAsync(
+                    batch.BusinessProfileId,
+                    batch.SourceCurrencyCode,
+                    batch.Items.Where(x => x.Status == BusinessPaymentBatchItemStatus.Valid)
+                        .Sum(x => x.TotalPayableAmount),
+                    ct);
+            }
+
             await MaterializeTransfersAsync(batch, userId, ct);
         }
 
@@ -225,7 +244,26 @@ public class BusinessPaymentBatchService : IBusinessPaymentBatchService
         {
             batch.Status = BusinessPaymentBatchStatus.Approved;
             batch.ApprovedAt = DateTime.UtcNow;
+
+            if (batch.FundingSource == BusinessFundingSource.BusinessWallet)
+            {
+                await _fundingService.EnsureAvailableBalanceAsync(
+                    batch.BusinessProfileId,
+                    batch.SourceCurrencyCode,
+                    batch.Items.Where(x => x.Status == BusinessPaymentBatchItemStatus.PendingApproval)
+                        .Sum(x => x.TotalPayableAmount),
+                    ct);
+            }
+
             await MaterializeTransfersAsync(batch, userId, ct);
+
+            await _notifications.QueueBusinessAsync(
+                batch.BusinessProfileId,
+                "Business payment batch approved",
+                $"Batch {batch.Reference} was approved. {batch.Items.Count(x => x.TransferId.HasValue)} transfer(s) were created.",
+                "BusinessPaymentBatch",
+                batch.Id,
+                ct);
         }
 
         await _db.SaveChangesAsync(ct);
@@ -267,6 +305,14 @@ public class BusinessPaymentBatchService : IBusinessPaymentBatchService
         batch.LastUpdatedByUserId = userId;
         foreach (var item in batch.Items.Where(x => x.TransferId == null))
             item.Status = BusinessPaymentBatchItemStatus.Rejected;
+
+        await _notifications.QueueBusinessAsync(
+            batch.BusinessProfileId,
+            "Business payment batch rejected",
+            $"Batch {batch.Reference} was rejected. {comment}",
+            "BusinessPaymentBatch",
+            batch.Id,
+            ct);
 
         await _db.SaveChangesAsync(ct);
         return ToDetailsDto(batch);
@@ -334,6 +380,16 @@ public class BusinessPaymentBatchService : IBusinessPaymentBatchService
                         EventType: "BUSINESS_BATCH_TRANSFER_CREATED",
                         Title: "Batch transfer created",
                         Description: $"Created from business payment batch {batch.Reference}."));
+
+                if (batch.FundingSource == BusinessFundingSource.BusinessWallet)
+                {
+                    await _fundingService.ReserveTransferAsync(
+                        transfer,
+                        actionedByUserId,
+                        "BusinessBatch",
+                        batch.Id,
+                        ct);
+                }
 
                 quote.IsUsed = true;
                 quote.UsedAt = DateTime.UtcNow;

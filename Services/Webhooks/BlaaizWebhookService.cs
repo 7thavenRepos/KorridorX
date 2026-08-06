@@ -630,9 +630,9 @@ public class BlaaizWebhookService : IBlaaizWebhookService
         application.ProviderResponseJson = providerSnapshot?.RawResponseJson ?? application.ProviderResponseJson;
         application.LastUpdatedAt = now;
 
-        if (providerSnapshot is not null)
+        if (providerSnapshot is { } resolvedProviderSnapshot)
         {
-            ApplyBusinessProviderSnapshot(application, providerSnapshot);
+            ApplyBusinessProviderSnapshot(application, resolvedProviderSnapshot);
         }
 
         if (status == KybStatus.Rejected)

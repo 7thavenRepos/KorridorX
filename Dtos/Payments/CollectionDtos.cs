@@ -15,40 +15,40 @@ public record CollectionPaymentMethodDto
 );
 
 public record CollectionDto
-(
-    Guid Id,
-    Guid TransferId,
-    string TransferReference,
-    TransferStatus TransferStatus,
-    string Reference,
-    string SourceCountryCode,
-    string CurrencyCode,
-    decimal Amount,
-    PaymentMethod PaymentMethod,
-    CollectionStatus Status,
-    string ProviderCode,
-    string? ProviderCollectionId,
-    string? ProviderReference,
-    string? CheckoutUrl,
-    DateTime? ProviderExpiresAt,
-    string? VirtualAccountNumber,
-    string? VirtualAccountBankName,
-    string? VirtualAccountName,
-    DateTime? InitiatedAt,
-    DateTime? ConfirmedAt,
-    DateTime? FailedAt,
-    DateTime? ExpiredAt,
-    DateTime? RefundInitiatedAt,
-    DateTime? RefundedAt,
-    string? ProviderRefundId,
-    string? ProviderRefundReference,
-    string? RefundReason,
-    string? RefundFailureReason,
-    DateTime? LastRefundSyncedAt,
-    string? FailureReason,
-    DateTime CreatedAt,
-    DateTime? LastUpdatedAt
-);
+{
+    public Guid Id { get; init; }
+    public Guid TransferId { get; init; }
+    public string TransferReference { get; init; } = "";
+    public TransferStatus TransferStatus { get; init; }
+    public string Reference { get; init; } = "";
+    public string SourceCountryCode { get; init; } = "";
+    public string CurrencyCode { get; init; } = "";
+    public decimal Amount { get; init; }
+    public PaymentMethod PaymentMethod { get; init; }
+    public CollectionStatus Status { get; init; }
+    public string ProviderCode { get; init; } = "";
+    public string? ProviderCollectionId { get; init; }
+    public string? ProviderReference { get; init; }
+    public string? CheckoutUrl { get; init; }
+    public DateTime? ProviderExpiresAt { get; init; }
+    public string? VirtualAccountNumber { get; init; }
+    public string? VirtualAccountBankName { get; init; }
+    public string? VirtualAccountName { get; init; }
+    public DateTime? InitiatedAt { get; init; }
+    public DateTime? ConfirmedAt { get; init; }
+    public DateTime? FailedAt { get; init; }
+    public DateTime? ExpiredAt { get; init; }
+    public DateTime? RefundInitiatedAt { get; init; }
+    public DateTime? RefundedAt { get; init; }
+    public string? ProviderRefundId { get; init; }
+    public string? ProviderRefundReference { get; init; }
+    public string? RefundReason { get; init; }
+    public string? RefundFailureReason { get; init; }
+    public DateTime? LastRefundSyncedAt { get; init; }
+    public string? FailureReason { get; init; }
+    public DateTime CreatedAt { get; init; }
+    public DateTime? LastUpdatedAt { get; init; }
+}
 
 public record CollectionAttemptDto
 (

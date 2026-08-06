@@ -9,6 +9,8 @@ using KorridorX.Models.Enums;
 using KorridorX.Models.Fx;
 using KorridorX.Models.Transfers;
 using KorridorX.Services.References;
+using KorridorX.Services.BusinessFunding;
+using KorridorX.Services.Notifications;
 using KorridorX.Services.Transfers;
 using Microsoft.EntityFrameworkCore;
 
@@ -20,17 +22,23 @@ public class BusinessTransferService : IBusinessTransferService
     private readonly IBusinessAccessService _accessService;
     private readonly IReferenceGenerator _referenceGenerator;
     private readonly ITransferStatusService _transferStatusService;
+    private readonly IBusinessFundingService _fundingService;
+    private readonly INotificationQueueService _notifications;
 
     public BusinessTransferService(
         AppDbContext db,
         IBusinessAccessService accessService,
         IReferenceGenerator referenceGenerator,
-        ITransferStatusService transferStatusService)
+        ITransferStatusService transferStatusService,
+        IBusinessFundingService fundingService,
+        INotificationQueueService notifications)
     {
         _db = db;
         _accessService = accessService;
         _referenceGenerator = referenceGenerator;
         _transferStatusService = transferStatusService;
+        _fundingService = fundingService;
+        _notifications = notifications;
     }
 
     public async Task<TransferQuoteDto> CreateQuoteAsync(
@@ -247,6 +255,36 @@ public class BusinessTransferService : IBusinessTransferService
         quote.LastUpdatedAt = DateTime.UtcNow;
         quote.LastUpdatedByUserId = userId;
 
+        if (approvalRequired)
+        {
+            await _notifications.QueueBusinessAsync(
+                access.BusinessProfileId,
+                "Business transfer approval required",
+                $"Transfer {transfer.Reference} requires {transfer.RequiredApprovals} approval(s).",
+                "Transfer",
+                transfer.Id,
+                ct);
+        }
+        else if (transfer.BusinessFundingSource == BusinessFundingSource.BusinessWallet)
+        {
+            await _fundingService.ReserveTransferAsync(
+                transfer,
+                userId,
+                "BusinessTransfer",
+                null,
+                ct);
+        }
+        else
+        {
+            await _notifications.QueueBusinessAsync(
+                access.BusinessProfileId,
+                "Business transfer awaiting funding",
+                $"Transfer {transfer.Reference} is approved and waiting for external funding.",
+                "Transfer",
+                transfer.Id,
+                ct);
+        }
+
         await _db.SaveChangesAsync(ct);
         await tx.CommitAsync(ct);
         return await GetTransferAsync(userId, transfer.Id, ct);
@@ -375,6 +413,26 @@ public class BusinessTransferService : IBusinessTransferService
                     EventType: "BUSINESS_TRANSFER_APPROVED",
                     Title: "Transfer approved",
                     Description: "The transfer has been approved and is waiting for funding confirmation."));
+
+            if (transfer.BusinessFundingSource == BusinessFundingSource.BusinessWallet)
+            {
+                await _fundingService.ReserveTransferAsync(
+                    transfer,
+                    userId,
+                    "BusinessApproval",
+                    null,
+                    ct);
+            }
+
+            await _notifications.QueueBusinessAsync(
+                access.BusinessProfileId,
+                "Business transfer approved",
+                transfer.BusinessFundingSource == BusinessFundingSource.BusinessWallet
+                    ? $"Transfer {transfer.Reference} was approved and funded from the business wallet."
+                    : $"Transfer {transfer.Reference} was approved and is waiting for external funding.",
+                "Transfer",
+                transfer.Id,
+                ct);
         }
 
         await _db.SaveChangesAsync(ct);
@@ -438,6 +496,20 @@ public class BusinessTransferService : IBusinessTransferService
                 EventType: "BUSINESS_TRANSFER_REJECTED",
                 Title: "Transfer rejected",
                 Description: comment));
+
+        _fundingService.ReleaseTransferReservation(
+            transfer,
+            comment,
+            userId,
+            "BusinessApproval");
+
+        await _notifications.QueueBusinessAsync(
+            access.BusinessProfileId,
+            "Business transfer rejected",
+            $"Transfer {transfer.Reference} was rejected. {comment}",
+            "Transfer",
+            transfer.Id,
+            ct);
 
         await _db.SaveChangesAsync(ct);
         return await GetTransferAsync(userId, transfer.Id, ct);

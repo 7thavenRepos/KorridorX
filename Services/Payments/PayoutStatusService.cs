@@ -1,6 +1,7 @@
 using KorridorX.Models.Enums;
 using KorridorX.Models.Payments;
 using KorridorX.Services.Transfers;
+using KorridorX.Services.BusinessFunding;
 
 namespace KorridorX.Services.Payments;
 
@@ -18,10 +19,14 @@ public class PayoutStatusService : IPayoutStatusService
         };
 
     private readonly ITransferStatusService _transferStatusService;
+    private readonly IBusinessFundingService _businessFundingService;
 
-    public PayoutStatusService(ITransferStatusService transferStatusService)
+    public PayoutStatusService(
+        ITransferStatusService transferStatusService,
+        IBusinessFundingService businessFundingService)
     {
         _transferStatusService = transferStatusService;
+        _businessFundingService = businessFundingService;
     }
 
     public bool CanTransition(PayoutStatus currentStatus, PayoutStatus newStatus)
@@ -175,6 +180,11 @@ public class PayoutStatusService : IPayoutStatusService
                         OccurredAt: occurredAt));
             }
 
+            _businessFundingService.CaptureTransferReservation(
+                transfer,
+                context.ChangedByUserId,
+                source);
+
             return;
         }
 
@@ -195,6 +205,12 @@ public class PayoutStatusService : IPayoutStatusService
                         MetadataJson: context.MetadataJson,
                         OccurredAt: occurredAt));
             }
+
+            _businessFundingService.ReleaseTransferReservation(
+                transfer,
+                reason ?? "Recipient payout could not be completed.",
+                context.ChangedByUserId,
+                source);
         }
     }
 

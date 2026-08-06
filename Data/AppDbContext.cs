@@ -1,6 +1,7 @@
 using KorridorX.Models.Audit;
 using KorridorX.Models.BusinessBeneficiaries;
 using KorridorX.Models.BusinessTransfers;
+using KorridorX.Models.BusinessFunding;
 using KorridorX.Models.Compliance;
 using KorridorX.Models.Customers;
 using KorridorX.Models.Fx;
@@ -45,6 +46,10 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<Guid
     public DbSet<BusinessPaymentBatch> BusinessPaymentBatches => Set<BusinessPaymentBatch>();
     public DbSet<BusinessPaymentBatchItem> BusinessPaymentBatchItems => Set<BusinessPaymentBatchItem>();
     public DbSet<BusinessApproval> BusinessApprovals => Set<BusinessApproval>();
+    public DbSet<BusinessWallet> BusinessWallets => Set<BusinessWallet>();
+    public DbSet<BusinessLedgerTransaction> BusinessLedgerTransactions => Set<BusinessLedgerTransaction>();
+    public DbSet<BusinessLedgerEntry> BusinessLedgerEntries => Set<BusinessLedgerEntry>();
+    public DbSet<BusinessWalletReservation> BusinessWalletReservations => Set<BusinessWalletReservation>();
 
     public DbSet<Collection> Collections => Set<Collection>();
     public DbSet<CollectionAttempt> CollectionAttempts => Set<CollectionAttempt>();

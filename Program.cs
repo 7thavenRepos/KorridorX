@@ -8,8 +8,13 @@ using KorridorX.Models.Identity;
 using KorridorX.Providers.Remittance;
 using KorridorX.Providers.Remittance.Blaaiz;
 using KorridorX.Services.Auth;
+using KorridorX.Services.Audit;
+using KorridorX.Services.BusinessContext;
 using KorridorX.Services.BusinessBeneficiaries;
 using KorridorX.Services.BusinessTransfers;
+using KorridorX.Services.BusinessFunding;
+using KorridorX.Services.Notifications;
+using KorridorX.Services.Operations;
 using KorridorX.Services.Compliance;
 using KorridorX.Services.Fx;
 using KorridorX.Services.Payments;
@@ -36,6 +41,11 @@ builder.Services
     .Bind(builder.Configuration.GetSection("Blaaiz"))
     .ValidateOnStart();
 builder.Services.AddSingleton<IValidateOptions<BlaaizOptions>, BlaaizOptionsValidator>();
+builder.Services
+    .AddOptions<NotificationDeliveryOptions>()
+    .Bind(builder.Configuration.GetSection(NotificationDeliveryOptions.SectionName))
+    .ValidateOnStart();
+builder.Services.AddSingleton<IValidateOptions<NotificationDeliveryOptions>, NotificationDeliveryOptionsValidator>();
 builder.Services.AddMemoryCache();
 builder.Services.AddDataProtection();
 
@@ -50,7 +60,6 @@ builder.Services.AddScoped<IBankDirectoryService, BankDirectoryService>();
 builder.Services.AddScoped<IProviderOperationsQueryService, ProviderOperationsQueryService>();
 builder.Services.AddScoped<IKycService, KycService>();
 builder.Services.AddScoped<IBusinessKybService, BusinessKybService>();
-builder.Services.AddScoped<IComplianceGateService, ComplianceGateService>();
 builder.Services.AddScoped<IAdminKycService, AdminKycService>();
 builder.Services.AddScoped<IAdminBusinessKybService, AdminBusinessKybService>();
 builder.Services.AddScoped<IBlaaizWebhookService, BlaaizWebhookService>();
@@ -78,9 +87,19 @@ builder.Services.AddScoped<IBusinessAccessService, BusinessAccessService>();
 builder.Services.AddScoped<IBusinessUserService, BusinessUserService>();
 builder.Services.AddScoped<IBusinessTransferService, BusinessTransferService>();
 builder.Services.AddScoped<IBusinessPaymentBatchService, BusinessPaymentBatchService>();
+builder.Services.AddScoped<IBusinessReportExportService, BusinessReportExportService>();
+builder.Services.AddScoped<IBusinessFundingService, BusinessFundingService>();
+builder.Services.AddScoped<INotificationQueueService, NotificationQueueService>();
+builder.Services.AddScoped<INotificationOperationsService, NotificationOperationsService>();
+builder.Services.AddScoped<INotificationDeliveryProvider, SmtpNotificationDeliveryProvider>();
+builder.Services.AddScoped<IAuditService, AuditService>();
+builder.Services.AddScoped<IOperationalHealthService, OperationalHealthService>();
+builder.Services.AddScoped<IBusinessContextAccessor, HttpBusinessContextAccessor>();
 builder.Services.AddScoped<ITransferQuoteService, TransferQuoteService>();
 builder.Services.AddScoped<ITransferStatusService, TransferStatusService>();
 builder.Services.AddScoped<ITransferService, TransferService>();
+// Required by collection, payout, and business-funding services.
+builder.Services.AddScoped<IComplianceGateService, ComplianceGateService>();
 builder.Services.AddScoped<ICollectionPaymentMethodPolicy, CollectionPaymentMethodPolicy>();
 builder.Services.AddScoped<ICollectionStatusService, CollectionStatusService>();
 builder.Services.AddScoped<ICollectionService, CollectionService>();
@@ -90,6 +109,7 @@ builder.Services.AddScoped<IRefundService, RefundService>();
 builder.Services.AddScoped<IProviderReconciliationService, ProviderReconciliationService>();
 builder.Services.AddHostedService<PayoutDispatchWorker>();
 builder.Services.AddHostedService<BlaaizReconciliationWorker>();
+builder.Services.AddHostedService<NotificationDeliveryWorker>();
 
 builder.Services.AddDbContext<AppDbContext>(options =>
 {

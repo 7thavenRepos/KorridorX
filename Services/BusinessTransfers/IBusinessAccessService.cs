@@ -1,3 +1,4 @@
+using KorridorX.Dtos.BusinessContext;
 using KorridorX.Models.Customers;
 using KorridorX.Models.Enums;
 
@@ -6,9 +7,14 @@ namespace KorridorX.Services.BusinessTransfers;
 public interface IBusinessAccessService
 {
     Task<BusinessAccessContext> GetAccessAsync(Guid userId, CancellationToken ct = default);
+
     Task<BusinessAccessContext> EnsurePermissionAsync(
         Guid userId,
         BusinessPermission permission,
+        CancellationToken ct = default);
+
+    Task<IReadOnlyList<AvailableBusinessContextDto>> GetAvailableBusinessesAsync(
+        Guid userId,
         CancellationToken ct = default);
 }
 

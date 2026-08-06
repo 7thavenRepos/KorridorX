@@ -185,15 +185,15 @@ public class CollectionService : ICollectionService
         var collection = await _db.Collections
             .Include(x => x.Transfer)
             .ThenInclude(x => x.CustomerProfile)
-            .ThenInclude(x => x.User)
+            .ThenInclude(x => x!.User)
             .Include(x => x.Attempts)
             .FirstOrDefaultAsync(x =>
                 x.Id == collectionId &&
-                x.Transfer.CustomerProfileId != null &&
-                x.Transfer.CustomerProfile!.UserId == userId &&
+                x.Transfer.CustomerProfile != null &&
+                x.Transfer.CustomerProfile.UserId == userId &&
                 !x.IsDeleted &&
                 !x.Transfer.IsDeleted &&
-                !x.Transfer.CustomerProfile.IsDeleted,
+                !x.Transfer.CustomerProfile!.IsDeleted,
                 ct);
 
         if (collection is null)
@@ -236,7 +236,7 @@ public class CollectionService : ICollectionService
             _remittanceProvider.ProviderCode,
             ct);
 
-        var email = request.PayerEmail ?? profile.Email ?? profile.User.Email;
+        var email = request.PayerEmail ?? profile.Email ?? profile.User?.Email;
         if (string.IsNullOrWhiteSpace(email))
         {
             throw new InvalidOperationException("Payer email is required to initiate this collection.");
@@ -247,13 +247,14 @@ public class CollectionService : ICollectionService
             : request.CustomerName.Trim();
 
         var walletId = ResolveCollectionWalletId(collection.CurrencyCode);
-        var card = request.Card is null
+        var cardRequest = request.Card;
+        var card = cardRequest is null
             ? null
             : new RemittanceCardDetails(
-                request.Card.CardHolderName,
-                request.Card.CardNumber,
-                request.Card.Expiry,
-                request.Card.Cvc);
+                cardRequest.CardHolderName,
+                cardRequest.CardNumber,
+                cardRequest.Expiry,
+                cardRequest.Cvc);
 
         var sanitizedRequestPayload = JsonSerializer.Serialize(new
         {
@@ -413,41 +414,43 @@ public class CollectionService : ICollectionService
                 x.Transfer.CustomerProfile!.UserId == userId &&
                 !x.IsDeleted &&
                 !x.Transfer.IsDeleted &&
-                !x.Transfer.CustomerProfile.IsDeleted)
+                !x.Transfer.CustomerProfile!.IsDeleted)
             .OrderByDescending(x => x.CreatedAt)
-            .Select(x => new CollectionDto(
-                x.Id,
-                x.TransferId,
-                x.Transfer.Reference,
-                x.Transfer.Status,
-                x.Reference,
-                x.Transfer.SourceCountryCode,
-                x.CurrencyCode,
-                x.Amount,
-                x.PaymentMethod,
-                x.Status,
-                x.ProviderCode,
-                x.ProviderCollectionId,
-                x.ProviderReference,
-                x.CheckoutUrl,
-                x.ProviderExpiresAt,
-                x.VirtualAccountNumber,
-                x.VirtualAccountBankName,
-                x.VirtualAccountName,
-                x.InitiatedAt,
-                x.ConfirmedAt,
-                x.FailedAt,
-                x.ExpiredAt,
-                x.RefundInitiatedAt,
-                x.RefundedAt,
-                x.ProviderRefundId,
-                x.ProviderRefundReference,
-                x.RefundReason,
-                x.RefundFailureReason,
-                x.LastRefundSyncedAt,
-                x.FailureReason,
-                x.CreatedAt,
-                x.LastUpdatedAt))
+            .Select(x => new CollectionDto
+            {
+                Id = x.Id,
+                TransferId = x.TransferId,
+                TransferReference = x.Transfer.Reference,
+                TransferStatus = x.Transfer.Status,
+                Reference = x.Reference,
+                SourceCountryCode = x.Transfer.SourceCountryCode,
+                CurrencyCode = x.CurrencyCode,
+                Amount = x.Amount,
+                PaymentMethod = x.PaymentMethod,
+                Status = x.Status,
+                ProviderCode = x.ProviderCode,
+                ProviderCollectionId = x.ProviderCollectionId,
+                ProviderReference = x.ProviderReference,
+                CheckoutUrl = x.CheckoutUrl,
+                ProviderExpiresAt = x.ProviderExpiresAt,
+                VirtualAccountNumber = x.VirtualAccountNumber,
+                VirtualAccountBankName = x.VirtualAccountBankName,
+                VirtualAccountName = x.VirtualAccountName,
+                InitiatedAt = x.InitiatedAt,
+                ConfirmedAt = x.ConfirmedAt,
+                FailedAt = x.FailedAt,
+                ExpiredAt = x.ExpiredAt,
+                RefundInitiatedAt = x.RefundInitiatedAt,
+                RefundedAt = x.RefundedAt,
+                ProviderRefundId = x.ProviderRefundId,
+                ProviderRefundReference = x.ProviderRefundReference,
+                RefundReason = x.RefundReason,
+                RefundFailureReason = x.RefundFailureReason,
+                LastRefundSyncedAt = x.LastRefundSyncedAt,
+                FailureReason = x.FailureReason,
+                CreatedAt = x.CreatedAt,
+                LastUpdatedAt = x.LastUpdatedAt
+            })
             .PaginateAsync(page, pageSize, ct);
     }
 
@@ -470,7 +473,7 @@ public class CollectionService : ICollectionService
             x.CustomerProfileId != null &&
             x.CustomerProfile!.UserId == userId &&
             !x.IsDeleted &&
-            !x.CustomerProfile.IsDeleted,
+            !x.CustomerProfile!.IsDeleted,
             ct);
 
         if (transfer is null)
@@ -493,7 +496,7 @@ public class CollectionService : ICollectionService
                 x.Transfer.CustomerProfile!.UserId == userId &&
                 !x.IsDeleted &&
                 !x.Transfer.IsDeleted &&
-                !x.Transfer.CustomerProfile.IsDeleted);
+                !x.Transfer.CustomerProfile!.IsDeleted);
     }
 
     private string? ResolveCollectionWalletId(string currencyCode)
@@ -583,39 +586,41 @@ public class CollectionService : ICollectionService
 
     private static CollectionDto ToDto(Collection collection)
     {
-        return new CollectionDto(
-            collection.Id,
-            collection.TransferId,
-            collection.Transfer.Reference,
-            collection.Transfer.Status,
-            collection.Reference,
-            collection.Transfer.SourceCountryCode,
-            collection.CurrencyCode,
-            collection.Amount,
-            collection.PaymentMethod,
-            collection.Status,
-            collection.ProviderCode,
-            collection.ProviderCollectionId,
-            collection.ProviderReference,
-            collection.CheckoutUrl,
-            collection.ProviderExpiresAt,
-            collection.VirtualAccountNumber,
-            collection.VirtualAccountBankName,
-            collection.VirtualAccountName,
-            collection.InitiatedAt,
-            collection.ConfirmedAt,
-            collection.FailedAt,
-            collection.ExpiredAt,
-            collection.RefundInitiatedAt,
-            collection.RefundedAt,
-            collection.ProviderRefundId,
-            collection.ProviderRefundReference,
-            collection.RefundReason,
-            collection.RefundFailureReason,
-            collection.LastRefundSyncedAt,
-            collection.FailureReason,
-            collection.CreatedAt,
-            collection.LastUpdatedAt);
+        return new CollectionDto
+        {
+            Id = collection.Id,
+            TransferId = collection.TransferId,
+            TransferReference = collection.Transfer.Reference,
+            TransferStatus = collection.Transfer.Status,
+            Reference = collection.Reference,
+            SourceCountryCode = collection.Transfer.SourceCountryCode,
+            CurrencyCode = collection.CurrencyCode,
+            Amount = collection.Amount,
+            PaymentMethod = collection.PaymentMethod,
+            Status = collection.Status,
+            ProviderCode = collection.ProviderCode,
+            ProviderCollectionId = collection.ProviderCollectionId,
+            ProviderReference = collection.ProviderReference,
+            CheckoutUrl = collection.CheckoutUrl,
+            ProviderExpiresAt = collection.ProviderExpiresAt,
+            VirtualAccountNumber = collection.VirtualAccountNumber,
+            VirtualAccountBankName = collection.VirtualAccountBankName,
+            VirtualAccountName = collection.VirtualAccountName,
+            InitiatedAt = collection.InitiatedAt,
+            ConfirmedAt = collection.ConfirmedAt,
+            FailedAt = collection.FailedAt,
+            ExpiredAt = collection.ExpiredAt,
+            RefundInitiatedAt = collection.RefundInitiatedAt,
+            RefundedAt = collection.RefundedAt,
+            ProviderRefundId = collection.ProviderRefundId,
+            ProviderRefundReference = collection.ProviderRefundReference,
+            RefundReason = collection.RefundReason,
+            RefundFailureReason = collection.RefundFailureReason,
+            LastRefundSyncedAt = collection.LastRefundSyncedAt,
+            FailureReason = collection.FailureReason,
+            CreatedAt = collection.CreatedAt,
+            LastUpdatedAt = collection.LastUpdatedAt
+        };
     }
 
     private static CollectionAttemptDto ToAttemptDto(CollectionAttempt attempt)

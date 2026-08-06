@@ -1,4 +1,4 @@
-using KorridorX.Models.Providers;
+﻿using KorridorX.Models.Providers;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -23,7 +23,6 @@ public class ProviderCustomerConfiguration : IEntityTypeConfiguration<ProviderCu
         builder.HasIndex(x => x.BusinessProfileId);
         builder.HasIndex(x => new { x.ProviderCode, x.ProviderCustomerId }).IsUnique();
         builder.HasIndex(x => new { x.ProviderCode, x.CustomerProfileId }).IsUnique();
-        builder.HasIndex(x => new { x.ProviderCode, x.BusinessProfileId }).IsUnique();
 
         builder.Property(x => x.ProviderCustomerId).HasMaxLength(150);
         builder.Property(x => x.ProviderStatus).HasMaxLength(100);
@@ -89,23 +88,5 @@ public class ProviderTransactionConfiguration : IEntityTypeConfiguration<Provide
             .WithMany()
             .HasForeignKey(x => x.PayoutId)
             .OnDelete(DeleteBehavior.Restrict);
-    }
-}
-public class ProviderBankConfiguration : IEntityTypeConfiguration<ProviderBank>
-{
-    public void Configure(EntityTypeBuilder<ProviderBank> builder)
-    {
-        builder.HasIndex(x => new { x.ProviderCode, x.ProviderBankId }).IsUnique();
-        builder.HasIndex(x => new { x.ProviderCode, x.CountryCode, x.IsActive });
-        builder.HasIndex(x => x.Name);
-        builder.HasIndex(x => x.Code);
-
-        builder.Property(x => x.ProviderBankId).HasMaxLength(150);
-        builder.Property(x => x.Name).HasMaxLength(200);
-        builder.Property(x => x.Code).HasMaxLength(100);
-        builder.Property(x => x.NationalBankCode).HasMaxLength(100);
-        builder.Property(x => x.ProviderCountryId).HasMaxLength(150);
-        builder.Property(x => x.CountryCode).HasMaxLength(10);
-        builder.Property(x => x.CountryName).HasMaxLength(150);
     }
 }

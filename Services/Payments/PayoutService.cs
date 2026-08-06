@@ -12,6 +12,7 @@ using KorridorX.Models.Recipients;
 using KorridorX.Models.Transfers;
 using KorridorX.Providers.Remittance;
 using KorridorX.Services.Compliance;
+using KorridorX.Services.BusinessFunding;
 using KorridorX.Services.References;
 using KorridorX.Services.Transfers;
 using Microsoft.EntityFrameworkCore;
@@ -27,6 +28,7 @@ public class PayoutService : IPayoutService
     private readonly IRemittanceProvider _remittanceProvider;
     private readonly IComplianceGateService _complianceGateService;
     private readonly ITransferStatusService _transferStatusService;
+    private readonly IBusinessFundingService _businessFundingService;
     private readonly IReadOnlyDictionary<string, string> _payoutWalletIds;
 
     public PayoutService(
@@ -36,6 +38,7 @@ public class PayoutService : IPayoutService
         IRemittanceProvider remittanceProvider,
         IComplianceGateService complianceGateService,
         ITransferStatusService transferStatusService,
+        IBusinessFundingService businessFundingService,
         IOptions<BlaaizOptions> blaaizOptions)
     {
         _db = db;
@@ -44,6 +47,7 @@ public class PayoutService : IPayoutService
         _remittanceProvider = remittanceProvider;
         _complianceGateService = complianceGateService;
         _transferStatusService = transferStatusService;
+        _businessFundingService = businessFundingService;
         _payoutWalletIds = blaaizOptions.Value.PayoutWalletIds;
     }
 
@@ -288,6 +292,12 @@ public class PayoutService : IPayoutService
             throw new InvalidOperationException(
                 $"Payout retry requires the transfer to be in RefundPending, but it is '{payout.Transfer.Status}'.");
         }
+
+        await _businessFundingService.ReactivateTransferReservationAsync(
+            payout.Transfer,
+            changedByUserId,
+            "AdminRetry",
+            ct);
 
         _transferStatusService.ApplyTransition(
             payout.Transfer,

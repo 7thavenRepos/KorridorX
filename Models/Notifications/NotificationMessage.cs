@@ -1,4 +1,4 @@
-﻿using KorridorX.Models.Common;
+using KorridorX.Models.Common;
 
 namespace KorridorX.Models.Notifications;
 
@@ -14,7 +14,17 @@ public class NotificationMessage : BaseEntity
 
     public string Status { get; set; } = "Pending";
 
+    public int AttemptCount { get; set; }
+    public int MaxAttempts { get; set; } = 5;
+    public DateTime? NextAttemptAt { get; set; } = DateTime.UtcNow;
+    public DateTime? LastAttemptAt { get; set; }
+    public DateTime? LockedAt { get; set; }
+    public Guid? LockId { get; set; }
+    public DateTime? DeadLetteredAt { get; set; }
+    public string? ProviderMessageId { get; set; }
+
     public DateTime? SentAt { get; set; }
+    public DateTime? ReadAt { get; set; }
     public string? ErrorMessage { get; set; }
 
     public string? RelatedEntityType { get; set; }

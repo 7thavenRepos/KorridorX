@@ -383,6 +383,280 @@ namespace KorridorX.Migrations
                     b.ToTable("BusinessBeneficiaryMobileWallets");
                 });
 
+            modelBuilder.Entity("KorridorX.Models.BusinessFunding.BusinessLedgerEntry", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal?>("AccountBalanceAfter")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<int>("AccountType")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("Amount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<Guid>("BusinessLedgerTransactionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("BusinessWalletId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime?>("LastUpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Side")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BusinessLedgerTransactionId");
+
+                    b.HasIndex("BusinessWalletId");
+
+                    b.ToTable("BusinessLedgerEntries");
+                });
+
+            modelBuilder.Entity("KorridorX.Models.BusinessFunding.BusinessLedgerTransaction", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("Amount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<Guid?>("BusinessPaymentBatchId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("BusinessProfileId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("CollectionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CreatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("CurrencyCode")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("DeletedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime?>("LastUpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("LastUpdatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("PostedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Reference")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid?>("TransferId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Type")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BusinessPaymentBatchId");
+
+                    b.HasIndex("BusinessProfileId");
+
+                    b.HasIndex("CollectionId");
+
+                    b.HasIndex("PostedAt");
+
+                    b.HasIndex("Reference")
+                        .IsUnique();
+
+                    b.HasIndex("TransferId");
+
+                    b.ToTable("BusinessLedgerTransactions");
+                });
+
+            modelBuilder.Entity("KorridorX.Models.BusinessFunding.BusinessWallet", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("AvailableBalance")
+                        .IsConcurrencyToken()
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<Guid>("BusinessProfileId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CreatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("CurrencyCode")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("DeletedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("HeldBalance")
+                        .IsConcurrencyToken()
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime?>("LastUpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("LastUpdatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("SettledBalance")
+                        .IsConcurrencyToken()
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Status");
+
+                    b.HasIndex("BusinessProfileId", "CurrencyCode")
+                        .IsUnique();
+
+                    b.ToTable("BusinessWallets");
+                });
+
+            modelBuilder.Entity("KorridorX.Models.BusinessFunding.BusinessWalletReservation", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("Amount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<Guid?>("BusinessPaymentBatchId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("BusinessWalletId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("CapturedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CreatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("DeletedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime?>("LastUpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("LastUpdatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Reference")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)");
+
+                    b.Property<string>("ReleaseReason")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<DateTime?>("ReleasedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("ReservedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Status")
+                        .IsConcurrencyToken()
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("TransferId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BusinessPaymentBatchId");
+
+                    b.HasIndex("BusinessWalletId");
+
+                    b.HasIndex("Reference")
+                        .IsUnique();
+
+                    b.HasIndex("Status");
+
+                    b.HasIndex("TransferId")
+                        .IsUnique();
+
+                    b.ToTable("BusinessWalletReservations");
+                });
+
             modelBuilder.Entity("KorridorX.Models.BusinessTransfers.BusinessApproval", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2446,6 +2720,9 @@ namespace KorridorX.Migrations
                     b.Property<DateTime?>("LastUpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<DateTime?>("ReadAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<string>("Recipient")
                         .IsRequired()
                         .HasMaxLength(255)
@@ -2478,6 +2755,8 @@ namespace KorridorX.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("Channel");
+
+                    b.HasIndex("ReadAt");
 
                     b.HasIndex("SentAt");
 
@@ -2908,17 +3187,14 @@ namespace KorridorX.Migrations
 
                     b.Property<string>("Code")
                         .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
+                        .HasColumnType("text");
 
                     b.Property<string>("CountryCode")
                         .IsRequired()
-                        .HasMaxLength(10)
-                        .HasColumnType("character varying(10)");
+                        .HasColumnType("text");
 
                     b.Property<string>("CountryName")
-                        .HasMaxLength(150)
-                        .HasColumnType("character varying(150)");
+                        .HasColumnType("text");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
@@ -2940,38 +3216,25 @@ namespace KorridorX.Migrations
 
                     b.Property<string>("Name")
                         .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
+                        .HasColumnType("text");
 
                     b.Property<string>("NationalBankCode")
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
+                        .HasColumnType("text");
 
                     b.Property<string>("ProviderBankId")
                         .IsRequired()
-                        .HasMaxLength(150)
-                        .HasColumnType("character varying(150)");
+                        .HasColumnType("text");
 
                     b.Property<int>("ProviderCode")
                         .HasColumnType("integer");
 
                     b.Property<string>("ProviderCountryId")
-                        .HasMaxLength(150)
-                        .HasColumnType("character varying(150)");
+                        .HasColumnType("text");
 
                     b.Property<string>("RawPayloadJson")
                         .HasColumnType("text");
 
                     b.HasKey("Id");
-
-                    b.HasIndex("Code");
-
-                    b.HasIndex("Name");
-
-                    b.HasIndex("ProviderCode", "ProviderBankId")
-                        .IsUnique();
-
-                    b.HasIndex("ProviderCode", "CountryCode", "IsActive");
 
                     b.ToTable("ProviderBanks");
                 });
@@ -3032,9 +3295,6 @@ namespace KorridorX.Migrations
                     b.HasIndex("BusinessProfileId");
 
                     b.HasIndex("CustomerProfileId");
-
-                    b.HasIndex("ProviderCode", "BusinessProfileId")
-                        .IsUnique();
 
                     b.HasIndex("ProviderCode", "CustomerProfileId")
                         .IsUnique();
@@ -4110,6 +4370,93 @@ namespace KorridorX.Migrations
                     b.Navigation("BusinessBeneficiary");
                 });
 
+            modelBuilder.Entity("KorridorX.Models.BusinessFunding.BusinessLedgerEntry", b =>
+                {
+                    b.HasOne("KorridorX.Models.BusinessFunding.BusinessLedgerTransaction", "BusinessLedgerTransaction")
+                        .WithMany("Entries")
+                        .HasForeignKey("BusinessLedgerTransactionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("KorridorX.Models.BusinessFunding.BusinessWallet", "BusinessWallet")
+                        .WithMany("LedgerEntries")
+                        .HasForeignKey("BusinessWalletId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("BusinessLedgerTransaction");
+
+                    b.Navigation("BusinessWallet");
+                });
+
+            modelBuilder.Entity("KorridorX.Models.BusinessFunding.BusinessLedgerTransaction", b =>
+                {
+                    b.HasOne("KorridorX.Models.BusinessTransfers.BusinessPaymentBatch", "BusinessPaymentBatch")
+                        .WithMany()
+                        .HasForeignKey("BusinessPaymentBatchId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("KorridorX.Models.Customers.BusinessProfile", "BusinessProfile")
+                        .WithMany()
+                        .HasForeignKey("BusinessProfileId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("KorridorX.Models.Payments.Collection", "Collection")
+                        .WithMany()
+                        .HasForeignKey("CollectionId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("KorridorX.Models.Transfers.Transfer", "Transfer")
+                        .WithMany()
+                        .HasForeignKey("TransferId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("BusinessPaymentBatch");
+
+                    b.Navigation("BusinessProfile");
+
+                    b.Navigation("Collection");
+
+                    b.Navigation("Transfer");
+                });
+
+            modelBuilder.Entity("KorridorX.Models.BusinessFunding.BusinessWallet", b =>
+                {
+                    b.HasOne("KorridorX.Models.Customers.BusinessProfile", "BusinessProfile")
+                        .WithMany()
+                        .HasForeignKey("BusinessProfileId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("BusinessProfile");
+                });
+
+            modelBuilder.Entity("KorridorX.Models.BusinessFunding.BusinessWalletReservation", b =>
+                {
+                    b.HasOne("KorridorX.Models.BusinessTransfers.BusinessPaymentBatch", "BusinessPaymentBatch")
+                        .WithMany()
+                        .HasForeignKey("BusinessPaymentBatchId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("KorridorX.Models.BusinessFunding.BusinessWallet", "BusinessWallet")
+                        .WithMany("Reservations")
+                        .HasForeignKey("BusinessWalletId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("KorridorX.Models.Transfers.Transfer", "Transfer")
+                        .WithMany()
+                        .HasForeignKey("TransferId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("BusinessPaymentBatch");
+
+                    b.Navigation("BusinessWallet");
+
+                    b.Navigation("Transfer");
+                });
+
             modelBuilder.Entity("KorridorX.Models.BusinessTransfers.BusinessApproval", b =>
                 {
                     b.HasOne("KorridorX.Models.Identity.ApplicationUser", "ActionedByUser")
@@ -4665,6 +5012,18 @@ namespace KorridorX.Migrations
                     b.Navigation("BankAccounts");
 
                     b.Navigation("MobileWallets");
+                });
+
+            modelBuilder.Entity("KorridorX.Models.BusinessFunding.BusinessLedgerTransaction", b =>
+                {
+                    b.Navigation("Entries");
+                });
+
+            modelBuilder.Entity("KorridorX.Models.BusinessFunding.BusinessWallet", b =>
+                {
+                    b.Navigation("LedgerEntries");
+
+                    b.Navigation("Reservations");
                 });
 
             modelBuilder.Entity("KorridorX.Models.BusinessTransfers.BusinessPaymentBatch", b =>

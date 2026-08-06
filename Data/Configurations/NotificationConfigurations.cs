@@ -1,4 +1,4 @@
-﻿using KorridorX.Models.Notifications;
+using KorridorX.Models.Notifications;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -11,13 +11,20 @@ public class NotificationMessageConfiguration : IEntityTypeConfiguration<Notific
         builder.HasIndex(x => x.UserId);
         builder.HasIndex(x => x.Channel);
         builder.HasIndex(x => x.Status);
+        builder.HasIndex(x => new { x.Status, x.NextAttemptAt });
+        builder.HasIndex(x => x.LockId);
+        builder.HasIndex(x => x.DeadLetteredAt);
         builder.HasIndex(x => x.SentAt);
+        builder.HasIndex(x => x.ReadAt);
         builder.HasIndex(x => new { x.RelatedEntityType, x.RelatedEntityId });
 
         builder.Property(x => x.Channel).HasMaxLength(50);
         builder.Property(x => x.Recipient).HasMaxLength(255);
         builder.Property(x => x.Subject).HasMaxLength(255);
-        builder.Property(x => x.Status).HasMaxLength(50);
+        builder.Property(x => x.Status).HasMaxLength(50).IsConcurrencyToken();
+        builder.Property(x => x.AttemptCount).HasDefaultValue(0);
+        builder.Property(x => x.MaxAttempts).HasDefaultValue(5);
+        builder.Property(x => x.ProviderMessageId).HasMaxLength(255);
         builder.Property(x => x.ErrorMessage).HasMaxLength(1000);
         builder.Property(x => x.RelatedEntityType).HasMaxLength(100);
         builder.Property(x => x.RelatedEntityId).HasMaxLength(100);

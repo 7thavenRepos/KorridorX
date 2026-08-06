@@ -1,7 +1,6 @@
 using System.Security.Claims;
 using KorridorX.Dtos.BusinessTransfers;
 using KorridorX.Infrastructure;
-using KorridorX.Models.Enums;
 using KorridorX.Services.BusinessTransfers;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -24,26 +23,22 @@ public class BusinessPaymentBatchesController : ControllerBase
     [Consumes("multipart/form-data")]
     [RequestSizeLimit(10 * 1024 * 1024)]
     public async Task<IActionResult> Import(
-        [FromForm] IFormFile file,
-        [FromForm] string name,
-        [FromForm] string sourceCountryCode,
-        [FromForm] string sourceCurrencyCode,
-        [FromForm] BusinessFundingSource fundingSource = BusinessFundingSource.BusinessWallet,
+        [FromForm] ImportBusinessPaymentBatchFormDto request,
         CancellationToken ct = default)
     {
-        if (file is null || file.Length == 0)
+        if (request.File is null || request.File.Length == 0)
             throw new InvalidOperationException("A non-empty CSV file is required.");
 
-        await using var stream = file.OpenReadStream();
+        await using var stream = request.File.OpenReadStream();
         var result = await _service.ImportAsync(
             GetUserId(),
-            file.FileName,
+            request.File.FileName,
             stream,
             new ImportBusinessPaymentBatchRequestDto(
-                name,
-                sourceCountryCode,
-                sourceCurrencyCode,
-                fundingSource),
+                request.Name,
+                request.SourceCountryCode,
+                request.SourceCurrencyCode,
+                request.FundingSource),
             ct);
 
         return Ok(ApiResponses.Ok(result, "Business payment batch imported and validated."));

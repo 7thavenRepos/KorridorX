@@ -505,3 +505,113 @@ Content-Type: application/json
 {
   "comment": "Batch reviewed and approved."
 }
+
+### Get business wallets
+GET {{KorridorX_HostAddress}}/api/business/funding/wallets?page=1&pageSize=20
+Authorization: Bearer {{accessToken}}
+
+### Credit business wallet - Admin/Operations
+POST {{KorridorX_HostAddress}}/api/admin/business-wallets/credit
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "businessProfileId": "00000000-0000-0000-0000-000000000000",
+  "currencyCode": "USD",
+  "amount": 25000,
+  "reason": "Sandbox operating balance"
+}
+
+### Fund approved business transfer from wallet
+POST {{KorridorX_HostAddress}}/api/business/funding/transfers/00000000-0000-0000-0000-000000000000/wallet
+Authorization: Bearer {{accessToken}}
+
+### Create external business collection
+POST {{KorridorX_HostAddress}}/api/business/funding/transfers/00000000-0000-0000-0000-000000000000/collections
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "paymentMethod": 3
+}
+
+### Get notifications
+GET {{KorridorX_HostAddress}}/api/notifications?page=1&pageSize=20
+Authorization: Bearer {{accessToken}}
+
+### Export business transfers
+GET {{KorridorX_HostAddress}}/api/business/exports/transfers.csv
+Authorization: Bearer {{accessToken}}
+
+### Available business contexts
+GET {{KorridorX_HostAddress}}/api/business/context
+Authorization: Bearer {{accessToken}}
+
+### Get business wallets for a selected business
+GET {{KorridorX_HostAddress}}/api/business/funding/wallets?page=1&pageSize=20
+Authorization: Bearer {{accessToken}}
+X-Business-Profile-Id: {{businessProfileId}}
+
+### Idempotent business wallet credit
+POST {{KorridorX_HostAddress}}/api/admin/business-wallets/credit
+Authorization: Bearer {{accessToken}}
+Idempotency-Key: wallet-credit-20260806-001
+Content-Type: application/json
+
+{
+  "businessProfileId": "{{businessProfileId}}",
+  "currencyCode": "USD",
+  "amount": 25000,
+  "reason": "Operating balance adjustment"
+}
+
+### Freeze a business wallet
+POST {{KorridorX_HostAddress}}/api/admin/business-wallets/{{businessWalletId}}/freeze
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "reason": "Temporary operational review"
+}
+
+### Manual wallet adjustment
+POST {{KorridorX_HostAddress}}/api/admin/business-wallets/{{businessWalletId}}/adjust
+Authorization: Bearer {{accessToken}}
+Idempotency-Key: wallet-adjustment-20260806-001
+Content-Type: application/json
+
+{
+  "amount": 100,
+  "direction": 1,
+  "reason": "Approved reconciliation correction"
+}
+
+### Reverse a standalone ledger transaction
+POST {{KorridorX_HostAddress}}/api/admin/business-wallets/ledger/{{businessLedgerTransactionId}}/reverse
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "reason": "Original adjustment was entered in error"
+}
+
+### Notification operations
+GET {{KorridorX_HostAddress}}/api/admin/notifications?status=DeadLetter&page=1&pageSize=20
+Authorization: Bearer {{accessToken}}
+
+### Retry notification
+POST {{KorridorX_HostAddress}}/api/admin/notifications/{{notificationId}}/retry
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "resetAttemptCount": true
+}
+
+### Audit logs
+GET {{KorridorX_HostAddress}}/api/admin/audit-logs?category=BusinessFunding&page=1&pageSize=20
+Authorization: Bearer {{accessToken}}
+
+### Operational health
+GET {{KorridorX_HostAddress}}/api/admin/operations/health
+Authorization: Bearer {{accessToken}}

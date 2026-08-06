@@ -14,6 +14,8 @@ public enum BusinessPermission : long
     ApproveBatches = 1L << 7,
     ViewReports = 1L << 8,
     ManageBusinessUsers = 1L << 9,
+    ViewWallets = 1L << 10,
+    ManageFunding = 1L << 11,
     All = ViewBeneficiaries |
           ManageBeneficiaries |
           ViewTransfers |
@@ -23,7 +25,9 @@ public enum BusinessPermission : long
           ManageBatches |
           ApproveBatches |
           ViewReports |
-          ManageBusinessUsers
+          ManageBusinessUsers |
+          ViewWallets |
+          ManageFunding
 }
 
 public enum BusinessApprovalStatus
