@@ -75,6 +75,16 @@ public class TransferService : ITransferService
             throw new InvalidOperationException("Transfer quote has expired. Please create a new quote.");
         }
 
+        if (quote.TransferType != TransferType.ConsumerToConsumer)
+        {
+            throw new InvalidOperationException("The selected quote is not a consumer transfer quote.");
+        }
+
+        if (!string.Equals(quote.SourceCountryCode, customerProfile.CountryCode, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException("The quote source country no longer matches the customer profile.");
+        }
+
         var recipient = await _db.Recipients
             .FirstOrDefaultAsync(x =>
                 x.Id == request.RecipientId &&
@@ -86,6 +96,11 @@ public class TransferService : ITransferService
         if (recipient is null)
         {
             throw new InvalidOperationException("Recipient not found.");
+        }
+
+        if (!string.Equals(recipient.CountryCode, quote.DestinationCountryCode, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException("The recipient country does not match the quote destination country.");
         }
 
         if (request.RecipientBankAccountId is not null)
@@ -140,8 +155,8 @@ public class TransferService : ITransferService
             Purpose = request.Purpose,
             PurposeNote = request.PurposeNote,
 
-            SourceCountryCode = customerProfile.CountryCode,
-            DestinationCountryCode = recipient.CountryCode,
+            SourceCountryCode = quote.SourceCountryCode,
+            DestinationCountryCode = quote.DestinationCountryCode,
 
             SourceCurrencyCode = quote.SourceCurrencyCode,
             DestinationCurrencyCode = quote.DestinationCurrencyCode,
@@ -198,7 +213,8 @@ public class TransferService : ITransferService
             .Include(x => x.TimelineEvents)
             .FirstOrDefaultAsync(x =>
                 x.Id == transferId &&
-                x.CustomerProfile.UserId == userId &&
+                x.CustomerProfileId != null &&
+                x.CustomerProfile!.UserId == userId &&
                 !x.IsDeleted,
                 ct);
 
@@ -238,8 +254,8 @@ public class TransferService : ITransferService
             .Select(x => new TransferDto(
                 x.Id,
                 x.Reference,
-                x.CustomerProfileId,
-                x.RecipientId,
+                x.CustomerProfileId!.Value,
+                x.RecipientId!.Value,
                 x.RecipientBankAccountId,
                 x.RecipientMobileWalletId,
                 x.TransferQuoteId,
@@ -293,7 +309,8 @@ public class TransferService : ITransferService
             .Include(x => x.CustomerProfile)
             .FirstOrDefaultAsync(x =>
                 x.Id == transferId &&
-                x.CustomerProfile.UserId == userId &&
+                x.CustomerProfileId != null &&
+                x.CustomerProfile!.UserId == userId &&
                 !x.IsDeleted,
                 ct);
 
@@ -372,8 +389,8 @@ public class TransferService : ITransferService
         return new TransferDto(
             transfer.Id,
             transfer.Reference,
-            transfer.CustomerProfileId,
-            transfer.RecipientId,
+            transfer.CustomerProfileId!.Value,
+            transfer.RecipientId!.Value,
             transfer.RecipientBankAccountId,
             transfer.RecipientMobileWalletId,
             transfer.TransferQuoteId,

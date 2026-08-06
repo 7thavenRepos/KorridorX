@@ -12,15 +12,26 @@ public class TransferStatusService : ITransferStatusService
             [TransferStatus.Draft] =
             [
                 TransferStatus.Quoted,
+                TransferStatus.PendingApproval,
                 TransferStatus.PendingPayment,
+                TransferStatus.PaymentReceived,
                 TransferStatus.Cancelled
             ],
 
             [TransferStatus.Quoted] =
             [
+                TransferStatus.PendingApproval,
                 TransferStatus.PendingPayment,
                 TransferStatus.Cancelled,
                 TransferStatus.Failed
+            ],
+
+            [TransferStatus.PendingApproval] =
+            [
+                TransferStatus.PendingPayment,
+                TransferStatus.PaymentReceived,
+                TransferStatus.Rejected,
+                TransferStatus.Cancelled
             ],
 
             [TransferStatus.PendingPayment] =
@@ -78,6 +89,11 @@ public class TransferStatusService : ITransferStatusService
             [TransferStatus.Cancelled] =
             [
                 TransferStatus.RefundPending
+            ],
+
+            [TransferStatus.Rejected] =
+            [
+                TransferStatus.PendingApproval
             ],
 
             [TransferStatus.Refunded] = []
@@ -217,6 +233,8 @@ public class TransferStatusService : ITransferStatusService
             TransferStatus.Cancelled => "TRANSFER_CANCELLED",
             TransferStatus.RefundPending => "TRANSFER_REFUND_PENDING",
             TransferStatus.Refunded => "TRANSFER_REFUNDED",
+            TransferStatus.PendingApproval => "TRANSFER_PENDING_APPROVAL",
+            TransferStatus.Rejected => "TRANSFER_REJECTED",
             _ => "TRANSFER_STATUS_CHANGED"
         };
     }
@@ -237,6 +255,8 @@ public class TransferStatusService : ITransferStatusService
             TransferStatus.Cancelled => "Transfer cancelled",
             TransferStatus.RefundPending => "Refund pending",
             TransferStatus.Refunded => "Transfer refunded",
+            TransferStatus.PendingApproval => "Transfer pending approval",
+            TransferStatus.Rejected => "Transfer rejected",
             _ => "Transfer status updated"
         };
     }
@@ -257,6 +277,8 @@ public class TransferStatusService : ITransferStatusService
             TransferStatus.Cancelled => "The transfer has been cancelled.",
             TransferStatus.RefundPending => "A refund is being processed.",
             TransferStatus.Refunded => "The transfer payment has been refunded.",
+            TransferStatus.PendingApproval => "The transfer is waiting for business approval.",
+            TransferStatus.Rejected => "The transfer was rejected during business approval.",
             _ => "The transfer status has been updated."
         };
     }

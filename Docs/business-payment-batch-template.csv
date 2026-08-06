@@ -1,0 +1,3 @@
+externalReference,businessBeneficiaryId,bankAccountId,mobileWalletId,destinationCurrencyCode,sourceAmount,purpose,purposeNote
+SUPPLIER-001,00000000-0000-0000-0000-000000000001,00000000-0000-0000-0000-000000000002,,NGN,1000.00,SupplierPayment,August supplier invoice
+PAYROLL-001,00000000-0000-0000-0000-000000000003,00000000-0000-0000-0000-000000000004,,NGN,500.00,Salary,August payroll

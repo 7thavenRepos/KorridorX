@@ -6,6 +6,7 @@ using KorridorX.Models.BusinessBeneficiaries;
 using KorridorX.Models.Enums;
 using KorridorX.Models.Providers;
 using KorridorX.Providers.Remittance;
+using KorridorX.Services.BusinessTransfers;
 using Microsoft.EntityFrameworkCore;
 
 namespace KorridorX.Services.BusinessBeneficiaries;
@@ -14,11 +15,16 @@ public class BusinessBeneficiaryService : IBusinessBeneficiaryService
 {
     private readonly AppDbContext _db;
     private readonly IRemittanceProvider _provider;
+    private readonly IBusinessAccessService _accessService;
 
-    public BusinessBeneficiaryService(AppDbContext db, IRemittanceProvider provider)
+    public BusinessBeneficiaryService(
+        AppDbContext db,
+        IRemittanceProvider provider,
+        IBusinessAccessService accessService)
     {
         _db = db;
         _provider = provider;
+        _accessService = accessService;
     }
 
     public async Task<PagedResult<BusinessBeneficiarySummaryDto>> GetAsync(
@@ -30,6 +36,7 @@ public class BusinessBeneficiaryService : IBusinessBeneficiaryService
         int pageSize,
         CancellationToken ct = default)
     {
+        await _accessService.EnsurePermissionAsync(userId, BusinessPermission.ViewBeneficiaries, ct);
         var businessProfileId = await GetBusinessProfileIdAsync(userId, ct);
 
         var query = _db.BusinessBeneficiaries
@@ -79,6 +86,7 @@ public class BusinessBeneficiaryService : IBusinessBeneficiaryService
         Guid beneficiaryId,
         CancellationToken ct = default)
     {
+        await _accessService.EnsurePermissionAsync(userId, BusinessPermission.ViewBeneficiaries, ct);
         var beneficiary = await OwnedQuery(userId)
             .AsNoTracking()
             .Include(x => x.BankAccounts.Where(a => !a.IsDeleted))
@@ -95,6 +103,7 @@ public class BusinessBeneficiaryService : IBusinessBeneficiaryService
         CreateBusinessBeneficiaryRequestDto request,
         CancellationToken ct = default)
     {
+        await _accessService.EnsurePermissionAsync(userId, BusinessPermission.ManageBeneficiaries, ct);
         ValidateBeneficiary(request.Name, request.CountryCode, request.Email);
         var businessProfileId = await GetBusinessProfileIdAsync(userId, ct);
         var countryCode = NormalizeCode(request.CountryCode);
@@ -126,10 +135,13 @@ public class BusinessBeneficiaryService : IBusinessBeneficiaryService
         UpdateBusinessBeneficiaryRequestDto request,
         CancellationToken ct = default)
     {
+        await _accessService.EnsurePermissionAsync(userId, BusinessPermission.ManageBeneficiaries, ct);
         ValidateBeneficiary(request.Name, request.CountryCode, request.Email);
         var entity = await OwnedQuery(userId)
             .FirstOrDefaultAsync(x => x.Id == beneficiaryId && !x.IsDeleted, ct)
             ?? throw new InvalidOperationException("Business beneficiary not found.");
+
+        await EnsureBeneficiaryNotInActiveTransferAsync(beneficiaryId, ct);
 
         var countryCode = NormalizeCode(request.CountryCode);
         await EnsureReceiveCountryAsync(countryCode, ct);
@@ -153,11 +165,14 @@ public class BusinessBeneficiaryService : IBusinessBeneficiaryService
 
     public async Task DeleteAsync(Guid userId, Guid beneficiaryId, CancellationToken ct = default)
     {
+        await _accessService.EnsurePermissionAsync(userId, BusinessPermission.ManageBeneficiaries, ct);
         var entity = await OwnedQuery(userId)
             .Include(x => x.BankAccounts)
             .Include(x => x.MobileWallets)
             .FirstOrDefaultAsync(x => x.Id == beneficiaryId && !x.IsDeleted, ct)
             ?? throw new InvalidOperationException("Business beneficiary not found.");
+
+        await EnsureBeneficiaryNotInActiveTransferAsync(beneficiaryId, ct);
 
         var now = DateTime.UtcNow;
         entity.IsDeleted = true;
@@ -192,6 +207,7 @@ public class BusinessBeneficiaryService : IBusinessBeneficiaryService
         AddBusinessBeneficiaryBankAccountRequestDto request,
         CancellationToken ct = default)
     {
+        await _accessService.EnsurePermissionAsync(userId, BusinessPermission.ManageBeneficiaries, ct);
         ValidateBankAccount(request.CountryCode, request.CurrencyCode, request.BankName,
             request.AccountName, request.AccountNumber);
 
@@ -242,6 +258,7 @@ public class BusinessBeneficiaryService : IBusinessBeneficiaryService
         UpdateBusinessBeneficiaryBankAccountRequestDto request,
         CancellationToken ct = default)
     {
+        await _accessService.EnsurePermissionAsync(userId, BusinessPermission.ManageBeneficiaries, ct);
         ValidateBankAccount(request.CountryCode, request.CurrencyCode, request.BankName,
             request.AccountName, request.AccountNumber);
 
@@ -252,6 +269,8 @@ public class BusinessBeneficiaryService : IBusinessBeneficiaryService
 
         var account = beneficiary.BankAccounts.FirstOrDefault(x => x.Id == bankAccountId && !x.IsDeleted)
             ?? throw new InvalidOperationException("Business beneficiary bank account not found.");
+
+        await EnsureBankAccountNotInActiveTransferAsync(bankAccountId, ct);
 
         var countryCode = NormalizeCode(request.CountryCode);
         var currencyCode = NormalizeCode(request.CurrencyCode);
@@ -299,6 +318,7 @@ public class BusinessBeneficiaryService : IBusinessBeneficiaryService
         Guid bankAccountId,
         CancellationToken ct = default)
     {
+        await _accessService.EnsurePermissionAsync(userId, BusinessPermission.ManageBeneficiaries, ct);
         var account = await _db.BusinessBeneficiaryBankAccounts
             .Include(x => x.BusinessBeneficiary)
             .ThenInclude(x => x.BusinessProfile)
@@ -378,6 +398,7 @@ public class BusinessBeneficiaryService : IBusinessBeneficiaryService
         Guid bankAccountId,
         CancellationToken ct = default)
     {
+        await _accessService.EnsurePermissionAsync(userId, BusinessPermission.ManageBeneficiaries, ct);
         var account = await _db.BusinessBeneficiaryBankAccounts
             .Include(x => x.BusinessBeneficiary)
             .ThenInclude(x => x.BusinessProfile)
@@ -389,6 +410,8 @@ public class BusinessBeneficiaryService : IBusinessBeneficiaryService
                  x.BusinessBeneficiary.BusinessProfile.Users.Any(u =>
                      u.UserId == userId && u.IsActive && !u.IsDeleted)), ct)
             ?? throw new InvalidOperationException("Business beneficiary bank account not found.");
+
+        await EnsureBankAccountNotInActiveTransferAsync(bankAccountId, ct);
 
         account.IsDeleted = true;
         account.DeletedAt = DateTime.UtcNow;
@@ -404,6 +427,7 @@ public class BusinessBeneficiaryService : IBusinessBeneficiaryService
         AddBusinessBeneficiaryMobileWalletRequestDto request,
         CancellationToken ct = default)
     {
+        await _accessService.EnsurePermissionAsync(userId, BusinessPermission.ManageBeneficiaries, ct);
         ValidateMobileWallet(request.CountryCode, request.CurrencyCode, request.ProviderName,
             request.WalletNumber, request.AccountName);
 
@@ -446,6 +470,7 @@ public class BusinessBeneficiaryService : IBusinessBeneficiaryService
         UpdateBusinessBeneficiaryMobileWalletRequestDto request,
         CancellationToken ct = default)
     {
+        await _accessService.EnsurePermissionAsync(userId, BusinessPermission.ManageBeneficiaries, ct);
         ValidateMobileWallet(request.CountryCode, request.CurrencyCode, request.ProviderName,
             request.WalletNumber, request.AccountName);
 
@@ -456,6 +481,8 @@ public class BusinessBeneficiaryService : IBusinessBeneficiaryService
 
         var wallet = beneficiary.MobileWallets.FirstOrDefault(x => x.Id == mobileWalletId && !x.IsDeleted)
             ?? throw new InvalidOperationException("Business beneficiary mobile wallet not found.");
+
+        await EnsureMobileWalletNotInActiveTransferAsync(mobileWalletId, ct);
 
         var countryCode = NormalizeCode(request.CountryCode);
         var currencyCode = NormalizeCode(request.CurrencyCode);
@@ -498,6 +525,7 @@ public class BusinessBeneficiaryService : IBusinessBeneficiaryService
         Guid mobileWalletId,
         CancellationToken ct = default)
     {
+        await _accessService.EnsurePermissionAsync(userId, BusinessPermission.ManageBeneficiaries, ct);
         var wallet = await _db.BusinessBeneficiaryMobileWallets
             .Include(x => x.BusinessBeneficiary)
             .ThenInclude(x => x.BusinessProfile)
@@ -510,12 +538,65 @@ public class BusinessBeneficiaryService : IBusinessBeneficiaryService
                      u.UserId == userId && u.IsActive && !u.IsDeleted)), ct)
             ?? throw new InvalidOperationException("Business beneficiary mobile wallet not found.");
 
+        await EnsureMobileWalletNotInActiveTransferAsync(mobileWalletId, ct);
+
         wallet.IsDeleted = true;
         wallet.DeletedAt = DateTime.UtcNow;
         wallet.DeletedByUserId = userId;
         wallet.IsActive = false;
         wallet.IsDefault = false;
         await _db.SaveChangesAsync(ct);
+    }
+
+    private async Task EnsureBeneficiaryNotInActiveTransferAsync(Guid beneficiaryId, CancellationToken ct)
+    {
+        var inUse = await _db.Transfers.AsNoTracking().AnyAsync(x =>
+            x.BusinessBeneficiaryId == beneficiaryId &&
+            !x.IsDeleted &&
+            x.Status != TransferStatus.Completed &&
+            x.Status != TransferStatus.Failed &&
+            x.Status != TransferStatus.Cancelled &&
+            x.Status != TransferStatus.Refunded &&
+            x.Status != TransferStatus.Rejected,
+            ct);
+
+        if (inUse)
+            throw new InvalidOperationException(
+                "This beneficiary cannot be changed while an active transfer is using it.");
+    }
+
+    private async Task EnsureBankAccountNotInActiveTransferAsync(Guid bankAccountId, CancellationToken ct)
+    {
+        var inUse = await _db.Transfers.AsNoTracking().AnyAsync(x =>
+            x.BusinessBeneficiaryBankAccountId == bankAccountId &&
+            !x.IsDeleted &&
+            x.Status != TransferStatus.Completed &&
+            x.Status != TransferStatus.Failed &&
+            x.Status != TransferStatus.Cancelled &&
+            x.Status != TransferStatus.Refunded &&
+            x.Status != TransferStatus.Rejected,
+            ct);
+
+        if (inUse)
+            throw new InvalidOperationException(
+                "This bank account cannot be changed while an active transfer is using it.");
+    }
+
+    private async Task EnsureMobileWalletNotInActiveTransferAsync(Guid mobileWalletId, CancellationToken ct)
+    {
+        var inUse = await _db.Transfers.AsNoTracking().AnyAsync(x =>
+            x.BusinessBeneficiaryMobileWalletId == mobileWalletId &&
+            !x.IsDeleted &&
+            x.Status != TransferStatus.Completed &&
+            x.Status != TransferStatus.Failed &&
+            x.Status != TransferStatus.Cancelled &&
+            x.Status != TransferStatus.Refunded &&
+            x.Status != TransferStatus.Rejected,
+            ct);
+
+        if (inUse)
+            throw new InvalidOperationException(
+                "This mobile wallet cannot be changed while an active transfer is using it.");
     }
 
     private IQueryable<BusinessBeneficiary> OwnedQuery(Guid userId) =>
@@ -525,15 +606,8 @@ public class BusinessBeneficiaryService : IBusinessBeneficiaryService
 
     private async Task<Guid> GetBusinessProfileIdAsync(Guid userId, CancellationToken ct)
     {
-        var id = await _db.BusinessProfiles.AsNoTracking()
-            .Where(x => !x.IsDeleted &&
-                (x.OwnerUserId == userId ||
-                 x.Users.Any(u => u.UserId == userId && u.IsActive && !u.IsDeleted)))
-            .Select(x => (Guid?)x.Id)
-            .FirstOrDefaultAsync(ct);
-
-        return id ?? throw new InvalidOperationException(
-            "Business profile not found. Start business onboarding first.");
+        var access = await _accessService.GetAccessAsync(userId, ct);
+        return access.BusinessProfileId;
     }
 
     private async Task EnsureReceiveCountryAsync(string countryCode, CancellationToken ct)

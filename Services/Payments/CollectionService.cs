@@ -189,7 +189,8 @@ public class CollectionService : ICollectionService
             .Include(x => x.Attempts)
             .FirstOrDefaultAsync(x =>
                 x.Id == collectionId &&
-                x.Transfer.CustomerProfile.UserId == userId &&
+                x.Transfer.CustomerProfileId != null &&
+                x.Transfer.CustomerProfile!.UserId == userId &&
                 !x.IsDeleted &&
                 !x.Transfer.IsDeleted &&
                 !x.Transfer.CustomerProfile.IsDeleted,
@@ -227,7 +228,8 @@ public class CollectionService : ICollectionService
                 $"Live provider initiation is not yet supported for '{collection.PaymentMethod}'.");
         }
 
-        var profile = collection.Transfer.CustomerProfile;
+        var profile = collection.Transfer.CustomerProfile
+            ?? throw new InvalidOperationException("Individual customer profile not found for this collection.");
 
         var complianceGate = await _complianceGateService.EnsureCanInitiateMoneyMovementAsync(
             profile.Id,
@@ -407,7 +409,8 @@ public class CollectionService : ICollectionService
         return await _db.Collections
             .AsNoTracking()
             .Where(x =>
-                x.Transfer.CustomerProfile.UserId == userId &&
+                x.Transfer.CustomerProfileId != null &&
+                x.Transfer.CustomerProfile!.UserId == userId &&
                 !x.IsDeleted &&
                 !x.Transfer.IsDeleted &&
                 !x.Transfer.CustomerProfile.IsDeleted)
@@ -464,7 +467,8 @@ public class CollectionService : ICollectionService
 
         var transfer = await query.FirstOrDefaultAsync(x =>
             x.Id == transferId &&
-            x.CustomerProfile.UserId == userId &&
+            x.CustomerProfileId != null &&
+            x.CustomerProfile!.UserId == userId &&
             !x.IsDeleted &&
             !x.CustomerProfile.IsDeleted,
             ct);
@@ -485,7 +489,8 @@ public class CollectionService : ICollectionService
             .ThenInclude(x => x.CustomerProfile)
             .Include(x => x.Attempts)
             .Where(x =>
-                x.Transfer.CustomerProfile.UserId == userId &&
+                x.Transfer.CustomerProfileId != null &&
+                x.Transfer.CustomerProfile!.UserId == userId &&
                 !x.IsDeleted &&
                 !x.Transfer.IsDeleted &&
                 !x.Transfer.CustomerProfile.IsDeleted);

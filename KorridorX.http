@@ -392,3 +392,116 @@ Accept: application/json
 GET {{KorridorX_HostAddress}}/api/business-beneficiaries?page=1&pageSize=20
 Authorization: Bearer {{accessToken}}
 Accept: application/json
+
+### Get the business approval policy
+GET {{KorridorX_HostAddress}}/api/business/users/approval-policy
+Authorization: Bearer {{accessToken}}
+Accept: application/json
+
+### Update the business approval policy
+PUT {{KorridorX_HostAddress}}/api/business/users/approval-policy
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "requiresTransferApproval": true,
+  "requiredTransferApprovals": 1,
+  "transferApprovalThreshold": 1000,
+  "allowTransferCreatorApproval": false
+}
+
+### Add a registered user to the business
+POST {{KorridorX_HostAddress}}/api/business/users
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "email": "approver@example.com",
+  "role": 2,
+  "permissions": 1023
+}
+
+### Create a business FX quote
+POST {{KorridorX_HostAddress}}/api/business/transfers/quotes
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "sourceCountryCode": "CA",
+  "destinationCountryCode": "NG",
+  "sourceCurrencyCode": "CAD",
+  "destinationCurrencyCode": "NGN",
+  "sourceAmount": 1000,
+  "transferType": 3
+}
+
+### Create a business transfer from an accepted quote
+POST {{KorridorX_HostAddress}}/api/business/transfers
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "transferQuoteId": "{{businessTransferQuoteId}}",
+  "businessBeneficiaryId": "{{businessBeneficiaryId}}",
+  "businessBeneficiaryBankAccountId": "{{businessBeneficiaryBankAccountId}}",
+  "businessBeneficiaryMobileWalletId": null,
+  "purpose": 5,
+  "purposeNote": "Supplier invoice",
+  "fundingSource": 1
+}
+
+### Approve a business transfer
+POST {{KorridorX_HostAddress}}/api/business/transfers/{{businessTransferId}}/approve
+Authorization: Bearer {{approverAccessToken}}
+Content-Type: application/json
+
+{
+  "comment": "Reviewed and approved."
+}
+
+### Business transfer report
+GET {{KorridorX_HostAddress}}/api/business/transfers/report?from=2026-08-01&to=2026-08-31
+Authorization: Bearer {{accessToken}}
+Accept: application/json
+
+### Import a business payment batch
+POST {{KorridorX_HostAddress}}/api/business/payment-batches/import
+Authorization: Bearer {{accessToken}}
+Content-Type: multipart/form-data; boundary=KorridorXBoundary
+
+--KorridorXBoundary
+Content-Disposition: form-data; name="name"
+
+August supplier payments
+--KorridorXBoundary
+Content-Disposition: form-data; name="sourceCountryCode"
+
+CA
+--KorridorXBoundary
+Content-Disposition: form-data; name="sourceCurrencyCode"
+
+CAD
+--KorridorXBoundary
+Content-Disposition: form-data; name="fundingSource"
+
+1
+--KorridorXBoundary
+Content-Disposition: form-data; name="file"; filename="business-payment-batch-template.csv"
+Content-Type: text/csv
+
+< ./Docs/business-payment-batch-template.csv
+--KorridorXBoundary--
+
+### Submit a validated batch
+POST {{KorridorX_HostAddress}}/api/business/payment-batches/{{businessPaymentBatchId}}/submit
+Authorization: Bearer {{accessToken}}
+Accept: application/json
+
+### Approve a business payment batch
+POST {{KorridorX_HostAddress}}/api/business/payment-batches/{{businessPaymentBatchId}}/approve
+Authorization: Bearer {{approverAccessToken}}
+Content-Type: application/json
+
+{
+  "comment": "Batch reviewed and approved."
+}

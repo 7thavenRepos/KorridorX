@@ -67,6 +67,7 @@ public class BusinessProfileConfiguration : IEntityTypeConfiguration<BusinessPro
         builder.Property(x => x.ContactPhone).HasMaxLength(50);
         builder.Property(x => x.BlaaizBusinessCustomerId).HasMaxLength(150);
         builder.Property(x => x.KybRejectionReason).HasMaxLength(2000);
+        builder.Property(x => x.TransferApprovalThreshold).HasPrecision(18, 2);
 
         builder.HasOne(x => x.OwnerUser)
             .WithMany()
@@ -80,6 +81,7 @@ public class BusinessUserConfiguration : IEntityTypeConfiguration<BusinessUser>
     public void Configure(EntityTypeBuilder<BusinessUser> builder)
     {
         builder.HasIndex(x => new { x.BusinessProfileId, x.UserId }).IsUnique();
+        builder.Property(x => x.Permissions).HasConversion<long>();
 
         builder.HasOne(x => x.BusinessProfile)
             .WithMany(x => x.Users)

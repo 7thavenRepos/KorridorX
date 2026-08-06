@@ -1,4 +1,4 @@
-﻿using KorridorX.Models.Transfers;
+using KorridorX.Models.Transfers;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -10,9 +10,12 @@ public class TransferConfiguration : IEntityTypeConfiguration<Transfer>
     {
         builder.HasIndex(x => x.Reference).IsUnique();
         builder.HasIndex(x => x.CustomerProfileId);
+        builder.HasIndex(x => x.BusinessProfileId);
         builder.HasIndex(x => x.RecipientId);
+        builder.HasIndex(x => x.BusinessBeneficiaryId);
         builder.HasIndex(x => x.TransferQuoteId);
         builder.HasIndex(x => x.Status);
+        builder.HasIndex(x => x.ApprovalStatus);
         builder.HasIndex(x => x.ProviderTransferId);
         builder.HasIndex(x => x.ProviderReference);
         builder.HasIndex(x => new { x.SourceCurrencyCode, x.DestinationCurrencyCode });
@@ -29,7 +32,9 @@ public class TransferConfiguration : IEntityTypeConfiguration<Transfer>
         builder.Property(x => x.ProviderTransferId).HasMaxLength(150);
         builder.Property(x => x.ProviderReference).HasMaxLength(150);
         builder.Property(x => x.FailureReason).HasMaxLength(1000);
+        builder.Property(x => x.ApprovalRejectionReason).HasMaxLength(1000);
         builder.Property(x => x.Status).IsConcurrencyToken();
+        builder.Property(x => x.ApprovalCount).IsConcurrencyToken();
 
         builder.Property(x => x.SourceAmount).HasPrecision(18, 2);
         builder.Property(x => x.DestinationAmount).HasPrecision(18, 2);
@@ -43,9 +48,19 @@ public class TransferConfiguration : IEntityTypeConfiguration<Transfer>
             .HasForeignKey(x => x.CustomerProfileId)
             .OnDelete(DeleteBehavior.Restrict);
 
+        builder.HasOne(x => x.BusinessProfile)
+            .WithMany()
+            .HasForeignKey(x => x.BusinessProfileId)
+            .OnDelete(DeleteBehavior.Restrict);
+
         builder.HasOne(x => x.Recipient)
             .WithMany()
             .HasForeignKey(x => x.RecipientId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasOne(x => x.BusinessBeneficiary)
+            .WithMany()
+            .HasForeignKey(x => x.BusinessBeneficiaryId)
             .OnDelete(DeleteBehavior.Restrict);
 
         builder.HasOne(x => x.RecipientBankAccount)
@@ -56,6 +71,16 @@ public class TransferConfiguration : IEntityTypeConfiguration<Transfer>
         builder.HasOne(x => x.RecipientMobileWallet)
             .WithMany()
             .HasForeignKey(x => x.RecipientMobileWalletId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasOne(x => x.BusinessBeneficiaryBankAccount)
+            .WithMany()
+            .HasForeignKey(x => x.BusinessBeneficiaryBankAccountId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasOne(x => x.BusinessBeneficiaryMobileWallet)
+            .WithMany()
+            .HasForeignKey(x => x.BusinessBeneficiaryMobileWalletId)
             .OnDelete(DeleteBehavior.Restrict);
 
         builder.HasOne(x => x.TransferQuote)

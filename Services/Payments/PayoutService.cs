@@ -9,6 +9,7 @@ using KorridorX.Models.Enums;
 using KorridorX.Models.Payments;
 using KorridorX.Models.Providers;
 using KorridorX.Models.Recipients;
+using KorridorX.Models.Transfers;
 using KorridorX.Providers.Remittance;
 using KorridorX.Services.Compliance;
 using KorridorX.Services.References;
@@ -54,9 +55,13 @@ public class PayoutService : IPayoutService
     {
         var transfer = await _db.Transfers
             .Include(x => x.CustomerProfile)
+            .Include(x => x.BusinessProfile)
             .Include(x => x.Recipient)
             .Include(x => x.RecipientBankAccount)
             .Include(x => x.RecipientMobileWallet)
+            .Include(x => x.BusinessBeneficiary)
+            .Include(x => x.BusinessBeneficiaryBankAccount)
+            .Include(x => x.BusinessBeneficiaryMobileWallet)
             .FirstOrDefaultAsync(x => x.Id == transferId && !x.IsDeleted, ct);
 
         if (transfer is null)
@@ -81,18 +86,34 @@ public class PayoutService : IPayoutService
                 $"Payout cannot be dispatched while the transfer status is '{transfer.Status}'.");
         }
 
-        if (transfer.RecipientMobileWalletId is not null)
+        var destination = ResolveDestination(transfer);
+        if (destination.IsMobileWallet)
         {
             throw new InvalidOperationException("Blaaiz mobile-wallet payouts are not yet enabled.");
         }
 
         var paymentMethod = ResolvePayoutMethod(transfer.DestinationCurrencyCode);
-        ValidateDestination(transfer.DestinationCurrencyCode, paymentMethod, transfer.RecipientBankAccount, transfer.Recipient.Email);
+        ValidateDestination(
+            transfer.DestinationCurrencyCode,
+            paymentMethod,
+            destination.BankAccountIsActive,
+            destination.BankAccountIsDeleted,
+            destination.ProviderBankId,
+            destination.AccountNumber,
+            destination.BankAccountIsVerified,
+            destination.VerifiedAccountName,
+            destination.Email);
 
-        var compliance = await _complianceGateService.EnsureCanInitiateMoneyMovementAsync(
-            transfer.CustomerProfileId,
-            _remittanceProvider.ProviderCode,
-            ct);
+        var compliance = transfer.BusinessProfileId.HasValue
+            ? await _complianceGateService.EnsureBusinessCanInitiateMoneyMovementAsync(
+                transfer.BusinessProfileId.Value,
+                _remittanceProvider.ProviderCode,
+                ct)
+            : await _complianceGateService.EnsureCanInitiateMoneyMovementAsync(
+                transfer.CustomerProfileId
+                    ?? throw new InvalidOperationException("Transfer customer profile is missing."),
+                _remittanceProvider.ProviderCode,
+                ct);
 
         var walletId = ResolvePayoutWalletId(transfer.SourceCurrencyCode);
 
@@ -121,18 +142,19 @@ public class PayoutService : IPayoutService
             payoutReference = payout.Reference,
             transferId = transfer.Id,
             transferReference = transfer.Reference,
+            transferOwnerType = transfer.BusinessProfileId.HasValue ? "business" : "individual",
             sourceCurrency = transfer.SourceCurrencyCode,
             destinationCurrency = transfer.DestinationCurrencyCode,
             amount = transfer.DestinationAmount,
             paymentMethod = paymentMethod.ToString(),
             recipient = new
             {
-                transfer.Recipient.FirstName,
-                transfer.Recipient.LastName,
-                transfer.Recipient.Email,
-                bankName = transfer.RecipientBankAccount?.BankName,
-                providerBankId = transfer.RecipientBankAccount?.ProviderBankId,
-                accountNumber = MaskSensitive(transfer.RecipientBankAccount?.AccountNumber)
+                destination.FirstName,
+                destination.LastName,
+                destination.Email,
+                bankName = destination.BankName,
+                providerBankId = destination.ProviderBankId,
+                accountNumber = MaskSensitive(destination.AccountNumber)
             }
         });
 
@@ -160,18 +182,18 @@ public class PayoutService : IPayoutService
                     transfer.DestinationCurrencyCode,
                     compliance.ProviderCustomerId,
                     walletId,
-                    transfer.Recipient.FirstName,
-                    transfer.Recipient.LastName,
-                    transfer.Recipient.Email,
-                    transfer.Recipient.PhoneNumber,
-                    transfer.RecipientBankAccount?.ProviderBankId,
-                    transfer.RecipientBankAccount?.BankName,
-                    transfer.RecipientBankAccount?.ProviderVerifiedAccountName ?? transfer.RecipientBankAccount?.AccountName,
-                    transfer.RecipientBankAccount?.AccountNumber,
-                    transfer.RecipientBankAccount?.RoutingNumber,
-                    transfer.RecipientBankAccount?.SortCode,
-                    transfer.RecipientBankAccount?.Iban,
-                    transfer.RecipientBankAccount?.SwiftBic,
+                    destination.FirstName,
+                    destination.LastName,
+                    destination.Email,
+                    destination.PhoneNumber,
+                    destination.ProviderBankId,
+                    destination.BankName,
+                    destination.VerifiedAccountName ?? destination.AccountName,
+                    destination.AccountNumber,
+                    destination.RoutingNumber,
+                    destination.SortCode,
+                    destination.Iban,
+                    destination.SwiftBic,
                     $"KorridorX transfer {transfer.Reference}"),
                 ct);
 
@@ -181,7 +203,8 @@ public class PayoutService : IPayoutService
                 provider = _remittanceProvider.ProviderName,
                 providerStatus = result.ProviderStatus,
                 providerTransactionId = result.ProviderTransactionId,
-                providerReference = result.ProviderReference
+                providerReference = result.ProviderReference,
+                businessTransfer = transfer.BusinessProfileId.HasValue
             });
 
             _payoutStatusService.ApplyTransition(
@@ -368,7 +391,8 @@ public class PayoutService : IPayoutService
             .AsNoTracking()
             .Include(x => x.Transfer)
             .Where(x =>
-                x.Transfer.CustomerProfile.UserId == userId &&
+                x.Transfer.CustomerProfileId != null &&
+                x.Transfer.CustomerProfile!.UserId == userId &&
                 !x.IsDeleted &&
                 !x.Transfer.IsDeleted &&
                 !x.Transfer.CustomerProfile.IsDeleted)
@@ -389,7 +413,8 @@ public class PayoutService : IPayoutService
             .ThenInclude(x => x.CustomerProfile)
             .Include(x => x.Attempts)
             .Where(x =>
-                x.Transfer.CustomerProfile.UserId == userId &&
+                x.Transfer.CustomerProfileId != null &&
+                x.Transfer.CustomerProfile!.UserId == userId &&
                 !x.IsDeleted &&
                 !x.Transfer.IsDeleted &&
                 !x.Transfer.CustomerProfile.IsDeleted);
@@ -469,26 +494,91 @@ public class PayoutService : IPayoutService
                 $"Automatic payout is not yet configured for {destinationCurrencyCode}.")
         };
 
+    private static PayoutDestination ResolveDestination(Transfer transfer)
+    {
+        if (transfer.BusinessProfileId.HasValue)
+        {
+            var beneficiary = transfer.BusinessBeneficiary
+                ?? throw new InvalidOperationException("Business transfer beneficiary is missing.");
+            var names = SplitName(beneficiary.Name);
+            var firstName = string.IsNullOrWhiteSpace(beneficiary.ContactFirstName)
+                ? names.FirstName
+                : beneficiary.ContactFirstName.Trim();
+            var lastName = string.IsNullOrWhiteSpace(beneficiary.ContactLastName)
+                ? names.LastName
+                : beneficiary.ContactLastName.Trim();
+            var account = transfer.BusinessBeneficiaryBankAccount;
+            var wallet = transfer.BusinessBeneficiaryMobileWallet;
+
+            return new PayoutDestination(
+                firstName,
+                lastName,
+                beneficiary.Email,
+                beneficiary.PhoneNumber,
+                account?.BankName,
+                account?.ProviderBankId,
+                account?.ProviderVerifiedAccountName,
+                account?.AccountName,
+                account?.AccountNumber,
+                account?.RoutingNumber,
+                account?.SortCode,
+                account?.Iban,
+                account?.SwiftBic,
+                account?.IsActive ?? false,
+                account?.IsDeleted ?? false,
+                account?.IsVerified ?? false,
+                wallet is not null);
+        }
+
+        var recipient = transfer.Recipient
+            ?? throw new InvalidOperationException("Transfer recipient is missing.");
+        var recipientAccount = transfer.RecipientBankAccount;
+
+        return new PayoutDestination(
+            recipient.FirstName,
+            recipient.LastName,
+            recipient.Email,
+            recipient.PhoneNumber,
+            recipientAccount?.BankName,
+            recipientAccount?.ProviderBankId,
+            recipientAccount?.ProviderVerifiedAccountName,
+            recipientAccount?.AccountName,
+            recipientAccount?.AccountNumber,
+            recipientAccount?.RoutingNumber,
+            recipientAccount?.SortCode,
+            recipientAccount?.Iban,
+            recipientAccount?.SwiftBic,
+            recipientAccount?.IsActive ?? false,
+            recipientAccount?.IsDeleted ?? false,
+            recipientAccount?.IsVerified ?? false,
+            transfer.RecipientMobileWallet is not null);
+    }
+
     private static void ValidateDestination(
         string currencyCode,
         PaymentMethod method,
-        RecipientBankAccount? bankAccount,
+        bool bankAccountIsActive,
+        bool bankAccountIsDeleted,
+        string? providerBankId,
+        string? accountNumber,
+        bool bankAccountIsVerified,
+        string? verifiedAccountName,
         string? recipientEmail)
     {
         if (method == PaymentMethod.BankTransfer)
         {
-            if (bankAccount is null || !bankAccount.IsActive || bankAccount.IsDeleted)
+            if (!bankAccountIsActive || bankAccountIsDeleted)
             {
                 throw new InvalidOperationException("An active recipient bank account is required for payout.");
             }
 
-            if (string.IsNullOrWhiteSpace(bankAccount.ProviderBankId) || string.IsNullOrWhiteSpace(bankAccount.AccountNumber))
+            if (string.IsNullOrWhiteSpace(providerBankId) || string.IsNullOrWhiteSpace(accountNumber))
             {
                 throw new InvalidOperationException(
                     $"A provider bank selection and account number are required for {currencyCode} payout.");
             }
 
-            if (!bankAccount.IsVerified || string.IsNullOrWhiteSpace(bankAccount.ProviderVerifiedAccountName))
+            if (!bankAccountIsVerified || string.IsNullOrWhiteSpace(verifiedAccountName))
             {
                 throw new InvalidOperationException(
                     "The recipient bank account must be verified with the provider before payout.");
@@ -500,6 +590,33 @@ public class PayoutService : IPayoutService
             throw new InvalidOperationException("Recipient email is required for an Interac payout.");
         }
     }
+
+    private static (string FirstName, string LastName) SplitName(string name)
+    {
+        var parts = name.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (parts.Length == 0) return ("Business", "Beneficiary");
+        if (parts.Length == 1) return (parts[0], "Beneficiary");
+        return (parts[0], string.Join(' ', parts.Skip(1)));
+    }
+
+    private sealed record PayoutDestination(
+        string FirstName,
+        string LastName,
+        string? Email,
+        string? PhoneNumber,
+        string? BankName,
+        string? ProviderBankId,
+        string? VerifiedAccountName,
+        string? AccountName,
+        string? AccountNumber,
+        string? RoutingNumber,
+        string? SortCode,
+        string? Iban,
+        string? SwiftBic,
+        bool BankAccountIsActive,
+        bool BankAccountIsDeleted,
+        bool BankAccountIsVerified,
+        bool IsMobileWallet);
 
     private static PayoutStatus MapProviderPayoutStatus(string status) =>
         status.Trim().ToUpperInvariant() switch

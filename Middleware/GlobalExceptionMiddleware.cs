@@ -2,6 +2,7 @@ using System.Net;
 using System.Text.Json;
 using KorridorX.Infrastructure;
 using KorridorX.Exceptions;
+using Microsoft.EntityFrameworkCore;
 
 namespace KorridorX.Middleware;
 
@@ -24,6 +25,14 @@ public class GlobalExceptionMiddleware
         {
             await _next(context);
         }
+        catch (ForbiddenException ex)
+        {
+            await WriteErrorAsync(
+                context,
+                HttpStatusCode.Forbidden,
+                "FORBIDDEN",
+                ex.Message);
+        }
         catch (UnauthorizedAccessException ex)
         {
             await WriteErrorAsync(
@@ -39,6 +48,16 @@ public class GlobalExceptionMiddleware
                 HttpStatusCode.BadRequest,
                 "INVALID_OPERATION",
                 ex.Message);
+        }
+        catch (DbUpdateConcurrencyException ex)
+        {
+            _logger.LogWarning(ex, "A concurrent update conflict occurred.");
+
+            await WriteErrorAsync(
+                context,
+                HttpStatusCode.Conflict,
+                "CONCURRENT_UPDATE",
+                "This record changed while your request was being processed. Refresh and try again.");
         }
         catch (JsonException ex)
         {

@@ -9,6 +9,7 @@ using KorridorX.Providers.Remittance;
 using KorridorX.Providers.Remittance.Blaaiz;
 using KorridorX.Services.Auth;
 using KorridorX.Services.BusinessBeneficiaries;
+using KorridorX.Services.BusinessTransfers;
 using KorridorX.Services.Compliance;
 using KorridorX.Services.Fx;
 using KorridorX.Services.Payments;
@@ -73,6 +74,10 @@ builder.Services.AddScoped<IAuthService, AuthService>();
 
 builder.Services.AddScoped<IRecipientService, RecipientService>();
 builder.Services.AddScoped<IBusinessBeneficiaryService, BusinessBeneficiaryService>();
+builder.Services.AddScoped<IBusinessAccessService, BusinessAccessService>();
+builder.Services.AddScoped<IBusinessUserService, BusinessUserService>();
+builder.Services.AddScoped<IBusinessTransferService, BusinessTransferService>();
+builder.Services.AddScoped<IBusinessPaymentBatchService, BusinessPaymentBatchService>();
 builder.Services.AddScoped<ITransferQuoteService, TransferQuoteService>();
 builder.Services.AddScoped<ITransferStatusService, TransferStatusService>();
 builder.Services.AddScoped<ITransferService, TransferService>();

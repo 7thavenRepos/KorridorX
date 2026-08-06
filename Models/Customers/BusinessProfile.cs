@@ -49,5 +49,10 @@ public class BusinessProfile : AuditableEntity
 
     public string? BlaaizBusinessCustomerId { get; set; }
 
+    public bool RequiresTransferApproval { get; set; } = true;
+    public int RequiredTransferApprovals { get; set; } = 1;
+    public decimal? TransferApprovalThreshold { get; set; }
+    public bool AllowTransferCreatorApproval { get; set; } = false;
+
     public ICollection<BusinessUser> Users { get; set; } = new List<BusinessUser>();
 }

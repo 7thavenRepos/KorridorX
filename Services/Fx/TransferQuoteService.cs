@@ -19,6 +19,17 @@ public class TransferQuoteService : ITransferQuoteService
         CreateTransferQuoteRequestDto request,
         CancellationToken ct = default)
     {
+        if (request.TransferType != KorridorX.Models.Enums.TransferType.ConsumerToConsumer)
+        {
+            throw new InvalidOperationException(
+                "The consumer quote endpoint only supports ConsumerToConsumer transfers.");
+        }
+
+        if (request.SourceAmount <= 0)
+        {
+            throw new InvalidOperationException("Source amount must be greater than zero.");
+        }
+
         var sourceCountryCode = NormalizeCode(request.SourceCountryCode);
         var destinationCountryCode = NormalizeCode(request.DestinationCountryCode);
         var sourceCurrencyCode = NormalizeCode(request.SourceCurrencyCode);
@@ -26,11 +37,20 @@ public class TransferQuoteService : ITransferQuoteService
 
         var customerProfile = await _db.CustomerProfiles
             .AsNoTracking()
-            .FirstOrDefaultAsync(x => x.UserId == userId, ct);
+            .FirstOrDefaultAsync(x => x.UserId == userId && !x.IsDeleted, ct);
 
         if (customerProfile is null)
         {
             throw new InvalidOperationException("Customer profile not found.");
+        }
+
+        if (!string.Equals(
+                customerProfile.CountryCode,
+                sourceCountryCode,
+                StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                "The source country must match the customer's profile country.");
         }
 
         await EnsureSendingCorridorAsync(sourceCountryCode, sourceCurrencyCode, ct);
@@ -78,8 +98,11 @@ public class TransferQuoteService : ITransferQuoteService
         var quote = new TransferQuote
         {
             CustomerProfileId = customerProfile.Id,
+            SourceCountryCode = sourceCountryCode,
+            DestinationCountryCode = destinationCountryCode,
             SourceCurrencyCode = sourceCurrencyCode,
             DestinationCurrencyCode = destinationCurrencyCode,
+            TransferType = request.TransferType,
             SourceAmount = request.SourceAmount,
             DestinationAmount = destinationAmount,
             ProviderRate = exchangeRate.ProviderRate,
@@ -109,7 +132,8 @@ public class TransferQuoteService : ITransferQuoteService
             .Include(x => x.CustomerProfile)
             .FirstOrDefaultAsync(x =>
                 x.Id == quoteId &&
-                x.CustomerProfile.UserId == userId,
+                x.CustomerProfileId != null &&
+                x.CustomerProfile!.UserId == userId,
                 ct);
 
         if (quote is null)
@@ -170,8 +194,12 @@ public class TransferQuoteService : ITransferQuoteService
         {
             Id = quote.Id,
             CustomerProfileId = quote.CustomerProfileId,
+            BusinessProfileId = quote.BusinessProfileId,
+            SourceCountryCode = quote.SourceCountryCode,
+            DestinationCountryCode = quote.DestinationCountryCode,
             SourceCurrencyCode = quote.SourceCurrencyCode,
             DestinationCurrencyCode = quote.DestinationCurrencyCode,
+            TransferType = quote.TransferType,
             SourceAmount = quote.SourceAmount,
             DestinationAmount = quote.DestinationAmount,
             ProviderRate = quote.ProviderRate,
@@ -190,6 +218,17 @@ public class TransferQuoteService : ITransferQuoteService
 
     private static string NormalizeCode(string value)
     {
-        return value.Trim().ToUpperInvariant();
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            throw new InvalidOperationException("Country and currency codes are required.");
+        }
+
+        var code = value.Trim().ToUpperInvariant();
+        if (code.Length > 10)
+        {
+            throw new InvalidOperationException("Country and currency codes cannot exceed 10 characters.");
+        }
+
+        return code;
     }
 }

@@ -1,4 +1,4 @@
-﻿using KorridorX.Models.Fx;
+using KorridorX.Models.Fx;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -26,9 +26,12 @@ public class TransferQuoteConfiguration : IEntityTypeConfiguration<TransferQuote
     public void Configure(EntityTypeBuilder<TransferQuote> builder)
     {
         builder.HasIndex(x => x.CustomerProfileId);
+        builder.HasIndex(x => x.BusinessProfileId);
         builder.HasIndex(x => x.ExpiresAt);
         builder.HasIndex(x => x.ProviderQuoteId);
 
+        builder.Property(x => x.SourceCountryCode).HasMaxLength(10);
+        builder.Property(x => x.DestinationCountryCode).HasMaxLength(10);
         builder.Property(x => x.SourceCurrencyCode).HasMaxLength(10);
         builder.Property(x => x.DestinationCurrencyCode).HasMaxLength(10);
         builder.Property(x => x.FeeCurrencyCode).HasMaxLength(10);
@@ -41,10 +44,16 @@ public class TransferQuoteConfiguration : IEntityTypeConfiguration<TransferQuote
         builder.Property(x => x.CustomerRate).HasPrecision(18, 8);
         builder.Property(x => x.FeeAmount).HasPrecision(18, 2);
         builder.Property(x => x.TotalPayableAmount).HasPrecision(18, 2);
+        builder.Property(x => x.IsUsed).IsConcurrencyToken();
 
         builder.HasOne(x => x.CustomerProfile)
             .WithMany()
             .HasForeignKey(x => x.CustomerProfileId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasOne(x => x.BusinessProfile)
+            .WithMany()
+            .HasForeignKey(x => x.BusinessProfileId)
             .OnDelete(DeleteBehavior.Restrict);
     }
 }

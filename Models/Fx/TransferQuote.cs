@@ -1,15 +1,22 @@
-﻿using KorridorX.Models.Common;
+using KorridorX.Models.Common;
 using KorridorX.Models.Customers;
+using KorridorX.Models.Enums;
 
 namespace KorridorX.Models.Fx;
 
 public class TransferQuote : AuditableEntity
 {
-    public Guid CustomerProfileId { get; set; }
-    public CustomerProfile CustomerProfile { get; set; } = null!;
+    public Guid? CustomerProfileId { get; set; }
+    public CustomerProfile? CustomerProfile { get; set; }
 
+    public Guid? BusinessProfileId { get; set; }
+    public BusinessProfile? BusinessProfile { get; set; }
+
+    public string SourceCountryCode { get; set; } = "";
+    public string DestinationCountryCode { get; set; } = "";
     public string SourceCurrencyCode { get; set; } = "";
     public string DestinationCurrencyCode { get; set; } = "";
+    public TransferType TransferType { get; set; } = TransferType.ConsumerToConsumer;
 
     public decimal SourceAmount { get; set; }
     public decimal DestinationAmount { get; set; }
@@ -27,7 +34,7 @@ public class TransferQuote : AuditableEntity
 
     public DateTime ExpiresAt { get; set; }
 
-    public bool IsUsed { get; set; } = false;
+    public bool IsUsed { get; set; }
     public DateTime? UsedAt { get; set; }
 
     public bool IsExpired => DateTime.UtcNow > ExpiresAt;

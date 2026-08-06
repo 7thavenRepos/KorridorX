@@ -5,4 +5,5 @@ public interface IReferenceGenerator
     string GenerateTransferReference();
     string GenerateCollectionReference();
     string GeneratePayoutReference();
+    string GenerateBusinessBatchReference();
 }

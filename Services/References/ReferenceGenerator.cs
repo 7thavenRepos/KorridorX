@@ -17,6 +17,11 @@ public class ReferenceGenerator : IReferenceGenerator
         return Generate("KXPO");
     }
 
+    public string GenerateBusinessBatchReference()
+    {
+        return Generate("KXBAT");
+    }
+
     private static string Generate(string prefix)
     {
         var date = DateTime.UtcNow.ToString("yyyyMMdd");

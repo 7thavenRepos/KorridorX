@@ -1,5 +1,6 @@
 ﻿using KorridorX.Models.Common;
 using KorridorX.Models.Identity;
+using KorridorX.Models.Enums;
 
 namespace KorridorX.Models.Customers;
 
@@ -12,6 +13,7 @@ public class BusinessUser : AuditableEntity
     public ApplicationUser User { get; set; } = null!;
 
     public BusinessUserRole Role { get; set; } = BusinessUserRole.Member;
+    public BusinessPermission Permissions { get; set; } = BusinessPermission.None;
 
     public bool IsActive { get; set; } = true;
 }

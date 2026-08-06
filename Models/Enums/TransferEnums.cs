@@ -13,7 +13,9 @@ public enum TransferStatus
     Failed = 9,
     Cancelled = 10,
     RefundPending = 11,
-    Refunded = 12
+    Refunded = 12,
+    PendingApproval = 13,
+    Rejected = 14
 }
 
 public enum TransferType
