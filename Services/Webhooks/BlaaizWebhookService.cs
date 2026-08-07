@@ -10,6 +10,7 @@ using KorridorX.Models.Providers;
 using KorridorX.Models.Webhooks;
 using KorridorX.Providers.Remittance;
 using KorridorX.Services.Payments;
+using KorridorX.Services.Compliance;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 
@@ -22,19 +23,22 @@ public class BlaaizWebhookService : IBlaaizWebhookService
     private readonly ICollectionStatusService _collectionStatusService;
     private readonly IPayoutStatusService _payoutStatusService;
     private readonly IRemittanceProvider _provider;
+    private readonly IComplianceScreeningService _screeningService;
 
     public BlaaizWebhookService(
         AppDbContext db,
         IOptions<BlaaizOptions> options,
         ICollectionStatusService collectionStatusService,
         IPayoutStatusService payoutStatusService,
-        IRemittanceProvider provider)
+        IRemittanceProvider provider,
+        IComplianceScreeningService screeningService)
     {
         _db = db;
         _options = options.Value;
         _collectionStatusService = collectionStatusService;
         _payoutStatusService = payoutStatusService;
         _provider = provider;
+        _screeningService = screeningService;
     }
 
     public Task<BlaaizWebhookResult> ProcessCollectionWebhookAsync(
@@ -576,6 +580,16 @@ public class BlaaizWebhookService : IBlaaizWebhookService
             }
         }
 
+        if (status == KycStatus.Approved)
+        {
+            await _screeningService.ScreenCustomerAsync(
+                customerProfileId,
+                ScreeningReason.Onboarding,
+                null,
+                null,
+                ct);
+        }
+
         return true;
     }
 
@@ -664,6 +678,12 @@ public class BlaaizWebhookService : IBlaaizWebhookService
         {
             businessProfile.KybRejectionReason = null;
             application.ReviewNote = null;
+            await _screeningService.ScreenBusinessAsync(
+                businessProfileId,
+                ScreeningReason.Onboarding,
+                null,
+                null,
+                ct);
         }
 
         return true;

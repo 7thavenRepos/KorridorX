@@ -21,3 +21,20 @@ ASP.NET Core maps double underscores to configuration sections.
 | `NotificationDelivery__Smtp__Password` | When SMTP enabled | SMTP password. |
 
 Never commit populated `.env` files, connection strings, JWT keys, OAuth credentials, SMTP passwords, certificates, or database dumps.
+
+## Compliance screening and transaction monitoring
+
+Screening remains disabled until a provider has been configured and validated.
+
+```text
+ComplianceScreening__IsEnabled=false
+ComplianceScreening__RequireRecentClearScreeningForPayout=false
+ComplianceScreening__FailClosedOnProviderError=true
+ComplianceScreening__ScreeningValidityDays=30
+ComplianceScreening__RescreeningWorkerEnabled=false
+ComplianceScreening__RescreeningIntervalHours=24
+ComplianceScreening__RescreeningBatchSize=50
+```
+
+The built-in `ConfiguredWatchlistScreeningProvider` is intended for development and controlled testing. Production should register a maintained vendor-backed `ISanctionsScreeningProvider`. Production startup rejects an enabled empty configured watchlist.
+ComplianceScreening__BlockDeclaredPep=true

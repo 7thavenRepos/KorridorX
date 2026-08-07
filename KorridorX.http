@@ -665,3 +665,36 @@ Content-Type: application/json
 ### Reassess transfer risk
 POST {{KorridorX_HostAddress}}/api/admin/risk/transfers/{{transferId}}/reassess
 Authorization: Bearer {{accessToken}}
+
+### Compliance case summary
+GET {{KorridorX_HostAddress}}/api/admin/compliance/cases/summary
+Authorization: Bearer {{accessToken}}
+
+### List open blocking compliance cases
+GET {{KorridorX_HostAddress}}/api/admin/compliance/cases?status=1&isBlocking=true&page=1&pageSize=20
+Authorization: Bearer {{accessToken}}
+
+### Run a manual customer screening
+POST {{KorridorX_HostAddress}}/api/admin/compliance/screenings/run
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "subjectType": 1,
+  "subjectId": "00000000-0000-0000-0000-000000000000",
+  "transferId": null
+}
+
+### Add compliance case evidence
+POST {{KorridorX_HostAddress}}/api/admin/compliance/cases/00000000-0000-0000-0000-000000000000/evidence
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "evidenceType": "ProviderSearch",
+  "title": "Secondary provider search result",
+  "description": "Supporting review evidence.",
+  "source": "Compliance Operations",
+  "externalReference": "CASE-REFERENCE",
+  "metadataJson": "{\"reviewed\":true}"
+}

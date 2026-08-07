@@ -1,5 +1,7 @@
 ﻿using KorridorX.Data;
 using KorridorX.Dtos.Customers;
+using KorridorX.Models.Enums;
+using KorridorX.Services.Compliance;
 using Microsoft.EntityFrameworkCore;
 
 namespace KorridorX.Services.Customers;
@@ -7,10 +9,14 @@ namespace KorridorX.Services.Customers;
 public class CustomerProfileService : ICustomerProfileService
 {
     private readonly AppDbContext _db;
+    private readonly IComplianceScreeningService _screeningService;
 
-    public CustomerProfileService(AppDbContext db)
+    public CustomerProfileService(
+        AppDbContext db,
+        IComplianceScreeningService screeningService)
     {
         _db = db;
+        _screeningService = screeningService;
     }
 
     public async Task<CustomerProfileDto> GetMyProfileAsync(Guid userId, CancellationToken ct = default)
@@ -49,6 +55,13 @@ public class CustomerProfileService : ICustomerProfileService
         profile.PostalCode = request.PostalCode;
         profile.LastUpdatedAt = DateTime.UtcNow;
 
+        await _db.SaveChangesAsync(ct);
+        await _screeningService.ScreenCustomerAsync(
+            profile.Id,
+            ScreeningReason.ProfileChanged,
+            userId,
+            null,
+            ct);
         await _db.SaveChangesAsync(ct);
 
         return Map(profile);

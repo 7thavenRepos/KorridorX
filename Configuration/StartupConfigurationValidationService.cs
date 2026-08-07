@@ -8,6 +8,7 @@ public sealed class StartupConfigurationValidationService : IHostedService
     private readonly IHostEnvironment _environment;
     private readonly IOptions<JwtOptions> _jwtOptions;
     private readonly IOptions<HostingOptions> _hostingOptions;
+    private readonly IOptions<ComplianceScreeningOptions> _screeningOptions;
     private readonly ILogger<StartupConfigurationValidationService> _logger;
 
     public StartupConfigurationValidationService(
@@ -15,12 +16,14 @@ public sealed class StartupConfigurationValidationService : IHostedService
         IHostEnvironment environment,
         IOptions<JwtOptions> jwtOptions,
         IOptions<HostingOptions> hostingOptions,
+        IOptions<ComplianceScreeningOptions> screeningOptions,
         ILogger<StartupConfigurationValidationService> logger)
     {
         _configuration = configuration;
         _environment = environment;
         _jwtOptions = jwtOptions;
         _hostingOptions = hostingOptions;
+        _screeningOptions = screeningOptions;
         _logger = logger;
     }
 
@@ -30,6 +33,7 @@ public sealed class StartupConfigurationValidationService : IHostedService
         var connectionString = _configuration.GetConnectionString("DefaultConnection");
         var jwt = _jwtOptions.Value;
         var hosting = _hostingOptions.Value;
+        var screening = _screeningOptions.Value;
 
         if (string.IsNullOrWhiteSpace(connectionString))
             errors.Add("ConnectionStrings:DefaultConnection is required.");
@@ -52,6 +56,15 @@ public sealed class StartupConfigurationValidationService : IHostedService
 
             if (hosting.AllowedOrigins.Any(LooksLikePlaceholder))
                 errors.Add("Hosting:AllowedOrigins contains a placeholder value.");
+
+            if (screening.IsEnabled &&
+                string.Equals(screening.ProviderCode, "ConfiguredWatchlist", StringComparison.OrdinalIgnoreCase) &&
+                screening.Entries.Count == 0)
+            {
+                errors.Add(
+                    "ComplianceScreening is enabled with ConfiguredWatchlist but no entries are configured. " +
+                    "Configure a watchlist or replace ISanctionsScreeningProvider with a production provider.");
+            }
         }
 
         if (errors.Count > 0)

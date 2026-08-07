@@ -10,6 +10,7 @@ using KorridorX.Models.Compliance;
 using KorridorX.Models.Enums;
 using KorridorX.Models.Transfers;
 using KorridorX.Services.Audit;
+using KorridorX.Services.Compliance;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 
@@ -22,15 +23,18 @@ public sealed class TransferRiskService : ITransferRiskService
     private readonly AppDbContext _db;
     private readonly TransferRiskOptions _options;
     private readonly IAuditService _audit;
+    private readonly IComplianceCaseService _caseService;
 
     public TransferRiskService(
         AppDbContext db,
         IOptions<SecurityOptions> options,
-        IAuditService audit)
+        IAuditService audit,
+        IComplianceCaseService caseService)
     {
         _db = db;
         _options = options.Value.TransferRisk;
         _audit = audit;
+        _caseService = caseService;
     }
 
     public async Task<TransferRiskDecisionDto> AssessAsync(
@@ -337,7 +341,15 @@ public sealed class TransferRiskService : ITransferRiskService
                     !x.IsDeleted,
                     ct);
 
-                if (!otherBlockingFlags)
+                var blockingCase = await _caseService.HasBlockingCaseAsync(
+                    flag.Transfer.Id,
+                    flag.Transfer.CustomerProfileId,
+                    flag.Transfer.BusinessProfileId,
+                    flag.Transfer.RecipientId,
+                    flag.Transfer.BusinessBeneficiaryId,
+                    ct);
+
+                if (!otherBlockingFlags && !blockingCase)
                 {
                     flag.Transfer.IsComplianceHold = false;
                     flag.Transfer.ComplianceHoldReason = null;

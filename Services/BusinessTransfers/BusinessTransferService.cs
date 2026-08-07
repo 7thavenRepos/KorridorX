@@ -28,6 +28,8 @@ public class BusinessTransferService : IBusinessTransferService
     private readonly INotificationQueueService _notifications;
     private readonly IComplianceLimitService _complianceLimitService;
     private readonly ITransferRiskService _transferRiskService;
+    private readonly IComplianceScreeningService _screeningService;
+    private readonly ITransactionMonitoringService _transactionMonitoringService;
 
     public BusinessTransferService(
         AppDbContext db,
@@ -37,7 +39,9 @@ public class BusinessTransferService : IBusinessTransferService
         IBusinessFundingService fundingService,
         INotificationQueueService notifications,
         IComplianceLimitService complianceLimitService,
-        ITransferRiskService transferRiskService)
+        ITransferRiskService transferRiskService,
+        IComplianceScreeningService screeningService,
+        ITransactionMonitoringService transactionMonitoringService)
     {
         _db = db;
         _accessService = accessService;
@@ -47,6 +51,8 @@ public class BusinessTransferService : IBusinessTransferService
         _notifications = notifications;
         _complianceLimitService = complianceLimitService;
         _transferRiskService = transferRiskService;
+        _screeningService = screeningService;
+        _transactionMonitoringService = transactionMonitoringService;
     }
 
     public async Task<TransferQuoteDto> CreateQuoteAsync(
@@ -261,6 +267,8 @@ public class BusinessTransferService : IBusinessTransferService
                     : "The business transfer has been created successfully."));
 
         await _transferRiskService.AssessAsync(transfer, userId, ct);
+        await _screeningService.ScreenTransferAsync(transfer, userId, ct);
+        await _transactionMonitoringService.MonitorAsync(transfer, userId, ct);
 
         quote.IsUsed = true;
         quote.UsedAt = DateTime.UtcNow;

@@ -7,6 +7,7 @@ using KorridorX.Models.Enums;
 using KorridorX.Models.Providers;
 using KorridorX.Providers.Remittance;
 using KorridorX.Services.BusinessTransfers;
+using KorridorX.Services.Compliance;
 using Microsoft.EntityFrameworkCore;
 
 namespace KorridorX.Services.BusinessBeneficiaries;
@@ -16,15 +17,18 @@ public class BusinessBeneficiaryService : IBusinessBeneficiaryService
     private readonly AppDbContext _db;
     private readonly IRemittanceProvider _provider;
     private readonly IBusinessAccessService _accessService;
+    private readonly IComplianceScreeningService _screeningService;
 
     public BusinessBeneficiaryService(
         AppDbContext db,
         IRemittanceProvider provider,
-        IBusinessAccessService accessService)
+        IBusinessAccessService accessService,
+        IComplianceScreeningService screeningService)
     {
         _db = db;
         _provider = provider;
         _accessService = accessService;
+        _screeningService = screeningService;
     }
 
     public async Task<PagedResult<BusinessBeneficiarySummaryDto>> GetAsync(
@@ -126,6 +130,13 @@ public class BusinessBeneficiaryService : IBusinessBeneficiaryService
 
         _db.BusinessBeneficiaries.Add(entity);
         await _db.SaveChangesAsync(ct);
+        await _screeningService.ScreenBusinessBeneficiaryAsync(
+            entity.Id,
+            ScreeningReason.Onboarding,
+            userId,
+            null,
+            ct);
+        await _db.SaveChangesAsync(ct);
         return await GetAsync(userId, entity.Id, ct);
     }
 
@@ -159,6 +170,13 @@ public class BusinessBeneficiaryService : IBusinessBeneficiaryService
         entity.LastUpdatedAt = DateTime.UtcNow;
         entity.LastUpdatedByUserId = userId;
 
+        await _db.SaveChangesAsync(ct);
+        await _screeningService.ScreenBusinessBeneficiaryAsync(
+            entity.Id,
+            ScreeningReason.ProfileChanged,
+            userId,
+            null,
+            ct);
         await _db.SaveChangesAsync(ct);
         return await GetAsync(userId, entity.Id, ct);
     }

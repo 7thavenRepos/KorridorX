@@ -37,6 +37,8 @@ public class BusinessPaymentBatchService : IBusinessPaymentBatchService
     private readonly INotificationQueueService _notifications;
     private readonly IComplianceLimitService _complianceLimitService;
     private readonly ITransferRiskService _transferRiskService;
+    private readonly IComplianceScreeningService _screeningService;
+    private readonly ITransactionMonitoringService _transactionMonitoringService;
 
     public BusinessPaymentBatchService(
         AppDbContext db,
@@ -46,7 +48,9 @@ public class BusinessPaymentBatchService : IBusinessPaymentBatchService
         IBusinessFundingService fundingService,
         INotificationQueueService notifications,
         IComplianceLimitService complianceLimitService,
-        ITransferRiskService transferRiskService)
+        ITransferRiskService transferRiskService,
+        IComplianceScreeningService screeningService,
+        ITransactionMonitoringService transactionMonitoringService)
     {
         _db = db;
         _accessService = accessService;
@@ -56,6 +60,8 @@ public class BusinessPaymentBatchService : IBusinessPaymentBatchService
         _notifications = notifications;
         _complianceLimitService = complianceLimitService;
         _transferRiskService = transferRiskService;
+        _screeningService = screeningService;
+        _transactionMonitoringService = transactionMonitoringService;
     }
 
     public async Task<BusinessPaymentBatchDetailsDto> ImportAsync(
@@ -395,6 +401,8 @@ public class BusinessPaymentBatchService : IBusinessPaymentBatchService
                         Description: $"Created from business payment batch {batch.Reference}."));
 
                 await _transferRiskService.AssessAsync(transfer, actionedByUserId, ct);
+                await _screeningService.ScreenTransferAsync(transfer, actionedByUserId, ct);
+                await _transactionMonitoringService.MonitorAsync(transfer, actionedByUserId, ct);
 
                 if (batch.FundingSource == BusinessFundingSource.BusinessWallet)
                 {

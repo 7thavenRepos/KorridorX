@@ -31,6 +31,7 @@ public class PayoutService : IPayoutService
     private readonly ITransferStatusService _transferStatusService;
     private readonly IBusinessFundingService _businessFundingService;
     private readonly ITransferRiskService _transferRiskService;
+    private readonly IComplianceScreeningService _screeningService;
     private readonly IReadOnlyDictionary<string, string> _payoutWalletIds;
 
     public PayoutService(
@@ -42,6 +43,7 @@ public class PayoutService : IPayoutService
         ITransferStatusService transferStatusService,
         IBusinessFundingService businessFundingService,
         ITransferRiskService transferRiskService,
+        IComplianceScreeningService screeningService,
         IOptions<BlaaizOptions> blaaizOptions)
     {
         _db = db;
@@ -52,6 +54,7 @@ public class PayoutService : IPayoutService
         _transferStatusService = transferStatusService;
         _businessFundingService = businessFundingService;
         _transferRiskService = transferRiskService;
+        _screeningService = screeningService;
         _payoutWalletIds = blaaizOptions.Value.PayoutWalletIds;
     }
 
@@ -95,6 +98,7 @@ public class PayoutService : IPayoutService
         }
 
         _transferRiskService.EnsureCanProceedToPayout(transfer);
+        await _screeningService.EnsureTransferCanProceedToPayoutAsync(transfer, ct);
 
         var destination = ResolveDestination(transfer);
         if (destination.IsMobileWallet)

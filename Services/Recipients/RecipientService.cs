@@ -5,6 +5,7 @@ using KorridorX.Infrastructure;
 using KorridorX.Models.Customers;
 using KorridorX.Models.Enums;
 using KorridorX.Models.Recipients;
+using KorridorX.Services.Compliance;
 using Microsoft.EntityFrameworkCore;
 
 namespace KorridorX.Services.Recipients;
@@ -12,10 +13,14 @@ namespace KorridorX.Services.Recipients;
 public class RecipientService : IRecipientService
 {
     private readonly AppDbContext _db;
+    private readonly IComplianceScreeningService _screeningService;
 
-    public RecipientService(AppDbContext db)
+    public RecipientService(
+        AppDbContext db,
+        IComplianceScreeningService screeningService)
     {
         _db = db;
+        _screeningService = screeningService;
     }
 
     public async Task<PagedResult<RecipientSummaryDto>> GetRecipientsAsync(
@@ -113,6 +118,13 @@ public class RecipientService : IRecipientService
 
         _db.Recipients.Add(recipient);
         await _db.SaveChangesAsync(ct);
+        await _screeningService.ScreenRecipientAsync(
+            recipient.Id,
+            ScreeningReason.Onboarding,
+            userId,
+            null,
+            ct);
+        await _db.SaveChangesAsync(ct);
 
         return await GetRecipientAsync(userId, recipient.Id, ct);
     }
@@ -144,6 +156,13 @@ public class RecipientService : IRecipientService
         recipient.LastUpdatedAt = DateTime.UtcNow;
         recipient.LastUpdatedByUserId = userId;
 
+        await _db.SaveChangesAsync(ct);
+        await _screeningService.ScreenRecipientAsync(
+            recipient.Id,
+            ScreeningReason.ProfileChanged,
+            userId,
+            null,
+            ct);
         await _db.SaveChangesAsync(ct);
 
         return await GetRecipientAsync(userId, recipient.Id, ct);

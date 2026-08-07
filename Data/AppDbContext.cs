@@ -68,6 +68,11 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<Guid
     public DbSet<ComplianceLimit> ComplianceLimits => Set<ComplianceLimit>();
     public DbSet<ComplianceCheck> ComplianceChecks => Set<ComplianceCheck>();
     public DbSet<AmlFlag> AmlFlags => Set<AmlFlag>();
+    public DbSet<ScreeningRecord> ScreeningRecords => Set<ScreeningRecord>();
+    public DbSet<ScreeningMatch> ScreeningMatches => Set<ScreeningMatch>();
+    public DbSet<ComplianceCase> ComplianceCases => Set<ComplianceCase>();
+    public DbSet<ComplianceCaseNote> ComplianceCaseNotes => Set<ComplianceCaseNote>();
+    public DbSet<ComplianceCaseEvidence> ComplianceCaseEvidence => Set<ComplianceCaseEvidence>();
 
     public DbSet<PaymentProvider> PaymentProviders => Set<PaymentProvider>();
     public DbSet<ProviderCustomer> ProviderCustomers => Set<ProviderCustomer>();

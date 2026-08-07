@@ -8,6 +8,7 @@ using KorridorX.Middleware;
 using KorridorX.Models.Identity;
 using KorridorX.Providers.Remittance;
 using KorridorX.Providers.Remittance.Blaaiz;
+using KorridorX.Providers.Screening;
 using KorridorX.Services.Auth;
 using KorridorX.Services.Audit;
 using KorridorX.Services.BusinessContext;
@@ -17,6 +18,7 @@ using KorridorX.Services.BusinessFunding;
 using KorridorX.Services.Notifications;
 using KorridorX.Services.Operations;
 using KorridorX.Services.Compliance;
+using KorridorX.Services.Customers;
 using KorridorX.Services.Fx;
 using KorridorX.Services.Payments;
 using KorridorX.Services.Recipients;
@@ -95,6 +97,11 @@ builder.Services
     .Bind(builder.Configuration.GetSection(SecurityOptions.SectionName))
     .ValidateOnStart();
 builder.Services.AddSingleton<IValidateOptions<SecurityOptions>, SecurityOptionsValidator>();
+builder.Services
+    .AddOptions<ComplianceScreeningOptions>()
+    .Bind(builder.Configuration.GetSection(ComplianceScreeningOptions.SectionName))
+    .ValidateOnStart();
+builder.Services.AddSingleton<IValidateOptions<ComplianceScreeningOptions>, ComplianceScreeningOptionsValidator>();
 builder.Services.AddMemoryCache();
 
 var dataProtection = builder.Services
@@ -212,6 +219,7 @@ builder.Services.AddHttpClient<IBlaaizApiClient, BlaaizApiClient>((serviceProvid
 builder.Services.AddScoped<IJwtTokenService, JwtTokenService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 
+builder.Services.AddScoped<ICustomerProfileService, CustomerProfileService>();
 builder.Services.AddScoped<IRecipientService, RecipientService>();
 builder.Services.AddScoped<IBusinessBeneficiaryService, BusinessBeneficiaryService>();
 builder.Services.AddScoped<IBusinessAccessService, BusinessAccessService>();
@@ -232,7 +240,11 @@ builder.Services.AddScoped<ITransferService, TransferService>();
 // Required by collection, payout, and business-funding services.
 builder.Services.AddScoped<IComplianceGateService, ComplianceGateService>();
 builder.Services.AddScoped<IComplianceLimitService, ComplianceLimitService>();
+builder.Services.AddScoped<IComplianceCaseService, ComplianceCaseService>();
+builder.Services.AddScoped<IComplianceScreeningService, ComplianceScreeningService>();
+builder.Services.AddScoped<ITransactionMonitoringService, TransactionMonitoringService>();
 builder.Services.AddScoped<ITransferRiskService, TransferRiskService>();
+builder.Services.AddSingleton<ISanctionsScreeningProvider, ConfiguredWatchlistScreeningProvider>();
 builder.Services.AddScoped<ICollectionPaymentMethodPolicy, CollectionPaymentMethodPolicy>();
 builder.Services.AddScoped<ICollectionStatusService, CollectionStatusService>();
 builder.Services.AddScoped<ICollectionService, CollectionService>();
@@ -243,6 +255,7 @@ builder.Services.AddScoped<IProviderReconciliationService, ProviderReconciliatio
 builder.Services.AddHostedService<PayoutDispatchWorker>();
 builder.Services.AddHostedService<BlaaizReconciliationWorker>();
 builder.Services.AddHostedService<NotificationDeliveryWorker>();
+builder.Services.AddHostedService<ComplianceRescreeningWorker>();
 
 builder.Services.AddDbContext<AppDbContext>(options =>
 {

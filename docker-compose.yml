@@ -41,6 +41,9 @@ services:
       Blaaiz__ClientId: ${BLAAIZ_CLIENT_ID:-}
       Blaaiz__ClientSecret: ${BLAAIZ_CLIENT_SECRET:-}
       Blaaiz__WebhookSigningSecret: ${BLAAIZ_WEBHOOK_SIGNING_SECRET:-}
+      ComplianceScreening__IsEnabled: ${COMPLIANCE_SCREENING_ENABLED:-false}
+      ComplianceScreening__RequireRecentClearScreeningForPayout: ${COMPLIANCE_SCREENING_REQUIRE_CLEAR_FOR_PAYOUT:-false}
+      ComplianceScreening__RescreeningWorkerEnabled: ${COMPLIANCE_RESCREENING_WORKER_ENABLED:-false}
       NotificationDelivery__WorkerEnabled: ${NOTIFICATION_WORKER_ENABLED:-false}
       NotificationDelivery__Smtp__IsEnabled: ${SMTP_ENABLED:-false}
       NotificationDelivery__Smtp__Host: ${SMTP_HOST:-}

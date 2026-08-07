@@ -24,6 +24,8 @@ public sealed class KorridorXWebApplicationFactory : WebApplicationFactory<Progr
                 ["Hosting:SwaggerEnabled"] = "false",
                 ["Hosting:JsonConsoleLogging"] = "false",
                 ["Blaaiz:IsEnabled"] = "false",
+                ["ComplianceScreening:IsEnabled"] = "false",
+                ["ComplianceScreening:RescreeningWorkerEnabled"] = "false",
                 ["NotificationDelivery:WorkerEnabled"] = "false"
             });
         });

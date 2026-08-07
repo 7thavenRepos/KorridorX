@@ -18,19 +18,25 @@ public class TransferService : ITransferService
     private readonly ITransferStatusService _transferStatusService;
     private readonly IComplianceLimitService _complianceLimitService;
     private readonly ITransferRiskService _transferRiskService;
+    private readonly IComplianceScreeningService _screeningService;
+    private readonly ITransactionMonitoringService _transactionMonitoringService;
 
     public TransferService(
         AppDbContext db,
         IReferenceGenerator referenceGenerator,
         ITransferStatusService transferStatusService,
         IComplianceLimitService complianceLimitService,
-        ITransferRiskService transferRiskService)
+        ITransferRiskService transferRiskService,
+        IComplianceScreeningService screeningService,
+        ITransactionMonitoringService transactionMonitoringService)
     {
         _db = db;
         _referenceGenerator = referenceGenerator;
         _transferStatusService = transferStatusService;
         _complianceLimitService = complianceLimitService;
         _transferRiskService = transferRiskService;
+        _screeningService = screeningService;
+        _transactionMonitoringService = transactionMonitoringService;
     }
 
     public async Task<TransferDetailsDto> CreateTransferAsync(
@@ -206,6 +212,8 @@ public class TransferService : ITransferService
                 Description: "Your transfer has been created and is pending payment."));
 
         await _transferRiskService.AssessAsync(transfer, userId, ct);
+        await _screeningService.ScreenTransferAsync(transfer, userId, ct);
+        await _transactionMonitoringService.MonitorAsync(transfer, userId, ct);
 
         await _db.SaveChangesAsync(ct);
         await tx.CommitAsync(ct);

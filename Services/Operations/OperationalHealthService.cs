@@ -32,7 +32,8 @@ public sealed class OperationalHealthService : IOperationalHealthService
                 new ProviderHealthDto(0, 0, 0, 0),
                 new WalletHealthDto(0, 0, 0),
                 new PaymentHealthDto(0, 0, 0),
-                new RiskHealthDto(0, 0, 0, 0));
+                new RiskHealthDto(0, 0, 0, 0),
+                new ComplianceOperationsHealthDto(0, 0, 0, 0, 0));
         }
 
         var notifications = new NotificationHealthDto(
@@ -105,12 +106,47 @@ public sealed class OperationalHealthService : IOperationalHealthService
             await _db.Transfers.CountAsync(x => !x.IsDeleted && x.IsComplianceHold, ct),
             await _db.LoginHistories.CountAsync(x => !x.WasSuccessful && x.OccurredAt >= last24Hours, ct));
 
+        var compliance = new ComplianceOperationsHealthDto(
+            await _db.ComplianceCases.CountAsync(x =>
+                !x.IsDeleted &&
+                x.Status != ComplianceCaseStatus.Resolved &&
+                x.Status != ComplianceCaseStatus.Closed,
+                ct),
+            await _db.ComplianceCases.CountAsync(x =>
+                !x.IsDeleted &&
+                x.IsBlocking &&
+                x.Status != ComplianceCaseStatus.Closed &&
+                (x.Status != ComplianceCaseStatus.Resolved ||
+                 x.Decision == ComplianceCaseDecision.ConfirmedMatch ||
+                 x.Decision == ComplianceCaseDecision.ReportFiled),
+                ct),
+            await _db.ComplianceCases.CountAsync(x =>
+                !x.IsDeleted &&
+                x.DueAt.HasValue &&
+                x.DueAt.Value < now &&
+                x.Status != ComplianceCaseStatus.Resolved &&
+                x.Status != ComplianceCaseStatus.Closed,
+                ct),
+            await _db.ScreeningRecords.CountAsync(x =>
+                !x.IsDeleted &&
+                x.Status == ScreeningStatus.Failed &&
+                x.ScreenedAt >= last24Hours,
+                ct),
+            await _db.ScreeningRecords.CountAsync(x =>
+                !x.IsDeleted &&
+                (x.Status == ScreeningStatus.PotentialMatch ||
+                 x.Status == ScreeningStatus.ConfirmedMatch),
+                ct));
+
         var status = !connected
             ? "Critical"
             : notifications.DeadLetter > 0 ||
               provider.FailedWebhooks > 0 ||
               wallets.InconsistentWallets > 0 ||
-              risk.BlockingFlags > 0
+              risk.BlockingFlags > 0 ||
+              compliance.BlockingCases > 0 ||
+              compliance.OverdueCases > 0 ||
+              compliance.ScreeningFailuresLast24Hours > 0
                 ? "Degraded"
                 : "Healthy";
 
@@ -122,7 +158,8 @@ public sealed class OperationalHealthService : IOperationalHealthService
             provider,
             wallets,
             payments,
-            risk);
+            risk,
+            compliance);
     }
 
     private Task<int> CountNotificationsAsync(string status, CancellationToken ct) =>

@@ -43,18 +43,21 @@ public class BusinessKybService : IBusinessKybService
     private readonly IRemittanceProvider _provider;
     private readonly IDataProtector _identityProtector;
     private readonly BlaaizOptions _blaaizOptions;
+    private readonly IComplianceScreeningService _screeningService;
 
     public BusinessKybService(
         AppDbContext db,
         IRemittanceProvider provider,
         IDataProtectionProvider dataProtectionProvider,
-        IOptions<BlaaizOptions> blaaizOptions)
+        IOptions<BlaaizOptions> blaaizOptions,
+        IComplianceScreeningService screeningService)
     {
         _db = db;
         _provider = provider;
         _identityProtector = dataProtectionProvider.CreateProtector(
             "KorridorX.BusinessKyb.OwnerIdentity.v1");
         _blaaizOptions = blaaizOptions.Value;
+        _screeningService = screeningService;
     }
 
     public async Task<BusinessKybApplicationDto> StartAsync(
@@ -141,6 +144,13 @@ public class BusinessKybService : IBusinessKybService
 
         await UpsertProviderCustomerAsync(profile, providerResult, userId, ct);
         await _db.SaveChangesAsync(ct);
+        await _screeningService.ScreenBusinessAsync(
+            profile.Id,
+            ScreeningReason.Onboarding,
+            userId,
+            null,
+            ct);
+        await _db.SaveChangesAsync(ct);
 
         return ToApplicationDto(current, profile);
     }
@@ -191,6 +201,13 @@ public class BusinessKybService : IBusinessKybService
         ApplyProviderSnapshot(application, providerResult);
         await UpsertProviderCustomerAsync(application.BusinessProfile, providerResult, userId, ct);
 
+        await _db.SaveChangesAsync(ct);
+        await _screeningService.ScreenBusinessAsync(
+            application.BusinessProfileId,
+            ScreeningReason.ProfileChanged,
+            userId,
+            null,
+            ct);
         await _db.SaveChangesAsync(ct);
         return ToApplicationDto(application, application.BusinessProfile);
     }
@@ -272,6 +289,13 @@ public class BusinessKybService : IBusinessKybService
         await UpsertProviderCustomerAsync(application.BusinessProfile, providerResult, userId, ct);
 
         await _db.SaveChangesAsync(ct);
+        await _screeningService.ScreenBusinessBeneficialOwnerAsync(
+            owner.Id,
+            ScreeningReason.Onboarding,
+            userId,
+            null,
+            ct);
+        await _db.SaveChangesAsync(ct);
         return ToOwnerDto(owner);
     }
 
@@ -346,6 +370,13 @@ public class BusinessKybService : IBusinessKybService
         ApplyProviderSnapshot(application, providerResult);
         await UpsertProviderCustomerAsync(application.BusinessProfile, providerResult, userId, ct);
 
+        await _db.SaveChangesAsync(ct);
+        await _screeningService.ScreenBusinessBeneficialOwnerAsync(
+            owner.Id,
+            ScreeningReason.ProfileChanged,
+            userId,
+            null,
+            ct);
         await _db.SaveChangesAsync(ct);
         return ToOwnerDto(owner);
     }
