@@ -127,11 +127,16 @@ public class AmlFlagConfiguration : IEntityTypeConfiguration<AmlFlag>
         builder.HasIndex(x => x.FlagType);
         builder.HasIndex(x => x.Severity);
         builder.HasIndex(x => x.IsResolved);
+        builder.HasIndex(x => x.IsBlocking);
+        builder.HasIndex(x => x.RiskScore);
+        builder.HasIndex(x => new { x.IsResolved, x.IsBlocking, x.CreatedAt });
 
         builder.Property(x => x.FlagType).HasMaxLength(100);
         builder.Property(x => x.Severity).HasMaxLength(50);
         builder.Property(x => x.Description).HasMaxLength(1000);
         builder.Property(x => x.ResolutionNote).HasMaxLength(1000);
+        builder.Property(x => x.ReviewDecision).HasMaxLength(50);
+        builder.Property(x => x.IsResolved).IsConcurrencyToken();
 
         builder.HasOne(x => x.CustomerProfile)
             .WithMany()

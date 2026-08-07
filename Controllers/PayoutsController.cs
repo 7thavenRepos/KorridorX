@@ -1,12 +1,15 @@
+using KorridorX.Configuration;
 using System.Security.Claims;
 using KorridorX.Infrastructure;
 using KorridorX.Services.Payments;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.Mvc;
 
 namespace KorridorX.Controllers;
 
 [Authorize]
+[EnableRateLimiting(SecurityRateLimitPolicies.Sensitive)]
 [ApiController]
 [Route("api/payouts")]
 public class PayoutsController : ControllerBase

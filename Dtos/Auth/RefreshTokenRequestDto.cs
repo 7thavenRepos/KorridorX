@@ -1,6 +1,6 @@
-﻿namespace KorridorX.Dtos.Auth;
+namespace KorridorX.Dtos.Auth;
 
-public record RefreshTokenRequestDto
-(
-    string RefreshToken
-);
+public record RefreshTokenRequestDto(
+    string RefreshToken,
+    string? DeviceFingerprint = null,
+    string? DeviceName = null);

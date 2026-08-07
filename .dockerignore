@@ -1,0 +1,16 @@
+**/.vs
+**/bin
+**/obj
+**/TestResults
+**/*.user
+**/*.suo
+**/*.pfx
+**/*.publishsettings
+**/.env
+**/.env.*
+!**/.env.example
+.git
+.github
+artifacts
+backups
+README.local.md

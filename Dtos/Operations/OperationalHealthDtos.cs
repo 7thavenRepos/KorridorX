@@ -7,7 +7,8 @@ public record OperationalHealthDto(
     NotificationHealthDto Notifications,
     ProviderHealthDto Provider,
     WalletHealthDto BusinessWallets,
-    PaymentHealthDto Payments);
+    PaymentHealthDto Payments,
+    RiskHealthDto Risk);
 
 public record NotificationHealthDto(
     int Pending,
@@ -31,3 +32,9 @@ public record PaymentHealthDto(
     int FailedCollectionsLast24Hours,
     int FailedPayoutsLast24Hours,
     int PendingRefunds);
+
+public record RiskHealthDto(
+    int OpenFlags,
+    int BlockingFlags,
+    int TransfersOnHold,
+    int FailedLoginsLast24Hours);

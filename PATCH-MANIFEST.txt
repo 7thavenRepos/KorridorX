@@ -1,0 +1,64 @@
+KorridorX Security, Rate Limits, Fraud Controls & Expanded Testing Patch
+
+Changed or added files: 58
+Removed files: 0
+
+Changed or added:
+- appsettings.json
+- Configuration/SecurityOptions.cs
+- Controllers/AdminBusinessWalletsController.cs
+- Controllers/AdminComplianceLimitsController.cs
+- Controllers/AdminRiskController.cs
+- Controllers/AuthController.cs
+- Controllers/BlaaizWebhooksController.cs
+- Controllers/BusinessFundingController.cs
+- Controllers/BusinessKybController.cs
+- Controllers/BusinessPaymentBatchesController.cs
+- Controllers/BusinessTransfersController.cs
+- Controllers/CollectionsController.cs
+- Controllers/KycController.cs
+- Controllers/PayoutsController.cs
+- Controllers/RecipientsController.cs
+- Controllers/RefundsController.cs
+- Controllers/TransferQuotesController.cs
+- Controllers/TransfersController.cs
+- Data/Configurations/ComplianceConfigurations.cs
+- Data/Configurations/IdentityConfigurations.cs
+- Data/Configurations/TransferConfigurations.cs
+- Docs/SecurityHardeningFraudControls.md
+- Dtos/Auth/RefreshTokenRequestDto.cs
+- Dtos/Auth/SessionDtos.cs
+- Dtos/Compliance/RiskDtos.cs
+- Dtos/Operations/OperationalHealthDtos.cs
+- Exceptions/ComplianceHoldException.cs
+- Exceptions/ComplianceLimitExceededException.cs
+- KorridorX.http
+- Middleware/GlobalExceptionMiddleware.cs
+- Middleware/SecurityHeadersMiddleware.cs
+- Models/Compliance/AmlFlag.cs
+- Models/Enums/SecurityEnums.cs
+- Models/Identity/RefreshToken.cs
+- Models/Transfers/Transfer.cs
+- Program.cs
+- Services/Auth/AuthService.cs
+- Services/Auth/IAuthService.cs
+- Services/BusinessTransfers/BusinessPaymentBatchService.cs
+- Services/BusinessTransfers/BusinessTransferService.cs
+- Services/Compliance/ComplianceLimitPolicy.cs
+- Services/Compliance/ComplianceLimitService.cs
+- Services/Compliance/IComplianceLimitService.cs
+- Services/Operations/OperationalHealthService.cs
+- Services/Payments/PayoutService.cs
+- Services/Security/ITransferRiskService.cs
+- Services/Security/RefreshTokenSecurity.cs
+- Services/Security/RegistrationSecurityPolicy.cs
+- Services/Security/TransferRiskPolicy.cs
+- Services/Security/TransferRiskService.cs
+- Services/Transfers/TransferService.cs
+- Services/Webhooks/BlaaizWebhookService.cs
+- Services/Webhooks/BlaaizWebhookSignature.cs
+- Tests/KorridorX.Tests/BlaaizWebhookSignatureTests.cs
+- Tests/KorridorX.Tests/ComplianceLimitPolicyTests.cs
+- Tests/KorridorX.Tests/RefreshTokenSecurityTests.cs
+- Tests/KorridorX.Tests/RegistrationSecurityPolicyTests.cs
+- Tests/KorridorX.Tests/TransferRiskPolicyTests.cs

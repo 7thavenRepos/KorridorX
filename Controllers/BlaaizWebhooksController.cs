@@ -1,11 +1,14 @@
+using KorridorX.Configuration;
 using KorridorX.Infrastructure;
 using KorridorX.Services.Webhooks;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace KorridorX.Controllers;
 
 [AllowAnonymous]
+[EnableRateLimiting(SecurityRateLimitPolicies.Webhook)]
 [ApiController]
 [Route("api/webhooks/blaaiz")]
 public class BlaaizWebhooksController : ControllerBase

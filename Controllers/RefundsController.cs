@@ -1,13 +1,16 @@
+using KorridorX.Configuration;
 using System.Security.Claims;
 using KorridorX.Dtos.Payments;
 using KorridorX.Infrastructure;
 using KorridorX.Services.Payments;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.Mvc;
 
 namespace KorridorX.Controllers;
 
 [Authorize(Roles = "Admin,SuperAdmin,Operations")]
+[EnableRateLimiting(SecurityRateLimitPolicies.Sensitive)]
 [ApiController]
 [Route("api/admin/collections/{collectionId:guid}/refund")]
 public class RefundsController : ControllerBase

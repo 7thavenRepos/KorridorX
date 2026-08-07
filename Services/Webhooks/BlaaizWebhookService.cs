@@ -798,67 +798,16 @@ public class BlaaizWebhookService : IBlaaizWebhookService
             throw new UnauthorizedAccessException("Missing Blaaiz webhook signature information.");
         }
 
-        var webhookTime = ParseTimestamp(timestamp);
-        var tolerance = TimeSpan.FromMinutes(_options.WebhookTimestampToleranceMinutes);
-
-        if ((DateTimeOffset.UtcNow - webhookTime).Duration() > tolerance)
-        {
-            throw new UnauthorizedAccessException("Blaaiz webhook timestamp is outside the allowed tolerance.");
-        }
-
-        using var json = JsonDocument.Parse(rawPayload);
-        var canonicalPayload = JsonSerializer.Serialize(json.RootElement);
-        var actual = receivedSignature.Trim();
-
-        if (actual.StartsWith("sha256=", StringComparison.OrdinalIgnoreCase))
-        {
-            actual = actual[7..];
-        }
-
-        var isValid = SignatureMatches($"{timestamp}.{canonicalPayload}", actual, _options.WebhookSigningSecret);
-
-        if (!isValid && !string.Equals(canonicalPayload, rawPayload, StringComparison.Ordinal))
-        {
-            isValid = SignatureMatches($"{timestamp}.{rawPayload}", actual, _options.WebhookSigningSecret);
-        }
+        var isValid = BlaaizWebhookSignature.IsValid(
+            rawPayload,
+            receivedSignature,
+            timestamp,
+            _options.WebhookSigningSecret,
+            TimeSpan.FromMinutes(_options.WebhookTimestampToleranceMinutes),
+            DateTimeOffset.UtcNow);
 
         if (!isValid)
-        {
-            throw new UnauthorizedAccessException("Invalid Blaaiz webhook signature.");
-        }
-    }
-
-    private static bool SignatureMatches(string signedContent, string receivedSignature, string secret)
-    {
-        using var hmac = new HMACSHA256(Encoding.UTF8.GetBytes(secret));
-        var expected = Convert.ToHexString(hmac.ComputeHash(Encoding.UTF8.GetBytes(signedContent)))
-            .ToLowerInvariant();
-        var expectedBytes = Encoding.UTF8.GetBytes(expected);
-        var actualBytes = Encoding.UTF8.GetBytes(receivedSignature.ToLowerInvariant());
-
-        return expectedBytes.Length == actualBytes.Length &&
-               CryptographicOperations.FixedTimeEquals(expectedBytes, actualBytes);
-    }
-
-    private static DateTimeOffset ParseTimestamp(string timestamp)
-    {
-        if (long.TryParse(timestamp, out var numeric))
-        {
-            return numeric > 10_000_000_000
-                ? DateTimeOffset.FromUnixTimeMilliseconds(numeric)
-                : DateTimeOffset.FromUnixTimeSeconds(numeric);
-        }
-
-        if (DateTimeOffset.TryParse(
-                timestamp,
-                CultureInfo.InvariantCulture,
-                DateTimeStyles.AssumeUniversal,
-                out var parsed))
-        {
-            return parsed.ToUniversalTime();
-        }
-
-        throw new UnauthorizedAccessException("Invalid Blaaiz webhook timestamp.");
+            throw new UnauthorizedAccessException("Invalid or stale Blaaiz webhook signature.");
     }
 
     private static JsonElement GetDataNode(JsonElement root)

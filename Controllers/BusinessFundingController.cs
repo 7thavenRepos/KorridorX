@@ -1,14 +1,17 @@
+using KorridorX.Configuration;
 using System.Security.Claims;
 using KorridorX.Dtos.BusinessFunding;
 using KorridorX.Dtos.Payments;
 using KorridorX.Infrastructure;
 using KorridorX.Services.BusinessFunding;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.Mvc;
 
 namespace KorridorX.Controllers;
 
 [Authorize]
+[EnableRateLimiting(SecurityRateLimitPolicies.Sensitive)]
 [ApiController]
 [Route("api/business/funding")]
 public class BusinessFundingController : ControllerBase

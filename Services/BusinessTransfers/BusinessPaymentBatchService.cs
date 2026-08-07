@@ -13,6 +13,8 @@ using KorridorX.Services.References;
 using KorridorX.Services.BusinessFunding;
 using KorridorX.Services.Notifications;
 using KorridorX.Services.Transfers;
+using KorridorX.Services.Compliance;
+using KorridorX.Services.Security;
 using Microsoft.EntityFrameworkCore;
 
 namespace KorridorX.Services.BusinessTransfers;
@@ -33,6 +35,8 @@ public class BusinessPaymentBatchService : IBusinessPaymentBatchService
     private readonly ITransferStatusService _transferStatusService;
     private readonly IBusinessFundingService _fundingService;
     private readonly INotificationQueueService _notifications;
+    private readonly IComplianceLimitService _complianceLimitService;
+    private readonly ITransferRiskService _transferRiskService;
 
     public BusinessPaymentBatchService(
         AppDbContext db,
@@ -40,7 +44,9 @@ public class BusinessPaymentBatchService : IBusinessPaymentBatchService
         IReferenceGenerator referenceGenerator,
         ITransferStatusService transferStatusService,
         IBusinessFundingService fundingService,
-        INotificationQueueService notifications)
+        INotificationQueueService notifications,
+        IComplianceLimitService complianceLimitService,
+        ITransferRiskService transferRiskService)
     {
         _db = db;
         _accessService = accessService;
@@ -48,6 +54,8 @@ public class BusinessPaymentBatchService : IBusinessPaymentBatchService
         _transferStatusService = transferStatusService;
         _fundingService = fundingService;
         _notifications = notifications;
+        _complianceLimitService = complianceLimitService;
+        _transferRiskService = transferRiskService;
     }
 
     public async Task<BusinessPaymentBatchDetailsDto> ImportAsync(
@@ -327,6 +335,9 @@ public class BusinessPaymentBatchService : IBusinessPaymentBatchService
                      (x.Status is BusinessPaymentBatchItemStatus.Valid or BusinessPaymentBatchItemStatus.PendingApproval) &&
                      x.TransferId == null))
         {
+            var trackedState = CaptureTrackedState();
+            var originalQuote = item.TransferQuote;
+
             try
             {
                 await EnsureDestinationStillValidAsync(item, ct);
@@ -368,6 +379,8 @@ public class BusinessPaymentBatchService : IBusinessPaymentBatchService
                     CreatedByUserId = batch.CreatedByUserId,
                     Status = TransferStatus.Draft
                 };
+
+                await _complianceLimitService.EnsureWithinLimitsAsync(transfer, ct);
                 _db.Transfers.Add(transfer);
 
                 _transferStatusService.ApplyTransition(
@@ -380,6 +393,8 @@ public class BusinessPaymentBatchService : IBusinessPaymentBatchService
                         EventType: "BUSINESS_BATCH_TRANSFER_CREATED",
                         Title: "Batch transfer created",
                         Description: $"Created from business payment batch {batch.Reference}."));
+
+                await _transferRiskService.AssessAsync(transfer, actionedByUserId, ct);
 
                 if (batch.FundingSource == BusinessFundingSource.BusinessWallet)
                 {
@@ -405,6 +420,10 @@ public class BusinessPaymentBatchService : IBusinessPaymentBatchService
             }
             catch (Exception ex)
             {
+                RestoreTrackedState(trackedState);
+                item.Transfer = null;
+                item.TransferId = null;
+                item.TransferQuote = originalQuote;
                 item.Status = BusinessPaymentBatchItemStatus.Failed;
                 item.ValidationErrors = Truncate(ex.Message, 4000);
             }
@@ -432,6 +451,39 @@ public class BusinessPaymentBatchService : IBusinessPaymentBatchService
             batch.FailureReason = null;
         }
     }
+
+    private IReadOnlyList<TrackedEntrySnapshot> CaptureTrackedState() =>
+        _db.ChangeTracker.Entries()
+            .Select(entry => new TrackedEntrySnapshot(
+                entry.Entity,
+                entry.State,
+                entry.CurrentValues.Clone()))
+            .ToList();
+
+    private void RestoreTrackedState(IReadOnlyList<TrackedEntrySnapshot> snapshot)
+    {
+        var originalEntities = snapshot
+            .Select(x => x.Entity)
+            .ToHashSet(ReferenceEqualityComparer.Instance);
+
+        foreach (var entry in _db.ChangeTracker.Entries().ToList())
+        {
+            if (!originalEntities.Contains(entry.Entity))
+                entry.State = EntityState.Detached;
+        }
+
+        foreach (var saved in snapshot)
+        {
+            var entry = _db.Entry(saved.Entity);
+            entry.CurrentValues.SetValues(saved.Values);
+            entry.State = saved.State;
+        }
+    }
+
+    private sealed record TrackedEntrySnapshot(
+        object Entity,
+        EntityState State,
+        Microsoft.EntityFrameworkCore.ChangeTracking.PropertyValues Values);
 
     private async Task<BusinessPaymentBatchItem> BuildItemAsync(
         BusinessPaymentBatch batch,

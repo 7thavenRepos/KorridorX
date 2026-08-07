@@ -20,6 +20,12 @@ public class TransferConfiguration : IEntityTypeConfiguration<Transfer>
         builder.HasIndex(x => x.ProviderReference);
         builder.HasIndex(x => new { x.SourceCurrencyCode, x.DestinationCurrencyCode });
         builder.HasIndex(x => x.CreatedAt);
+        builder.HasIndex(x => new { x.CustomerProfileId, x.CreatedAt });
+        builder.HasIndex(x => new { x.BusinessProfileId, x.CreatedAt });
+        builder.HasIndex(x => new { x.RecipientId, x.SourceAmount, x.CreatedAt });
+        builder.HasIndex(x => new { x.BusinessBeneficiaryId, x.SourceAmount, x.CreatedAt });
+        builder.HasIndex(x => x.IsComplianceHold);
+        builder.HasIndex(x => new { x.RiskDecision, x.RiskLevel });
 
         builder.Property(x => x.Reference).HasMaxLength(50);
         builder.Property(x => x.PurposeNote).HasMaxLength(500);
@@ -33,7 +39,9 @@ public class TransferConfiguration : IEntityTypeConfiguration<Transfer>
         builder.Property(x => x.ProviderReference).HasMaxLength(150);
         builder.Property(x => x.FailureReason).HasMaxLength(1000);
         builder.Property(x => x.ApprovalRejectionReason).HasMaxLength(1000);
+        builder.Property(x => x.ComplianceHoldReason).HasMaxLength(1000);
         builder.Property(x => x.Status).IsConcurrencyToken();
+        builder.Property(x => x.IsComplianceHold).IsConcurrencyToken();
         builder.Property(x => x.ApprovalCount).IsConcurrencyToken();
 
         builder.Property(x => x.SourceAmount).HasPrecision(18, 2);

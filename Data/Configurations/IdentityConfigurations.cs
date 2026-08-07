@@ -1,4 +1,4 @@
-﻿using KorridorX.Models.Identity;
+using KorridorX.Models.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -29,10 +29,17 @@ public class RefreshTokenConfiguration : IEntityTypeConfiguration<RefreshToken>
     public void Configure(EntityTypeBuilder<RefreshToken> builder)
     {
         builder.HasIndex(x => x.Token).IsUnique();
+        builder.HasIndex(x => new { x.UserId, x.IsRevoked, x.ExpiresAt });
 
         builder.Property(x => x.Token).HasMaxLength(500);
         builder.Property(x => x.CreatedByIp).HasMaxLength(100);
         builder.Property(x => x.RevokedByIp).HasMaxLength(100);
+        builder.Property(x => x.DeviceFingerprint).HasMaxLength(250);
+        builder.Property(x => x.DeviceName).HasMaxLength(250);
+        builder.Property(x => x.UserAgent).HasMaxLength(1000);
+        builder.Property(x => x.ReplacedByToken).HasMaxLength(128);
+        builder.Property(x => x.RevokedReason).HasMaxLength(500);
+        builder.Property(x => x.IsRevoked).IsConcurrencyToken();
     }
 }
 
@@ -42,6 +49,8 @@ public class LoginHistoryConfiguration : IEntityTypeConfiguration<LoginHistory>
     {
         builder.HasIndex(x => x.UserId);
         builder.HasIndex(x => x.OccurredAt);
+        builder.HasIndex(x => new { x.UserId, x.WasSuccessful, x.OccurredAt });
+        builder.HasIndex(x => new { x.UserId, x.DeviceFingerprint, x.OccurredAt });
 
         builder.Property(x => x.IpAddress).HasMaxLength(100);
         builder.Property(x => x.UserAgent).HasMaxLength(1000);

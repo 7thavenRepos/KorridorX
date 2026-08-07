@@ -1,4 +1,4 @@
-﻿using KorridorX.Models.Common;
+using KorridorX.Models.Common;
 using KorridorX.Models.Customers;
 using KorridorX.Models.Transfers;
 
@@ -16,6 +16,12 @@ public class AmlFlag : AuditableEntity
     public string Severity { get; set; } = "";
 
     public string Description { get; set; } = "";
+
+    public int RiskScore { get; set; }
+    public bool IsBlocking { get; set; }
+    public string? ReviewDecision { get; set; }
+    public DateTime? ReviewedAt { get; set; }
+    public Guid? ReviewedByUserId { get; set; }
 
     public bool IsResolved { get; set; } = false;
     public DateTime? ResolvedAt { get; set; }

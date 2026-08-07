@@ -12,6 +12,8 @@ using KorridorX.Services.References;
 using KorridorX.Services.BusinessFunding;
 using KorridorX.Services.Notifications;
 using KorridorX.Services.Transfers;
+using KorridorX.Services.Compliance;
+using KorridorX.Services.Security;
 using Microsoft.EntityFrameworkCore;
 
 namespace KorridorX.Services.BusinessTransfers;
@@ -24,6 +26,8 @@ public class BusinessTransferService : IBusinessTransferService
     private readonly ITransferStatusService _transferStatusService;
     private readonly IBusinessFundingService _fundingService;
     private readonly INotificationQueueService _notifications;
+    private readonly IComplianceLimitService _complianceLimitService;
+    private readonly ITransferRiskService _transferRiskService;
 
     public BusinessTransferService(
         AppDbContext db,
@@ -31,7 +35,9 @@ public class BusinessTransferService : IBusinessTransferService
         IReferenceGenerator referenceGenerator,
         ITransferStatusService transferStatusService,
         IBusinessFundingService fundingService,
-        INotificationQueueService notifications)
+        INotificationQueueService notifications,
+        IComplianceLimitService complianceLimitService,
+        ITransferRiskService transferRiskService)
     {
         _db = db;
         _accessService = accessService;
@@ -39,6 +45,8 @@ public class BusinessTransferService : IBusinessTransferService
         _transferStatusService = transferStatusService;
         _fundingService = fundingService;
         _notifications = notifications;
+        _complianceLimitService = complianceLimitService;
+        _transferRiskService = transferRiskService;
     }
 
     public async Task<TransferQuoteDto> CreateQuoteAsync(
@@ -231,6 +239,8 @@ public class BusinessTransferService : IBusinessTransferService
             Status = TransferStatus.Draft
         };
 
+        await _complianceLimitService.EnsureWithinLimitsAsync(transfer, ct);
+
         _db.Transfers.Add(transfer);
 
         _transferStatusService.ApplyTransition(
@@ -249,6 +259,8 @@ public class BusinessTransferService : IBusinessTransferService
                 Description: approvalRequired
                     ? "The transfer is waiting for the required business approvals."
                     : "The business transfer has been created successfully."));
+
+        await _transferRiskService.AssessAsync(transfer, userId, ct);
 
         quote.IsUsed = true;
         quote.UsedAt = DateTime.UtcNow;

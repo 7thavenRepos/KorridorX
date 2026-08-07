@@ -80,6 +80,15 @@ public class Transfer : AuditableEntity
     public DateTime? CancelledAt { get; set; }
     public string? FailureReason { get; set; }
 
+    public int RiskScore { get; set; }
+    public RiskLevel RiskLevel { get; set; } = RiskLevel.Low;
+    public RiskDecision RiskDecision { get; set; } = RiskDecision.Allow;
+    public bool IsComplianceHold { get; set; }
+    public string? ComplianceHoldReason { get; set; }
+    public DateTime? RiskAssessedAt { get; set; }
+    public DateTime? ComplianceReviewedAt { get; set; }
+    public Guid? ComplianceReviewedByUserId { get; set; }
+
     public ICollection<TransferStatusHistory> StatusHistories { get; set; } = new List<TransferStatusHistory>();
     public ICollection<TransferTimelineEvent> TimelineEvents { get; set; } = new List<TransferTimelineEvent>();
 }

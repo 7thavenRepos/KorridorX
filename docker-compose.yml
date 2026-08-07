@@ -1,0 +1,62 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-korridorx}
+      POSTGRES_USER: ${POSTGRES_USER:-korridorx}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+    volumes:
+      - korridorx-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-korridorx} -d ${POSTGRES_DB:-korridorx}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - korridorx
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "${API_PORT:-8080}:8080"
+    environment:
+      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Development}
+      ASPNETCORE_HTTP_PORTS: 8080
+      ConnectionStrings__DefaultConnection: Host=postgres;Port=5432;Database=${POSTGRES_DB:-korridorx};Username=${POSTGRES_USER:-korridorx};Password=${POSTGRES_PASSWORD};Pooling=true
+      Jwt__Issuer: ${JWT_ISSUER:-KorridorX}
+      Jwt__Audience: ${JWT_AUDIENCE:-KorridorX.Clients}
+      Jwt__Key: ${JWT_KEY:?JWT_KEY is required}
+      AllowedHosts: ${ALLOWED_HOSTS:-localhost;127.0.0.1}
+      Hosting__AllowedOrigins__0: ${ALLOWED_ORIGIN:-http://localhost:4200}
+      Hosting__RequireHttpsRedirection: ${REQUIRE_HTTPS_REDIRECTION:-false}
+      Hosting__DataProtectionKeysPath: /var/lib/korridorx/keys
+      Blaaiz__IsEnabled: ${BLAAIZ_ENABLED:-false}
+      Blaaiz__ClientId: ${BLAAIZ_CLIENT_ID:-}
+      Blaaiz__ClientSecret: ${BLAAIZ_CLIENT_SECRET:-}
+      Blaaiz__WebhookSigningSecret: ${BLAAIZ_WEBHOOK_SIGNING_SECRET:-}
+      NotificationDelivery__WorkerEnabled: ${NOTIFICATION_WORKER_ENABLED:-false}
+      NotificationDelivery__Smtp__IsEnabled: ${SMTP_ENABLED:-false}
+      NotificationDelivery__Smtp__Host: ${SMTP_HOST:-}
+      NotificationDelivery__Smtp__Port: ${SMTP_PORT:-587}
+      NotificationDelivery__Smtp__Username: ${SMTP_USERNAME:-}
+      NotificationDelivery__Smtp__Password: ${SMTP_PASSWORD:-}
+      NotificationDelivery__Smtp__FromAddress: ${SMTP_FROM_ADDRESS:-}
+    volumes:
+      - korridorx-dataprotection:/var/lib/korridorx/keys
+    networks:
+      - korridorx
+
+volumes:
+  korridorx-postgres:
+  korridorx-dataprotection:
+
+networks:
+  korridorx:
+    driver: bridge

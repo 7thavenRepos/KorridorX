@@ -1,7 +1,8 @@
-﻿using System.Net;
+using System.Net;
 using System.Text.Json;
 using KorridorX.Infrastructure;
 using KorridorX.Exceptions;
+using Microsoft.EntityFrameworkCore;
 
 namespace KorridorX.Middleware;
 
@@ -24,6 +25,14 @@ public class GlobalExceptionMiddleware
         {
             await _next(context);
         }
+        catch (ForbiddenException ex)
+        {
+            await WriteErrorAsync(
+                context,
+                HttpStatusCode.Forbidden,
+                "FORBIDDEN",
+                ex.Message);
+        }
         catch (UnauthorizedAccessException ex)
         {
             await WriteErrorAsync(
@@ -32,12 +41,47 @@ public class GlobalExceptionMiddleware
                 "UNAUTHORIZED",
                 ex.Message);
         }
+        catch (ComplianceLimitExceededException ex)
+        {
+            await WriteErrorAsync(
+                context,
+                HttpStatusCode.UnprocessableEntity,
+                ex.Code,
+                ex.Message);
+        }
+        catch (ComplianceHoldException ex)
+        {
+            await WriteErrorAsync(
+                context,
+                HttpStatusCode.Conflict,
+                "COMPLIANCE_HOLD",
+                ex.Message);
+        }
         catch (InvalidOperationException ex)
         {
             await WriteErrorAsync(
                 context,
                 HttpStatusCode.BadRequest,
                 "INVALID_OPERATION",
+                ex.Message);
+        }
+        catch (DbUpdateConcurrencyException ex)
+        {
+            _logger.LogWarning(ex, "A concurrent update conflict occurred.");
+
+            await WriteErrorAsync(
+                context,
+                HttpStatusCode.Conflict,
+                "CONCURRENT_UPDATE",
+                "This record changed while your request was being processed. Refresh and try again.");
+        }
+        catch (JsonException ex)
+        {
+            await WriteErrorAsync(
+                context,
+                HttpStatusCode.BadRequest,
+                "INVALID_JSON",
+                "The request contains invalid JSON.",
                 ex.Message);
         }
         catch (ProviderIntegrationException ex)
@@ -81,7 +125,15 @@ public class GlobalExceptionMiddleware
         context.Response.ContentType = "application/json";
         context.Response.StatusCode = (int)statusCode;
 
-        var response = ApiResponses.Fail(message, code, details);
+        var responseDetails = details is null
+            ? new { correlationId = context.TraceIdentifier }
+            : new
+            {
+                correlationId = context.TraceIdentifier,
+                context = details
+            };
+
+        var response = ApiResponses.Fail(message, code, responseDetails);
 
         var json = JsonSerializer.Serialize(response, new JsonSerializerOptions
         {

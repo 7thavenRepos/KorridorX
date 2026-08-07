@@ -5,6 +5,8 @@ using KorridorX.Infrastructure;
 using KorridorX.Models.Enums;
 using KorridorX.Models.Transfers;
 using KorridorX.Services.References;
+using KorridorX.Services.Compliance;
+using KorridorX.Services.Security;
 using Microsoft.EntityFrameworkCore;
 
 namespace KorridorX.Services.Transfers;
@@ -14,15 +16,21 @@ public class TransferService : ITransferService
     private readonly AppDbContext _db;
     private readonly IReferenceGenerator _referenceGenerator;
     private readonly ITransferStatusService _transferStatusService;
+    private readonly IComplianceLimitService _complianceLimitService;
+    private readonly ITransferRiskService _transferRiskService;
 
     public TransferService(
         AppDbContext db,
         IReferenceGenerator referenceGenerator,
-        ITransferStatusService transferStatusService)
+        ITransferStatusService transferStatusService,
+        IComplianceLimitService complianceLimitService,
+        ITransferRiskService transferRiskService)
     {
         _db = db;
         _referenceGenerator = referenceGenerator;
         _transferStatusService = transferStatusService;
+        _complianceLimitService = complianceLimitService;
+        _transferRiskService = transferRiskService;
     }
 
     public async Task<TransferDetailsDto> CreateTransferAsync(
@@ -182,6 +190,8 @@ public class TransferService : ITransferService
         quote.LastUpdatedAt = DateTime.UtcNow;
         quote.LastUpdatedByUserId = userId;
 
+        await _complianceLimitService.EnsureWithinLimitsAsync(transfer, ct);
+
         _db.Transfers.Add(transfer);
 
         _transferStatusService.ApplyTransition(
@@ -194,6 +204,8 @@ public class TransferService : ITransferService
                 EventType: "TRANSFER_CREATED",
                 Title: "Transfer created",
                 Description: "Your transfer has been created and is pending payment."));
+
+        await _transferRiskService.AssessAsync(transfer, userId, ct);
 
         await _db.SaveChangesAsync(ct);
         await tx.CommitAsync(ct);

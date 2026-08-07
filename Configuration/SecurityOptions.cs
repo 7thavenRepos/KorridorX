@@ -1,0 +1,111 @@
+using Microsoft.Extensions.Options;
+
+namespace KorridorX.Configuration;
+
+public static class SecurityRateLimitPolicies
+{
+    public const string Authentication = "Authentication";
+    public const string Sensitive = "Sensitive";
+    public const string Webhook = "Webhook";
+}
+
+public sealed class SecurityOptions
+{
+    public const string SectionName = "Security";
+
+    public RateLimitOptions RateLimits { get; set; } = new();
+    public SessionSecurityOptions Sessions { get; set; } = new();
+    public TransferRiskOptions TransferRisk { get; set; } = new();
+}
+
+public sealed class RateLimitOptions
+{
+    public int GlobalPermitLimit { get; set; } = 300;
+    public int GlobalWindowMinutes { get; set; } = 1;
+    public int AuthenticationPermitLimit { get; set; } = 10;
+    public int AuthenticationWindowMinutes { get; set; } = 1;
+    public int SensitivePermitLimit { get; set; } = 60;
+    public int SensitiveWindowMinutes { get; set; } = 1;
+    public int WebhookPermitLimit { get; set; } = 300;
+    public int WebhookWindowMinutes { get; set; } = 1;
+}
+
+public sealed class SessionSecurityOptions
+{
+    public int MaximumActiveSessionsPerUser { get; set; } = 10;
+}
+
+public sealed class TransferRiskOptions
+{
+    public bool IsEnabled { get; set; } = true;
+    public int ReviewScore { get; set; } = 40;
+    public int BlockScore { get; set; } = 70;
+    public int RecentRecipientHours { get; set; } = 24;
+    public int RapidTransferWindowMinutes { get; set; } = 60;
+    public int RapidTransferCount { get; set; } = 3;
+    public int DailyTransferCount { get; set; } = 5;
+    public int DuplicateTransferWindowHours { get; set; } = 24;
+    public int DuplicateTransferCount { get; set; } = 2;
+    public int FailedLoginWindowHours { get; set; } = 24;
+    public int FailedLoginCount { get; set; } = 3;
+    public int DistinctDeviceWindowDays { get; set; } = 30;
+    public int DistinctDeviceCount { get; set; } = 3;
+    public Dictionary<string, decimal> HighValueThresholds { get; set; } = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["USD"] = 5000m,
+        ["CAD"] = 5000m,
+        ["GBP"] = 4000m,
+        ["EUR"] = 4000m,
+        ["NGN"] = 5_000_000m
+    };
+}
+
+public sealed class SecurityOptionsValidator : IValidateOptions<SecurityOptions>
+{
+    public ValidateOptionsResult Validate(string? name, SecurityOptions options)
+    {
+        var errors = new List<string>();
+
+        ValidatePositive(options.RateLimits.GlobalPermitLimit, "Security:RateLimits:GlobalPermitLimit", errors);
+        ValidatePositive(options.RateLimits.GlobalWindowMinutes, "Security:RateLimits:GlobalWindowMinutes", errors);
+        ValidatePositive(options.RateLimits.AuthenticationPermitLimit, "Security:RateLimits:AuthenticationPermitLimit", errors);
+        ValidatePositive(options.RateLimits.AuthenticationWindowMinutes, "Security:RateLimits:AuthenticationWindowMinutes", errors);
+        ValidatePositive(options.RateLimits.SensitivePermitLimit, "Security:RateLimits:SensitivePermitLimit", errors);
+        ValidatePositive(options.RateLimits.SensitiveWindowMinutes, "Security:RateLimits:SensitiveWindowMinutes", errors);
+        ValidatePositive(options.RateLimits.WebhookPermitLimit, "Security:RateLimits:WebhookPermitLimit", errors);
+        ValidatePositive(options.RateLimits.WebhookWindowMinutes, "Security:RateLimits:WebhookWindowMinutes", errors);
+        ValidatePositive(options.Sessions.MaximumActiveSessionsPerUser, "Security:Sessions:MaximumActiveSessionsPerUser", errors);
+
+        if (options.TransferRisk.ReviewScore < 0 || options.TransferRisk.ReviewScore > 100)
+            errors.Add("Security:TransferRisk:ReviewScore must be between 0 and 100.");
+        if (options.TransferRisk.BlockScore < options.TransferRisk.ReviewScore || options.TransferRisk.BlockScore > 100)
+            errors.Add("Security:TransferRisk:BlockScore must be between ReviewScore and 100.");
+
+        ValidatePositive(options.TransferRisk.RecentRecipientHours, "Security:TransferRisk:RecentRecipientHours", errors);
+        ValidatePositive(options.TransferRisk.RapidTransferWindowMinutes, "Security:TransferRisk:RapidTransferWindowMinutes", errors);
+        ValidatePositive(options.TransferRisk.RapidTransferCount, "Security:TransferRisk:RapidTransferCount", errors);
+        ValidatePositive(options.TransferRisk.DailyTransferCount, "Security:TransferRisk:DailyTransferCount", errors);
+        ValidatePositive(options.TransferRisk.DuplicateTransferWindowHours, "Security:TransferRisk:DuplicateTransferWindowHours", errors);
+        ValidatePositive(options.TransferRisk.DuplicateTransferCount, "Security:TransferRisk:DuplicateTransferCount", errors);
+        ValidatePositive(options.TransferRisk.FailedLoginWindowHours, "Security:TransferRisk:FailedLoginWindowHours", errors);
+        ValidatePositive(options.TransferRisk.FailedLoginCount, "Security:TransferRisk:FailedLoginCount", errors);
+        ValidatePositive(options.TransferRisk.DistinctDeviceWindowDays, "Security:TransferRisk:DistinctDeviceWindowDays", errors);
+        ValidatePositive(options.TransferRisk.DistinctDeviceCount, "Security:TransferRisk:DistinctDeviceCount", errors);
+
+        foreach (var threshold in options.TransferRisk.HighValueThresholds)
+        {
+            if (string.IsNullOrWhiteSpace(threshold.Key) || threshold.Value <= 0)
+                errors.Add("Security:TransferRisk:HighValueThresholds must contain valid currency codes and positive amounts.");
+        }
+
+        return errors.Count == 0
+            ? ValidateOptionsResult.Success
+            : ValidateOptionsResult.Fail(errors);
+    }
+
+    private static void ValidatePositive(int value, string key, ICollection<string> errors)
+    {
+        if (value <= 0)
+            errors.Add($"{key} must be greater than zero.");
+    }
+}

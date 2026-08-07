@@ -15,6 +15,7 @@ using KorridorX.Services.Compliance;
 using KorridorX.Services.BusinessFunding;
 using KorridorX.Services.References;
 using KorridorX.Services.Transfers;
+using KorridorX.Services.Security;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 
@@ -29,6 +30,7 @@ public class PayoutService : IPayoutService
     private readonly IComplianceGateService _complianceGateService;
     private readonly ITransferStatusService _transferStatusService;
     private readonly IBusinessFundingService _businessFundingService;
+    private readonly ITransferRiskService _transferRiskService;
     private readonly IReadOnlyDictionary<string, string> _payoutWalletIds;
 
     public PayoutService(
@@ -39,6 +41,7 @@ public class PayoutService : IPayoutService
         IComplianceGateService complianceGateService,
         ITransferStatusService transferStatusService,
         IBusinessFundingService businessFundingService,
+        ITransferRiskService transferRiskService,
         IOptions<BlaaizOptions> blaaizOptions)
     {
         _db = db;
@@ -48,6 +51,7 @@ public class PayoutService : IPayoutService
         _complianceGateService = complianceGateService;
         _transferStatusService = transferStatusService;
         _businessFundingService = businessFundingService;
+        _transferRiskService = transferRiskService;
         _payoutWalletIds = blaaizOptions.Value.PayoutWalletIds;
     }
 
@@ -89,6 +93,8 @@ public class PayoutService : IPayoutService
             throw new InvalidOperationException(
                 $"Payout cannot be dispatched while the transfer status is '{transfer.Status}'.");
         }
+
+        _transferRiskService.EnsureCanProceedToPayout(transfer);
 
         var destination = ResolveDestination(transfer);
         if (destination.IsMobileWallet)
@@ -337,6 +343,7 @@ public class PayoutService : IPayoutService
             .Where(x =>
                 !x.IsDeleted &&
                 (x.Status == TransferStatus.PaymentReceived || x.Status == TransferStatus.Processing) &&
+                !x.IsComplianceHold &&
                 !_db.Payouts.Any(p => p.TransferId == x.Id && !p.IsDeleted))
             .Select(x => x.Id)
             .Take(batchSize)

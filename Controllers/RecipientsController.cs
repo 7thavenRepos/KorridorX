@@ -1,13 +1,16 @@
+using KorridorX.Configuration;
 using KorridorX.Dtos.Recipients;
 using KorridorX.Infrastructure;
 using KorridorX.Services.Recipients;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
 
 namespace KorridorX.Controllers;
 
 [Authorize]
+[EnableRateLimiting(SecurityRateLimitPolicies.Sensitive)]
 [ApiController]
 [Route("api/recipients")]
 public class RecipientsController : ControllerBase

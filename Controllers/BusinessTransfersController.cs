@@ -1,13 +1,16 @@
+using KorridorX.Configuration;
 using System.Security.Claims;
 using KorridorX.Dtos.BusinessTransfers;
 using KorridorX.Infrastructure;
 using KorridorX.Services.BusinessTransfers;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.Mvc;
 
 namespace KorridorX.Controllers;
 
 [Authorize]
+[EnableRateLimiting(SecurityRateLimitPolicies.Sensitive)]
 [ApiController]
 [Route("api/business/transfers")]
 public class BusinessTransfersController : ControllerBase

@@ -3,6 +3,7 @@ using KorridorX.Configuration;
 using KorridorX.Data;
 using KorridorX.Data.Seed;
 using KorridorX.Infrastructure;
+using KorridorX.HealthChecks;
 using KorridorX.Middleware;
 using KorridorX.Models.Identity;
 using KorridorX.Providers.Remittance;
@@ -24,18 +25,61 @@ using KorridorX.Services.Transfers;
 using KorridorX.Services.Providers;
 using KorridorX.Services.Reconciliation;
 using KorridorX.Services.Webhooks;
+using KorridorX.Services.Security;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.OpenApi.Models;
 using System.Text;
+using System.Diagnostics;
+using System.Net;
+using System.Security.Claims;
+using System.Threading.RateLimiting;
+
+Activity.DefaultIdFormat = ActivityIdFormat.W3C;
+Activity.ForceDefaultIdFormat = true;
 
 var builder = WebApplication.CreateBuilder(args);
 
+var hostingOptions = builder.Configuration
+    .GetSection(HostingOptions.SectionName)
+    .Get<HostingOptions>() ?? new HostingOptions();
+
+builder.Logging.ClearProviders();
+if (hostingOptions.JsonConsoleLogging)
+{
+    builder.Logging.AddJsonConsole(options =>
+    {
+        options.IncludeScopes = true;
+        options.UseUtcTimestamp = true;
+        options.TimestampFormat = "yyyy-MM-dd'T'HH:mm:ss.fff'Z'";
+    });
+}
+else
+{
+    builder.Logging.AddSimpleConsole(options =>
+    {
+        options.IncludeScopes = true;
+        options.SingleLine = true;
+        options.TimestampFormat = "yyyy-MM-dd HH:mm:ss ";
+        options.UseUtcTimestamp = true;
+    });
+    builder.Logging.AddDebug();
+}
+
 builder.Services.Configure<JwtOptions>(builder.Configuration.GetSection("Jwt"));
+builder.Services
+    .AddOptions<HostingOptions>()
+    .Bind(builder.Configuration.GetSection(HostingOptions.SectionName))
+    .ValidateOnStart();
+builder.Services.AddSingleton<IValidateOptions<HostingOptions>, HostingOptionsValidator>();
 builder.Services
     .AddOptions<BlaaizOptions>()
     .Bind(builder.Configuration.GetSection("Blaaiz"))
@@ -46,10 +90,97 @@ builder.Services
     .Bind(builder.Configuration.GetSection(NotificationDeliveryOptions.SectionName))
     .ValidateOnStart();
 builder.Services.AddSingleton<IValidateOptions<NotificationDeliveryOptions>, NotificationDeliveryOptionsValidator>();
+builder.Services
+    .AddOptions<SecurityOptions>()
+    .Bind(builder.Configuration.GetSection(SecurityOptions.SectionName))
+    .ValidateOnStart();
+builder.Services.AddSingleton<IValidateOptions<SecurityOptions>, SecurityOptionsValidator>();
 builder.Services.AddMemoryCache();
-builder.Services.AddDataProtection();
+
+var dataProtection = builder.Services
+    .AddDataProtection()
+    .SetApplicationName(hostingOptions.ApplicationName);
+
+if (!string.IsNullOrWhiteSpace(hostingOptions.DataProtectionKeysPath))
+{
+    Directory.CreateDirectory(hostingOptions.DataProtectionKeysPath);
+    dataProtection.PersistKeysToFileSystem(
+        new DirectoryInfo(hostingOptions.DataProtectionKeysPath));
+}
+
+builder.Services.AddHostedService<StartupConfigurationValidationService>();
 
 builder.Services.AddControllers();
+builder.Services
+    .AddHealthChecks()
+    .AddCheck(
+        "self",
+        () => HealthCheckResult.Healthy("KorridorX process is running."),
+        tags: ["live"])
+    .AddCheck<DatabaseReadinessHealthCheck>(
+        "postgresql",
+        failureStatus: HealthStatus.Unhealthy,
+        tags: ["ready"]);
+
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor |
+                               ForwardedHeaders.XForwardedProto;
+    options.ForwardLimit = hostingOptions.ForwardLimit;
+
+    foreach (var proxy in hostingOptions.TrustedProxies)
+    {
+        if (IPAddress.TryParse(proxy, out var address))
+            options.KnownProxies.Add(address);
+    }
+});
+
+var securityOptions = builder.Configuration
+    .GetSection(SecurityOptions.SectionName)
+    .Get<SecurityOptions>() ?? new SecurityOptions();
+
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.OnRejected = async (context, cancellationToken) =>
+    {
+        context.HttpContext.Response.StatusCode = StatusCodes.Status429TooManyRequests;
+        context.HttpContext.Response.ContentType = "application/json";
+        await context.HttpContext.Response.WriteAsJsonAsync(
+            ApiResponses.Fail(
+                "Too many requests. Please wait before trying again.",
+                "RATE_LIMIT_EXCEEDED"),
+            cancellationToken);
+    };
+
+    options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            ResolveRateLimitKey(httpContext),
+            _ => CreateFixedWindowOptions(
+                securityOptions.RateLimits.GlobalPermitLimit,
+                securityOptions.RateLimits.GlobalWindowMinutes)));
+
+    options.AddPolicy(SecurityRateLimitPolicies.Authentication, httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            _ => CreateFixedWindowOptions(
+                securityOptions.RateLimits.AuthenticationPermitLimit,
+                securityOptions.RateLimits.AuthenticationWindowMinutes)));
+
+    options.AddPolicy(SecurityRateLimitPolicies.Sensitive, httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            ResolveRateLimitKey(httpContext),
+            _ => CreateFixedWindowOptions(
+                securityOptions.RateLimits.SensitivePermitLimit,
+                securityOptions.RateLimits.SensitiveWindowMinutes)));
+
+    options.AddPolicy(SecurityRateLimitPolicies.Webhook, httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            _ => CreateFixedWindowOptions(
+                securityOptions.RateLimits.WebhookPermitLimit,
+                securityOptions.RateLimits.WebhookWindowMinutes)));
+});
 
 builder.Services.AddScoped<IReferenceGenerator, ReferenceGenerator>();
 builder.Services.AddScoped<IProviderRequestAuditService, ProviderRequestAuditService>();
@@ -100,6 +231,8 @@ builder.Services.AddScoped<ITransferStatusService, TransferStatusService>();
 builder.Services.AddScoped<ITransferService, TransferService>();
 // Required by collection, payout, and business-funding services.
 builder.Services.AddScoped<IComplianceGateService, ComplianceGateService>();
+builder.Services.AddScoped<IComplianceLimitService, ComplianceLimitService>();
+builder.Services.AddScoped<ITransferRiskService, TransferRiskService>();
 builder.Services.AddScoped<ICollectionPaymentMethodPolicy, CollectionPaymentMethodPolicy>();
 builder.Services.AddScoped<ICollectionStatusService, CollectionStatusService>();
 builder.Services.AddScoped<ICollectionService, CollectionService>();
@@ -225,7 +358,7 @@ builder.Services.AddCors(options =>
     options.AddPolicy("AngularClient", policy =>
     {
         policy
-            .WithOrigins("http://localhost:4200")
+            .WithOrigins(hostingOptions.AllowedOrigins)
             .AllowAnyHeader()
             .AllowAnyMethod();
     });
@@ -271,7 +404,7 @@ builder.Services.AddHttpContextAccessor();
 
 var app = builder.Build();
 
-if (app.Environment.IsDevelopment())
+if (hostingOptions.SwaggerEnabled)
 {
     app.UseSwagger();
     app.UseSwaggerUI(options =>
@@ -281,17 +414,55 @@ if (app.Environment.IsDevelopment())
     });
 }
 
+if (hostingOptions.TrustedProxies.Length > 0)
+    app.UseForwardedHeaders();
+
+app.UseMiddleware<SecurityHeadersMiddleware>();
+app.UseMiddleware<CorrelationIdMiddleware>();
+app.UseMiddleware<RequestLoggingMiddleware>();
 app.UseMiddleware<GlobalExceptionMiddleware>();
 
 app.UseCors("AngularClient");
 
-app.UseHttpsRedirection();
+if (hostingOptions.RequireHttpsRedirection)
+    app.UseHttpsRedirection();
 
 app.UseAuthentication();
+app.UseRateLimiter();
 app.UseAuthorization();
+
+app.MapHealthChecks("/health/live", new HealthCheckOptions
+{
+    Predicate = registration => registration.Tags.Contains("live"),
+    ResponseWriter = HealthCheckResponseWriter.WriteAsync
+}).DisableRateLimiting();
+
+app.MapHealthChecks("/health/ready", new HealthCheckOptions
+{
+    Predicate = registration => registration.Tags.Contains("ready"),
+    ResponseWriter = HealthCheckResponseWriter.WriteAsync
+}).DisableRateLimiting();
 
 app.MapControllers();
 
-await RoleSeeder.SeedRolesAsync(app.Services);
+if (!app.Environment.IsEnvironment("Testing"))
+    await RoleSeeder.SeedRolesAsync(app.Services);
 
 app.Run();
+
+static FixedWindowRateLimiterOptions CreateFixedWindowOptions(int permitLimit, int windowMinutes) =>
+    new()
+    {
+        PermitLimit = Math.Max(1, permitLimit),
+        Window = TimeSpan.FromMinutes(Math.Max(1, windowMinutes)),
+        QueueLimit = 0,
+        QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+        AutoReplenishment = true
+    };
+
+static string ResolveRateLimitKey(HttpContext context) =>
+    context.User.FindFirstValue(ClaimTypes.NameIdentifier)
+    ?? context.Connection.RemoteIpAddress?.ToString()
+    ?? "unknown";
+
+public partial class Program { }

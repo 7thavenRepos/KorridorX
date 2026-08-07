@@ -1052,10 +1052,14 @@ namespace KorridorX.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
 
+                    b.Property<bool>("IsBlocking")
+                        .HasColumnType("boolean");
+
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("boolean");
 
                     b.Property<bool>("IsResolved")
+                        .IsConcurrencyToken()
                         .HasColumnType("boolean");
 
                     b.Property<DateTime?>("LastUpdatedAt")
@@ -1074,6 +1078,19 @@ namespace KorridorX.Migrations
                     b.Property<Guid?>("ResolvedByUserId")
                         .HasColumnType("uuid");
 
+                    b.Property<string>("ReviewDecision")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<DateTime?>("ReviewedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("ReviewedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("RiskScore")
+                        .HasColumnType("integer");
+
                     b.Property<string>("Severity")
                         .IsRequired()
                         .HasMaxLength(50)
@@ -1088,11 +1105,17 @@ namespace KorridorX.Migrations
 
                     b.HasIndex("FlagType");
 
+                    b.HasIndex("IsBlocking");
+
                     b.HasIndex("IsResolved");
+
+                    b.HasIndex("RiskScore");
 
                     b.HasIndex("Severity");
 
                     b.HasIndex("TransferId");
+
+                    b.HasIndex("IsResolved", "IsBlocking", "CreatedAt");
 
                     b.ToTable("AmlFlags");
                 });
@@ -2571,6 +2594,10 @@ namespace KorridorX.Migrations
 
                     b.HasIndex("UserId");
 
+                    b.HasIndex("UserId", "DeviceFingerprint", "OccurredAt");
+
+                    b.HasIndex("UserId", "WasSuccessful", "OccurredAt");
+
                     b.ToTable("LoginHistories");
                 });
 
@@ -2590,6 +2617,14 @@ namespace KorridorX.Migrations
                     b.Property<DateTime?>("DeletedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<string>("DeviceFingerprint")
+                        .HasMaxLength(250)
+                        .HasColumnType("character varying(250)");
+
+                    b.Property<string>("DeviceName")
+                        .HasMaxLength(250)
+                        .HasColumnType("character varying(250)");
+
                     b.Property<DateTime>("ExpiresAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -2597,10 +2632,18 @@ namespace KorridorX.Migrations
                         .HasColumnType("boolean");
 
                     b.Property<bool>("IsRevoked")
+                        .IsConcurrencyToken()
                         .HasColumnType("boolean");
 
                     b.Property<DateTime?>("LastUpdatedAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("LastUsedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ReplacedByToken")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
 
                     b.Property<DateTime?>("RevokedAt")
                         .HasColumnType("timestamp with time zone");
@@ -2609,10 +2652,18 @@ namespace KorridorX.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
 
+                    b.Property<string>("RevokedReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
                     b.Property<string>("Token")
                         .IsRequired()
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)");
+
+                    b.Property<string>("UserAgent")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
 
                     b.Property<Guid>("UserId")
                         .HasColumnType("uuid");
@@ -2622,7 +2673,7 @@ namespace KorridorX.Migrations
                     b.HasIndex("Token")
                         .IsUnique();
 
-                    b.HasIndex("UserId");
+                    b.HasIndex("UserId", "IsRevoked", "ExpiresAt");
 
                     b.ToTable("RefreshTokens");
                 });
@@ -3885,6 +3936,16 @@ namespace KorridorX.Migrations
                     b.Property<DateTime?>("CompletedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<string>("ComplianceHoldReason")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<DateTime?>("ComplianceReviewedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("ComplianceReviewedByUserId")
+                        .HasColumnType("uuid");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -3936,6 +3997,10 @@ namespace KorridorX.Migrations
 
                     b.Property<Guid?>("FinalApprovedByUserId")
                         .HasColumnType("uuid");
+
+                    b.Property<bool>("IsComplianceHold")
+                        .IsConcurrencyToken()
+                        .HasColumnType("boolean");
 
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("boolean");
@@ -4002,6 +4067,18 @@ namespace KorridorX.Migrations
                     b.Property<int>("RequiredApprovals")
                         .HasColumnType("integer");
 
+                    b.Property<DateTime?>("RiskAssessedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("RiskDecision")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("RiskLevel")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("RiskScore")
+                        .HasColumnType("integer");
+
                     b.Property<decimal>("SourceAmount")
                         .HasPrecision(18, 2)
                         .HasColumnType("numeric(18,2)");
@@ -4049,6 +4126,8 @@ namespace KorridorX.Migrations
 
                     b.HasIndex("CustomerProfileId");
 
+                    b.HasIndex("IsComplianceHold");
+
                     b.HasIndex("ProviderReference");
 
                     b.HasIndex("ProviderTransferId");
@@ -4066,7 +4145,17 @@ namespace KorridorX.Migrations
 
                     b.HasIndex("TransferQuoteId");
 
+                    b.HasIndex("BusinessProfileId", "CreatedAt");
+
+                    b.HasIndex("CustomerProfileId", "CreatedAt");
+
+                    b.HasIndex("RiskDecision", "RiskLevel");
+
                     b.HasIndex("SourceCurrencyCode", "DestinationCurrencyCode");
+
+                    b.HasIndex("BusinessBeneficiaryId", "SourceAmount", "CreatedAt");
+
+                    b.HasIndex("RecipientId", "SourceAmount", "CreatedAt");
 
                     b.ToTable("Transfers");
                 });

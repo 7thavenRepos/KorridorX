@@ -1,14 +1,17 @@
+using KorridorX.Configuration;
 using System.Security.Claims;
 using KorridorX.Dtos.BusinessFunding;
 using KorridorX.Infrastructure;
 using KorridorX.Models.Enums;
 using KorridorX.Services.BusinessFunding;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.Mvc;
 
 namespace KorridorX.Controllers;
 
 [Authorize(Roles = "Admin,SuperAdmin,Operations")]
+[EnableRateLimiting(SecurityRateLimitPolicies.Sensitive)]
 [ApiController]
 [Route("api/admin/business-wallets")]
 public class AdminBusinessWalletsController : ControllerBase

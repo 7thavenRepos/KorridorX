@@ -31,7 +31,8 @@ public sealed class OperationalHealthService : IOperationalHealthService
                 new NotificationHealthDto(0, 0, 0, 0, 0),
                 new ProviderHealthDto(0, 0, 0, 0),
                 new WalletHealthDto(0, 0, 0),
-                new PaymentHealthDto(0, 0, 0));
+                new PaymentHealthDto(0, 0, 0),
+                new RiskHealthDto(0, 0, 0, 0));
         }
 
         var notifications = new NotificationHealthDto(
@@ -98,11 +99,18 @@ public sealed class OperationalHealthService : IOperationalHealthService
                 !x.IsDeleted && x.Status == CollectionStatus.RefundPending,
                 ct));
 
+        var risk = new RiskHealthDto(
+            await _db.AmlFlags.CountAsync(x => !x.IsDeleted && !x.IsResolved, ct),
+            await _db.AmlFlags.CountAsync(x => !x.IsDeleted && !x.IsResolved && x.IsBlocking, ct),
+            await _db.Transfers.CountAsync(x => !x.IsDeleted && x.IsComplianceHold, ct),
+            await _db.LoginHistories.CountAsync(x => !x.WasSuccessful && x.OccurredAt >= last24Hours, ct));
+
         var status = !connected
             ? "Critical"
             : notifications.DeadLetter > 0 ||
               provider.FailedWebhooks > 0 ||
-              wallets.InconsistentWallets > 0
+              wallets.InconsistentWallets > 0 ||
+              risk.BlockingFlags > 0
                 ? "Degraded"
                 : "Healthy";
 
@@ -113,7 +121,8 @@ public sealed class OperationalHealthService : IOperationalHealthService
             notifications,
             provider,
             wallets,
-            payments);
+            payments,
+            risk);
     }
 
     private Task<int> CountNotificationsAsync(string status, CancellationToken ct) =>

@@ -615,3 +615,53 @@ Authorization: Bearer {{accessToken}}
 ### Operational health
 GET {{KorridorX_HostAddress}}/api/admin/operations/health
 Authorization: Bearer {{accessToken}}
+
+### Active sessions
+GET {{KorridorX_HostAddress}}/api/auth/sessions
+Authorization: Bearer {{accessToken}}
+
+### Revoke one session
+DELETE {{KorridorX_HostAddress}}/api/auth/sessions/{{sessionId}}
+Authorization: Bearer {{accessToken}}
+
+### Revoke all refresh-token sessions
+POST {{KorridorX_HostAddress}}/api/auth/sessions/revoke-all
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "reason": "Security reset"
+}
+
+### Configure compliance limit
+POST {{KorridorX_HostAddress}}/api/admin/compliance/limits
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "customerType": 1,
+  "countryCode": "US",
+  "currencyCode": "USD",
+  "dailyLimit": 10000,
+  "monthlyLimit": 50000,
+  "perTransferLimit": 5000,
+  "isActive": true
+}
+
+### Open transfer risk flags
+GET {{KorridorX_HostAddress}}/api/admin/risk/flags?isResolved=false&page=1&pageSize=20
+Authorization: Bearer {{accessToken}}
+
+### Review and release a risk flag
+POST {{KorridorX_HostAddress}}/api/admin/risk/flags/{{amlFlagId}}/review
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "decision": 1,
+  "note": "Source of funds and transfer purpose were verified."
+}
+
+### Reassess transfer risk
+POST {{KorridorX_HostAddress}}/api/admin/risk/transfers/{{transferId}}/reassess
+Authorization: Bearer {{accessToken}}
