@@ -90,6 +90,9 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<Guid
     public DbSet<FxMarkupRule> FxMarkupRules => Set<FxMarkupRule>();
     public DbSet<SettlementBatch> SettlementBatches => Set<SettlementBatch>();
     public DbSet<SettlementBatchItem> SettlementBatchItems => Set<SettlementBatchItem>();
+    public DbSet<TreasuryRebalanceRequest> TreasuryRebalanceRequests => Set<TreasuryRebalanceRequest>();
+    public DbSet<SettlementStatementImport> SettlementStatementImports => Set<SettlementStatementImport>();
+    public DbSet<SettlementStatementItem> SettlementStatementItems => Set<SettlementStatementItem>();
 
     public DbSet<WebhookEvent> WebhookEvents => Set<WebhookEvent>();
     public DbSet<WebhookProcessingAttempt> WebhookProcessingAttempts => Set<WebhookProcessingAttempt>();

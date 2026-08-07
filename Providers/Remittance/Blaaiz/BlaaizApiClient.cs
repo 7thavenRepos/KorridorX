@@ -67,6 +67,26 @@ public class BlaaizApiClient : IBlaaizApiClient
             ct);
     }
 
+    public Task<BlaaizApiResult<BlaaizSwapResponse>> SwapBusinessWalletsAsync(
+        BlaaizSwapRequest request,
+        CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(request.FromBusinessWalletId) ||
+            string.IsNullOrWhiteSpace(request.ToBusinessWalletId))
+            throw new InvalidOperationException("Both provider wallet IDs are required for a swap.");
+
+        return SendAsync<BlaaizSwapRequest, BlaaizSwapResponse>(
+            HttpMethod.Post,
+            "/api/external/swap",
+            request,
+            JsonSerializer.Serialize(request, SerializerOptions),
+            null,
+            null,
+            null,
+            null,
+            ct);
+    }
+
     public Task<BlaaizApiResult<List<BlaaizBankData>>> ListBanksAsync(
         string? countryCode = null,
         string? currencyCode = null,

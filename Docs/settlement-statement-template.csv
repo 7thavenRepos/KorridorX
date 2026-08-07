@@ -1,0 +1,3 @@
+provider_transaction_id,provider_reference,transaction_type,direction,amount,currency,status,occurred_at
+txn_example_001,ref_example_001,COLLECTION,credit,1000.00,USD,SUCCESSFUL,2026-08-07T12:00:00Z
+txn_example_002,ref_example_002,PAYOUT,debit,250.00,USD,SUCCESSFUL,2026-08-07T13:00:00Z

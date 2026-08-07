@@ -20,4 +20,14 @@ public class TreasuryOptionsValidatorTests
         });
         Assert.True(result.Failed);
     }
+
+    [Fact]
+    public void Validate_SwapAmountBelowProviderMinimum_Fails()
+    {
+        var result = new TreasuryOptionsValidator().Validate(null, new TreasuryOptions
+        {
+            MinimumSwapAmount = 0.01m
+        });
+        Assert.True(result.Failed);
+    }
 }

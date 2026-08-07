@@ -13,4 +13,10 @@ public interface ITreasuryService
     Task<SettlementBatchDto> CreateSettlementBatchAsync(Guid userId, CreateSettlementBatchRequestDto request, CancellationToken ct = default);
     Task<SettlementBatchDto> ReconcileSettlementBatchAsync(Guid userId, Guid batchId, ReconcileSettlementBatchRequestDto request, CancellationToken ct = default);
     Task<PagedResult<SettlementBatchDto>> GetSettlementBatchesAsync(int page, int pageSize, CancellationToken ct = default);
+    Task<IReadOnlyList<TreasuryRebalanceSuggestionDto>> GetRebalanceSuggestionsAsync(CancellationToken ct = default);
+    Task<TreasuryRebalanceDto> CreateRebalanceAsync(Guid userId, CreateTreasuryRebalanceRequestDto request, CancellationToken ct = default);
+    Task<TreasuryRebalanceDto> ReviewRebalanceAsync(Guid userId, Guid rebalanceId, ReviewTreasuryRebalanceRequestDto request, CancellationToken ct = default);
+    Task<TreasuryRebalanceDto> ExecuteRebalanceAsync(Guid userId, Guid rebalanceId, CancellationToken ct = default);
+    Task<PagedResult<TreasuryRebalanceDto>> GetRebalancesAsync(int page, int pageSize, CancellationToken ct = default);
+    Task<SettlementStatementImportDto> ImportSettlementStatementAsync(Guid userId, Guid batchId, ImportSettlementStatementFormDto request, CancellationToken ct = default);
 }

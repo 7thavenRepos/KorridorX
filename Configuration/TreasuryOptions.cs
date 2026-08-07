@@ -10,6 +10,8 @@ public sealed class TreasuryOptions
     public int ProviderWalletStaleMinutes { get; set; } = 15;
     public int FxRateStaleMinutes { get; set; } = 60;
     public decimal SettlementVarianceTolerance { get; set; } = 0.01m;
+    public bool RebalanceApprovalRequired { get; set; } = true;
+    public decimal MinimumSwapAmount { get; set; } = 0.1m;
 }
 
 public sealed class TreasuryOptionsValidator : IValidateOptions<TreasuryOptions>
@@ -21,6 +23,7 @@ public sealed class TreasuryOptionsValidator : IValidateOptions<TreasuryOptions>
         if (options.ProviderWalletStaleMinutes < 1) errors.Add("Treasury:ProviderWalletStaleMinutes must be at least 1.");
         if (options.FxRateStaleMinutes < 1) errors.Add("Treasury:FxRateStaleMinutes must be at least 1.");
         if (options.SettlementVarianceTolerance < 0) errors.Add("Treasury:SettlementVarianceTolerance cannot be negative.");
+        if (options.MinimumSwapAmount < 0.1m) errors.Add("Treasury:MinimumSwapAmount must be at least 0.1.");
         return errors.Count == 0 ? ValidateOptionsResult.Success : ValidateOptionsResult.Fail(errors);
     }
 }

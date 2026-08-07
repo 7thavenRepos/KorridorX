@@ -150,3 +150,87 @@ public sealed class FxOperationsDashboardDto
     public int ActiveMarkupRuleCount { get; set; }
     public List<ManagedExchangeRateDto> Rates { get; set; } = new();
 }
+
+public sealed class CreateTreasuryRebalanceRequestDto
+{
+    public Guid FromProviderWalletBalanceId { get; set; }
+    public Guid ToProviderWalletBalanceId { get; set; }
+    [Range(0.1, double.MaxValue)] public decimal Amount { get; set; }
+    public TreasurySwapAmountType AmountType { get; set; } = TreasurySwapAmountType.From;
+    [MaxLength(1000)] public string? Reason { get; set; }
+}
+
+public sealed class ReviewTreasuryRebalanceRequestDto
+{
+    public bool Approve { get; set; }
+    [MaxLength(1000)] public string? Note { get; set; }
+}
+
+public sealed class TreasuryRebalanceDto
+{
+    public Guid Id { get; set; }
+    public string Reference { get; set; } = "";
+    public string ProviderCode { get; set; } = "";
+    public Guid FromProviderWalletBalanceId { get; set; }
+    public Guid ToProviderWalletBalanceId { get; set; }
+    public string FromCurrencyCode { get; set; } = "";
+    public string ToCurrencyCode { get; set; } = "";
+    public decimal RequestedAmount { get; set; }
+    public TreasurySwapAmountType AmountType { get; set; }
+    public TreasuryRebalanceStatus Status { get; set; }
+    public string? Reason { get; set; }
+    public Guid RequestedByUserId { get; set; }
+    public Guid? ApprovedByUserId { get; set; }
+    public Guid? RejectedByUserId { get; set; }
+    public string? RejectionReason { get; set; }
+    public string? ProviderSwapId { get; set; }
+    public string? ProviderTransactionId { get; set; }
+    public string? ProviderReference { get; set; }
+    public decimal? FromAmount { get; set; }
+    public decimal? FromAmountMinusFees { get; set; }
+    public decimal? ToAmount { get; set; }
+    public decimal? ExchangeRate { get; set; }
+    public decimal? CustomExchangeRate { get; set; }
+    public string? FailureReason { get; set; }
+    public DateTime CreatedAt { get; set; }
+    public DateTime? ApprovedAt { get; set; }
+    public DateTime? RejectedAt { get; set; }
+    public DateTime? ExecutedAt { get; set; }
+    public DateTime? FailedAt { get; set; }
+}
+
+public sealed class TreasuryRebalanceSuggestionDto
+{
+    public Guid FromProviderWalletBalanceId { get; set; }
+    public Guid ToProviderWalletBalanceId { get; set; }
+    public string ProviderCode { get; set; } = "";
+    public string FromCurrencyCode { get; set; } = "";
+    public string ToCurrencyCode { get; set; } = "";
+    public decimal SourceExcessAboveTarget { get; set; }
+    public decimal DestinationShortfallToTarget { get; set; }
+}
+
+public sealed class ImportSettlementStatementFormDto
+{
+    [Required] public Microsoft.AspNetCore.Http.IFormFile File { get; set; } = null!;
+    [MaxLength(2000)] public string? Note { get; set; }
+}
+
+public sealed class SettlementStatementImportDto
+{
+    public Guid Id { get; set; }
+    public Guid SettlementBatchId { get; set; }
+    public string ProviderCode { get; set; } = "";
+    public string CurrencyCode { get; set; } = "";
+    public string FileName { get; set; } = "";
+    public SettlementStatementImportStatus Status { get; set; }
+    public int RowCount { get; set; }
+    public int MatchedRowCount { get; set; }
+    public int UnmatchedRowCount { get; set; }
+    public decimal GrossCredits { get; set; }
+    public decimal GrossDebits { get; set; }
+    public decimal NetAmount { get; set; }
+    public decimal? VarianceAmount { get; set; }
+    public string? Note { get; set; }
+    public DateTime ImportedAt { get; set; }
+}

@@ -11,6 +11,10 @@ public interface IBlaaizApiClient
         string providerWalletId,
         CancellationToken ct = default);
 
+    Task<BlaaizApiResult<BlaaizSwapResponse>> SwapBusinessWalletsAsync(
+        BlaaizSwapRequest request,
+        CancellationToken ct = default);
+
 
     Task<BlaaizApiResult<List<BlaaizBankData>>> ListBanksAsync(
         string? countryCode = null,

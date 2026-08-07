@@ -19,6 +19,7 @@ using KorridorX.Services.Notifications;
 using KorridorX.Services.Operations;
 using KorridorX.Services.Compliance;
 using KorridorX.Services.Customers;
+using KorridorX.Services.Finance;
 using KorridorX.Services.Fx;
 using KorridorX.Services.Payments;
 using KorridorX.Services.Recipients;
@@ -265,6 +266,7 @@ builder.Services.AddScoped<IOperationalHealthService, OperationalHealthService>(
 builder.Services.AddScoped<IBusinessContextAccessor, HttpBusinessContextAccessor>();
 builder.Services.AddScoped<ITransferQuoteService, TransferQuoteService>();
 builder.Services.AddScoped<IFxOperationsService, FxOperationsService>();
+builder.Services.AddScoped<IFinanceReportingService, FinanceReportingService>();
 builder.Services.AddScoped<ITreasuryService, TreasuryService>();
 builder.Services.AddScoped<ITransferStatusService, TransferStatusService>();
 builder.Services.AddScoped<ITransferService, TransferService>();

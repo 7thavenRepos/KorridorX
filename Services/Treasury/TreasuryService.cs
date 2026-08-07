@@ -1,3 +1,6 @@
+using KorridorX.Providers.Remittance.Blaaiz.Models;
+using System.Text;
+using System.Security.Cryptography;
 using KorridorX.Configuration;
 using KorridorX.Data;
 using KorridorX.Dtos.Audit;
@@ -349,6 +352,363 @@ public sealed class TreasuryService : ITreasuryService
         };
     }
 
+    public async Task<IReadOnlyList<TreasuryRebalanceSuggestionDto>> GetRebalanceSuggestionsAsync(CancellationToken ct = default)
+    {
+        var wallets = await _db.ProviderWalletBalances.AsNoTracking()
+            .Where(x => !x.IsDeleted && x.IsActive)
+            .ToListAsync(ct);
+        var thresholds = await GetThresholdMapAsync(ct);
+
+        var sources = wallets
+            .Select(x => new { Wallet = x, Threshold = thresholds.GetValueOrDefault(Key(x.ProviderCode, x.CurrencyCode)) })
+            .Where(x => x.Threshold is not null && x.Wallet.Balance > x.Threshold.TargetBalance)
+            .ToList();
+
+        var destinations = wallets
+            .Select(x => new { Wallet = x, Threshold = thresholds.GetValueOrDefault(Key(x.ProviderCode, x.CurrencyCode)) })
+            .Where(x => x.Threshold is not null && x.Wallet.Balance < x.Threshold.TargetBalance)
+            .ToList();
+
+        var suggestions = new List<TreasuryRebalanceSuggestionDto>();
+        foreach (var destination in destinations)
+        {
+            var source = sources
+                .Where(x => x.Wallet.ProviderCode.Equals(destination.Wallet.ProviderCode, StringComparison.OrdinalIgnoreCase)
+                    && !x.Wallet.CurrencyCode.Equals(destination.Wallet.CurrencyCode, StringComparison.OrdinalIgnoreCase)
+                    && (string.IsNullOrWhiteSpace(x.Wallet.ProviderBusinessId)
+                        || string.IsNullOrWhiteSpace(destination.Wallet.ProviderBusinessId)
+                        || x.Wallet.ProviderBusinessId == destination.Wallet.ProviderBusinessId))
+                .OrderByDescending(x => x.Wallet.Balance - x.Threshold!.TargetBalance)
+                .FirstOrDefault();
+
+            if (source is null) continue;
+            suggestions.Add(new TreasuryRebalanceSuggestionDto
+            {
+                FromProviderWalletBalanceId = source.Wallet.Id,
+                ToProviderWalletBalanceId = destination.Wallet.Id,
+                ProviderCode = source.Wallet.ProviderCode,
+                FromCurrencyCode = source.Wallet.CurrencyCode,
+                ToCurrencyCode = destination.Wallet.CurrencyCode,
+                SourceExcessAboveTarget = source.Wallet.Balance - source.Threshold!.TargetBalance,
+                DestinationShortfallToTarget = destination.Threshold!.TargetBalance - destination.Wallet.Balance
+            });
+        }
+
+        return suggestions;
+    }
+
+    public async Task<TreasuryRebalanceDto> CreateRebalanceAsync(
+        Guid userId,
+        CreateTreasuryRebalanceRequestDto request,
+        CancellationToken ct = default)
+    {
+        if (request.FromProviderWalletBalanceId == request.ToProviderWalletBalanceId)
+            throw new InvalidOperationException("Source and destination provider wallets must be different.");
+        if (request.Amount < _options.MinimumSwapAmount)
+            throw new InvalidOperationException($"Swap amount must be at least {_options.MinimumSwapAmount:0.##}.");
+        if (decimal.Round(request.Amount, 2) != request.Amount)
+            throw new InvalidOperationException("Swap amount supports a maximum of two decimal places.");
+
+        var fromWallet = await _db.ProviderWalletBalances.FirstOrDefaultAsync(x =>
+            x.Id == request.FromProviderWalletBalanceId && !x.IsDeleted, ct)
+            ?? throw new InvalidOperationException("Source provider wallet not found.");
+        var toWallet = await _db.ProviderWalletBalances.FirstOrDefaultAsync(x =>
+            x.Id == request.ToProviderWalletBalanceId && !x.IsDeleted, ct)
+            ?? throw new InvalidOperationException("Destination provider wallet not found.");
+
+        if (!fromWallet.IsActive || !toWallet.IsActive)
+            throw new InvalidOperationException("Both provider wallets must be active.");
+        if (!fromWallet.ProviderCode.Equals(toWallet.ProviderCode, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("Provider wallet swaps must use wallets from the same provider.");
+        if (!fromWallet.ProviderCode.Equals("Blaaiz", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("Live treasury swaps are currently implemented only for Blaaiz provider wallets.");
+        if (fromWallet.CurrencyCode.Equals(toWallet.CurrencyCode, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("Provider wallet swaps require different currencies.");
+        if (!string.IsNullOrWhiteSpace(fromWallet.ProviderBusinessId) &&
+            !string.IsNullOrWhiteSpace(toWallet.ProviderBusinessId) &&
+            fromWallet.ProviderBusinessId != toWallet.ProviderBusinessId)
+            throw new InvalidOperationException("Provider wallets must belong to the same provider business.");
+        if (request.AmountType == TreasurySwapAmountType.From && fromWallet.Balance < request.Amount)
+            throw new InvalidOperationException("Source provider wallet does not have enough synchronized balance for this swap.");
+
+        var entity = new TreasuryRebalanceRequest
+        {
+            Reference = GenerateRebalanceReference(),
+            ProviderCode = fromWallet.ProviderCode,
+            FromProviderWalletBalanceId = fromWallet.Id,
+            ToProviderWalletBalanceId = toWallet.Id,
+            FromCurrencyCode = fromWallet.CurrencyCode,
+            ToCurrencyCode = toWallet.CurrencyCode,
+            RequestedAmount = request.Amount,
+            AmountType = request.AmountType,
+            Status = _options.RebalanceApprovalRequired ? TreasuryRebalanceStatus.PendingApproval : TreasuryRebalanceStatus.Approved,
+            Reason = CleanNullable(request.Reason, 1000),
+            RequestedByUserId = userId,
+            CreatedByUserId = userId
+        };
+
+        if (!_options.RebalanceApprovalRequired)
+        {
+            entity.ApprovedByUserId = userId;
+            entity.ApprovedAt = DateTime.UtcNow;
+        }
+
+        _db.TreasuryRebalanceRequests.Add(entity);
+        await _db.SaveChangesAsync(ct);
+        await _audit.RecordAsync(new AuditRecordRequest(
+            "TreasuryRebalanceRequested", "Treasury", nameof(TreasuryRebalanceRequest), entity.Id.ToString(),
+            NewValues: new { entity.Reference, entity.FromCurrencyCode, entity.ToCurrencyCode, entity.RequestedAmount, entity.AmountType, entity.Status },
+            UserId: userId), ct);
+
+        return ToRebalanceDto(entity);
+    }
+
+    public async Task<TreasuryRebalanceDto> ReviewRebalanceAsync(
+        Guid userId,
+        Guid rebalanceId,
+        ReviewTreasuryRebalanceRequestDto request,
+        CancellationToken ct = default)
+    {
+        var entity = await _db.TreasuryRebalanceRequests.FirstOrDefaultAsync(x => x.Id == rebalanceId && !x.IsDeleted, ct)
+            ?? throw new InvalidOperationException("Treasury rebalance request not found.");
+        if (entity.Status != TreasuryRebalanceStatus.PendingApproval)
+            throw new InvalidOperationException("Only pending treasury rebalances can be reviewed.");
+        if (entity.RequestedByUserId == userId)
+            throw new InvalidOperationException("The user who requested a treasury rebalance cannot approve or reject the same request.");
+
+        if (request.Approve)
+        {
+            entity.Status = TreasuryRebalanceStatus.Approved;
+            entity.ApprovedByUserId = userId;
+            entity.ApprovedAt = DateTime.UtcNow;
+        }
+        else
+        {
+            if (string.IsNullOrWhiteSpace(request.Note))
+                throw new InvalidOperationException("A rejection reason is required.");
+            entity.Status = TreasuryRebalanceStatus.Rejected;
+            entity.RejectedByUserId = userId;
+            entity.RejectedAt = DateTime.UtcNow;
+            entity.RejectionReason = CleanNullable(request.Note, 1000);
+        }
+
+        entity.LastUpdatedAt = DateTime.UtcNow;
+        entity.LastUpdatedByUserId = userId;
+        await _db.SaveChangesAsync(ct);
+        await _audit.RecordAsync(new AuditRecordRequest(
+            request.Approve ? "TreasuryRebalanceApproved" : "TreasuryRebalanceRejected",
+            "Treasury", nameof(TreasuryRebalanceRequest), entity.Id.ToString(),
+            NewValues: new { entity.Status, Note = request.Note }, UserId: userId), ct);
+        return ToRebalanceDto(entity);
+    }
+
+    public async Task<TreasuryRebalanceDto> ExecuteRebalanceAsync(
+        Guid userId,
+        Guid rebalanceId,
+        CancellationToken ct = default)
+    {
+        var entity = await _db.TreasuryRebalanceRequests
+            .Include(x => x.FromProviderWalletBalance)
+            .Include(x => x.ToProviderWalletBalance)
+            .FirstOrDefaultAsync(x => x.Id == rebalanceId && !x.IsDeleted, ct)
+            ?? throw new InvalidOperationException("Treasury rebalance request not found.");
+        if (entity.Status != TreasuryRebalanceStatus.Approved && entity.Status != TreasuryRebalanceStatus.Failed)
+            throw new InvalidOperationException("Only approved or previously failed treasury rebalances can be executed.");
+        if (!entity.FromProviderWalletBalance.IsActive || !entity.ToProviderWalletBalance.IsActive)
+            throw new InvalidOperationException("Both provider wallets must be active before execution.");
+
+        entity.Status = TreasuryRebalanceStatus.Executing;
+        entity.FailureReason = null;
+        entity.LastUpdatedAt = DateTime.UtcNow;
+        entity.LastUpdatedByUserId = userId;
+        await _db.SaveChangesAsync(ct);
+
+        try
+        {
+            var result = await _blaaiz.SwapBusinessWalletsAsync(new BlaaizSwapRequest
+            {
+                FromBusinessWalletId = entity.FromProviderWalletBalance.ProviderWalletId,
+                ToBusinessWalletId = entity.ToProviderWalletBalance.ProviderWalletId,
+                Amount = entity.RequestedAmount,
+                AmountType = entity.AmountType == TreasurySwapAmountType.To ? "to" : "from"
+            }, ct);
+
+            var swap = result.Data.BusinessSwapTransaction;
+            if (!swap.Status.Equals("SUCCESSFUL", StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException($"Blaaiz returned swap status '{swap.Status}'.");
+
+            entity.ProviderSwapId = swap.Id;
+            entity.ProviderTransactionId = swap.BusinessTransactionId;
+            entity.ProviderReference = swap.Reference;
+            entity.FromAmount = swap.FromAmount;
+            entity.FromAmountMinusFees = swap.FromAmountMinusFees;
+            entity.ToAmount = swap.ToAmount;
+            entity.ExchangeRate = swap.FromExchangeRate;
+            entity.CustomExchangeRate = swap.CustomExchangeRate;
+            entity.Status = TreasuryRebalanceStatus.Completed;
+            entity.ExecutedAt = DateTime.UtcNow;
+            entity.LastUpdatedAt = DateTime.UtcNow;
+
+            entity.FromProviderWalletBalance.Balance = Math.Max(0m, entity.FromProviderWalletBalance.Balance - swap.FromAmount);
+            entity.ToProviderWalletBalance.Balance += swap.ToAmount;
+            entity.FromProviderWalletBalance.LastSyncedAt = DateTime.UtcNow;
+            entity.ToProviderWalletBalance.LastSyncedAt = DateTime.UtcNow;
+            entity.FromProviderWalletBalance.LastUpdatedAt = DateTime.UtcNow;
+            entity.ToProviderWalletBalance.LastUpdatedAt = DateTime.UtcNow;
+            await _db.SaveChangesAsync(ct);
+
+            await _audit.RecordAsync(new AuditRecordRequest(
+                "TreasuryRebalanceExecuted", "Treasury", nameof(TreasuryRebalanceRequest), entity.Id.ToString(),
+                NewValues: new { entity.ProviderSwapId, entity.ProviderTransactionId, entity.FromAmount, entity.ToAmount, entity.ExchangeRate },
+                UserId: userId), ct);
+            return ToRebalanceDto(entity);
+        }
+        catch (Exception ex)
+        {
+            entity.Status = TreasuryRebalanceStatus.Failed;
+            entity.FailedAt = DateTime.UtcNow;
+            entity.FailureReason = CleanNullable(ex.Message, 2000);
+            entity.LastUpdatedAt = DateTime.UtcNow;
+            entity.LastUpdatedByUserId = userId;
+            await _db.SaveChangesAsync(CancellationToken.None);
+            throw;
+        }
+    }
+
+    public async Task<PagedResult<TreasuryRebalanceDto>> GetRebalancesAsync(
+        int page,
+        int pageSize,
+        CancellationToken ct = default)
+    {
+        var paged = await _db.TreasuryRebalanceRequests.AsNoTracking()
+            .Where(x => !x.IsDeleted)
+            .OrderByDescending(x => x.CreatedAt)
+            .PaginateAsync(page, pageSize, ct);
+        return new PagedResult<TreasuryRebalanceDto>
+        {
+            Meta = paged.Meta,
+            Items = paged.Items.Select(ToRebalanceDto).ToList()
+        };
+    }
+
+    public async Task<SettlementStatementImportDto> ImportSettlementStatementAsync(
+        Guid userId,
+        Guid batchId,
+        ImportSettlementStatementFormDto request,
+        CancellationToken ct = default)
+    {
+        if (request.File is null || request.File.Length == 0)
+            throw new InvalidOperationException("A settlement statement CSV file is required.");
+        if (request.File.Length > 10 * 1024 * 1024)
+            throw new InvalidOperationException("Settlement statement file cannot exceed 10 MB.");
+        if (!Path.GetExtension(request.File.FileName).Equals(".csv", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("Settlement statement must be a CSV file.");
+
+        var batch = await _db.SettlementBatches
+            .Include(x => x.Items).ThenInclude(x => x.ProviderTransaction)
+            .FirstOrDefaultAsync(x => x.Id == batchId && !x.IsDeleted, ct)
+            ?? throw new InvalidOperationException("Settlement batch not found.");
+
+        await using var memory = new MemoryStream();
+        await request.File.CopyToAsync(memory, ct);
+        var bytes = memory.ToArray();
+        var fileHash = Convert.ToHexString(SHA256.HashData(bytes));
+        if (await _db.SettlementStatementImports.AnyAsync(x => x.ProviderCode == batch.ProviderCode && x.FileHash == fileHash && !x.IsDeleted, ct))
+            throw new InvalidOperationException("This settlement statement has already been imported.");
+
+        memory.Position = 0;
+        using var reader = new StreamReader(memory, Encoding.UTF8, detectEncodingFromByteOrderMarks: true, bufferSize: 1024, leaveOpen: true);
+        var headerLine = await reader.ReadLineAsync(ct) ?? throw new InvalidOperationException("Settlement statement is empty.");
+        var headers = ParseCsvLine(headerLine).Select((x, i) => new { Name = x.Trim().ToLowerInvariant(), Index = i })
+            .ToDictionary(x => x.Name, x => x.Index, StringComparer.OrdinalIgnoreCase);
+        foreach (var required in new[] { "provider_transaction_id", "direction", "amount", "currency" })
+            if (!headers.ContainsKey(required)) throw new InvalidOperationException($"Settlement statement is missing required column '{required}'.");
+
+        var batchTransactions = batch.Items.ToDictionary(x => x.ProviderTransaction.ProviderTransactionId, StringComparer.OrdinalIgnoreCase);
+        var import = new SettlementStatementImport
+        {
+            SettlementBatchId = batch.Id,
+            ProviderCode = batch.ProviderCode,
+            CurrencyCode = batch.CurrencyCode,
+            FileName = Path.GetFileName(request.File.FileName),
+            FileHash = fileHash,
+            Note = CleanNullable(request.Note, 2000),
+            ImportedAt = DateTime.UtcNow,
+            CreatedByUserId = userId
+        };
+
+        var rowNumber = 1;
+        while (await reader.ReadLineAsync(ct) is { } line)
+        {
+            rowNumber++;
+            if (string.IsNullOrWhiteSpace(line)) continue;
+            var values = ParseCsvLine(line);
+            string Get(string name) => headers[name] < values.Count ? values[headers[name]].Trim() : "";
+            string? GetOptional(string name) => headers.TryGetValue(name, out var idx) && idx < values.Count && !string.IsNullOrWhiteSpace(values[idx]) ? values[idx].Trim() : null;
+
+            var providerTransactionId = Get("provider_transaction_id");
+            if (string.IsNullOrWhiteSpace(providerTransactionId)) throw new InvalidOperationException($"Row {rowNumber}: provider_transaction_id is required.");
+            if (!decimal.TryParse(Get("amount"), System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture, out var amount) || amount < 0)
+                throw new InvalidOperationException($"Row {rowNumber}: amount is invalid.");
+            var currency = NormalizeCode(Get("currency"));
+            if (currency != batch.CurrencyCode) throw new InvalidOperationException($"Row {rowNumber}: currency '{currency}' does not match settlement batch currency '{batch.CurrencyCode}'.");
+            var directionText = Get("direction").ToLowerInvariant();
+            var direction = directionText is "credit" or "inflow" ? SettlementDirection.Inflow
+                : directionText is "debit" or "outflow" ? SettlementDirection.Outflow
+                : throw new InvalidOperationException($"Row {rowNumber}: direction must be credit/inflow or debit/outflow.");
+
+            batchTransactions.TryGetValue(providerTransactionId, out var matchedBatchItem);
+            DateTime? occurredAt = null;
+            var occurredText = GetOptional("occurred_at");
+            if (!string.IsNullOrWhiteSpace(occurredText) && DateTimeOffset.TryParse(occurredText, out var parsedOccurred))
+                occurredAt = parsedOccurred.UtcDateTime;
+
+            var item = new SettlementStatementItem
+            {
+                RowNumber = rowNumber,
+                ProviderTransactionId = providerTransactionId,
+                ProviderReference = GetOptional("provider_reference"),
+                TransactionType = GetOptional("transaction_type") ?? "",
+                Direction = direction,
+                Amount = amount,
+                CurrencyCode = currency,
+                ProviderStatus = GetOptional("status"),
+                OccurredAt = occurredAt,
+                IsMatched = matchedBatchItem is not null,
+                ProviderTransactionRowId = matchedBatchItem?.ProviderTransactionRowId
+            };
+            import.Items.Add(item);
+            if (direction == SettlementDirection.Inflow) import.GrossCredits += amount;
+            else import.GrossDebits += amount;
+        }
+
+        if (import.Items.Count == 0) throw new InvalidOperationException("Settlement statement contains no transaction rows.");
+        import.RowCount = import.Items.Count;
+        import.MatchedRowCount = import.Items.Count(x => x.IsMatched);
+        import.UnmatchedRowCount = import.RowCount - import.MatchedRowCount;
+        import.NetAmount = import.GrossCredits - import.GrossDebits;
+        import.VarianceAmount = import.NetAmount - batch.ExpectedNetAmount;
+        import.Status = import.UnmatchedRowCount == 0 && Math.Abs(import.VarianceAmount.Value) <= _options.SettlementVarianceTolerance
+            ? SettlementStatementImportStatus.Reconciled
+            : SettlementStatementImportStatus.Variance;
+
+        batch.ActualNetAmount = import.NetAmount;
+        batch.VarianceAmount = import.VarianceAmount;
+        batch.ReconciliationNote = CleanNullable(request.Note, 2000);
+        batch.ReconciledAt = DateTime.UtcNow;
+        batch.Status = import.Status == SettlementStatementImportStatus.Reconciled ? SettlementBatchStatus.Reconciled : SettlementBatchStatus.Variance;
+        batch.LastUpdatedAt = DateTime.UtcNow;
+        batch.LastUpdatedByUserId = userId;
+
+        _db.SettlementStatementImports.Add(import);
+        await _db.SaveChangesAsync(ct);
+        await _audit.RecordAsync(new AuditRecordRequest(
+            "SettlementStatementImported", "Treasury", nameof(SettlementStatementImport), import.Id.ToString(),
+            NewValues: new { import.FileName, import.RowCount, import.MatchedRowCount, import.UnmatchedRowCount, import.NetAmount, import.VarianceAmount, import.Status },
+            Metadata: new { SettlementBatchId = batch.Id, batch.Reference }, UserId: userId), ct);
+        return ToStatementImportDto(import);
+    }
+
     private async Task<SettlementBatchDto> LoadBatchDtoAsync(Guid id, CancellationToken ct)
     {
         var batch = await _db.SettlementBatches.AsNoTracking()
@@ -431,5 +791,55 @@ public sealed class TreasuryService : ITreasuryService
     private static string NormalizeCode(string value) => Clean(value, 10).ToUpperInvariant();
     private static string Clean(string value, int max) => string.IsNullOrWhiteSpace(value) ? throw new InvalidOperationException("A required value was not supplied.") : value.Trim()[..Math.Min(value.Trim().Length, max)];
     private static string? CleanNullable(string? value, int max) => string.IsNullOrWhiteSpace(value) ? null : value.Trim()[..Math.Min(value.Trim().Length, max)];
+    private static TreasuryRebalanceDto ToRebalanceDto(TreasuryRebalanceRequest x) => new()
+    {
+        Id = x.Id, Reference = x.Reference, ProviderCode = x.ProviderCode,
+        FromProviderWalletBalanceId = x.FromProviderWalletBalanceId, ToProviderWalletBalanceId = x.ToProviderWalletBalanceId,
+        FromCurrencyCode = x.FromCurrencyCode, ToCurrencyCode = x.ToCurrencyCode, RequestedAmount = x.RequestedAmount,
+        AmountType = x.AmountType, Status = x.Status, Reason = x.Reason, RequestedByUserId = x.RequestedByUserId,
+        ApprovedByUserId = x.ApprovedByUserId, RejectedByUserId = x.RejectedByUserId, RejectionReason = x.RejectionReason,
+        ProviderSwapId = x.ProviderSwapId, ProviderTransactionId = x.ProviderTransactionId, ProviderReference = x.ProviderReference,
+        FromAmount = x.FromAmount, FromAmountMinusFees = x.FromAmountMinusFees, ToAmount = x.ToAmount,
+        ExchangeRate = x.ExchangeRate, CustomExchangeRate = x.CustomExchangeRate, FailureReason = x.FailureReason,
+        CreatedAt = x.CreatedAt, ApprovedAt = x.ApprovedAt, RejectedAt = x.RejectedAt, ExecutedAt = x.ExecutedAt, FailedAt = x.FailedAt
+    };
+
+    private static SettlementStatementImportDto ToStatementImportDto(SettlementStatementImport x) => new()
+    {
+        Id = x.Id, SettlementBatchId = x.SettlementBatchId, ProviderCode = x.ProviderCode, CurrencyCode = x.CurrencyCode,
+        FileName = x.FileName, Status = x.Status, RowCount = x.RowCount, MatchedRowCount = x.MatchedRowCount,
+        UnmatchedRowCount = x.UnmatchedRowCount, GrossCredits = x.GrossCredits, GrossDebits = x.GrossDebits,
+        NetAmount = x.NetAmount, VarianceAmount = x.VarianceAmount, Note = x.Note, ImportedAt = x.ImportedAt
+    };
+
+    private static List<string> ParseCsvLine(string line)
+    {
+        var result = new List<string>();
+        var current = new StringBuilder();
+        var quoted = false;
+        for (var i = 0; i < line.Length; i++)
+        {
+            var ch = line[i];
+            if (ch == '"')
+            {
+                if (quoted && i + 1 < line.Length && line[i + 1] == '"')
+                {
+                    current.Append('"');
+                    i++;
+                }
+                else quoted = !quoted;
+            }
+            else if (ch == ',' && !quoted)
+            {
+                result.Add(current.ToString());
+                current.Clear();
+            }
+            else current.Append(ch);
+        }
+        result.Add(current.ToString());
+        return result;
+    }
+
+    private static string GenerateRebalanceReference() => $"KXREB-{DateTime.UtcNow:yyyyMMdd}-{Random.Shared.Next(100000, 999999)}";
     private static string GenerateSettlementReference() => $"KXSET-{DateTime.UtcNow:yyyyMMdd}-{Random.Shared.Next(100000, 999999)}";
 }

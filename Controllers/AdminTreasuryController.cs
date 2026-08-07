@@ -56,6 +56,35 @@ public sealed class AdminTreasuryController : ControllerBase
     public async Task<IActionResult> ReconcileSettlement(Guid batchId, [FromBody] ReconcileSettlementBatchRequestDto request, CancellationToken ct) =>
         Ok(ApiResponses.Ok(await _service.ReconcileSettlementBatchAsync(GetUserId(), batchId, request, ct), "Settlement batch reconciled successfully."));
 
+
+    [HttpGet("rebalancing/suggestions")]
+    public async Task<IActionResult> RebalanceSuggestions(CancellationToken ct) =>
+        Ok(ApiResponses.Ok(await _service.GetRebalanceSuggestionsAsync(ct), "Treasury rebalance suggestions retrieved successfully."));
+
+    [HttpGet("rebalancing")]
+    public async Task<IActionResult> Rebalances([FromQuery] int page = 1, [FromQuery] int pageSize = 20, CancellationToken ct = default)
+    {
+        var result = await _service.GetRebalancesAsync(page, pageSize, ct);
+        return Ok(ApiResponses.OkPaged(result.Items, result.Meta, "Treasury rebalances retrieved successfully."));
+    }
+
+    [HttpPost("rebalancing")]
+    public async Task<IActionResult> CreateRebalance([FromBody] CreateTreasuryRebalanceRequestDto request, CancellationToken ct) =>
+        Ok(ApiResponses.Ok(await _service.CreateRebalanceAsync(GetUserId(), request, ct), "Treasury rebalance request created successfully."));
+
+    [HttpPost("rebalancing/{rebalanceId:guid}/review")]
+    public async Task<IActionResult> ReviewRebalance(Guid rebalanceId, [FromBody] ReviewTreasuryRebalanceRequestDto request, CancellationToken ct) =>
+        Ok(ApiResponses.Ok(await _service.ReviewRebalanceAsync(GetUserId(), rebalanceId, request, ct), request.Approve ? "Treasury rebalance approved successfully." : "Treasury rebalance rejected successfully."));
+
+    [HttpPost("rebalancing/{rebalanceId:guid}/execute")]
+    public async Task<IActionResult> ExecuteRebalance(Guid rebalanceId, CancellationToken ct) =>
+        Ok(ApiResponses.Ok(await _service.ExecuteRebalanceAsync(GetUserId(), rebalanceId, ct), "Treasury rebalance executed successfully."));
+
+    [HttpPost("settlements/{batchId:guid}/statement")]
+    [Consumes("multipart/form-data")]
+    public async Task<IActionResult> ImportStatement(Guid batchId, [FromForm] ImportSettlementStatementFormDto request, CancellationToken ct) =>
+        Ok(ApiResponses.Ok(await _service.ImportSettlementStatementAsync(GetUserId(), batchId, request, ct), "Settlement statement imported successfully."));
+
     private Guid GetUserId()
     {
         var value = User.FindFirstValue(ClaimTypes.NameIdentifier);

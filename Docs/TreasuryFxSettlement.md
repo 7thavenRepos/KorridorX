@@ -25,3 +25,41 @@ Settlement batches group successful provider transactions once only, by provider
 Reconciliation requires the actual net amount from the provider statement or treasury report. Variances within `Treasury:SettlementVarianceTolerance` are marked Reconciled; larger differences are marked Variance for operational review.
 
 No settlement batch posts accounting entries or moves provider money automatically.
+
+## Treasury rebalancing and provider swaps
+
+Treasury operators can create a controlled rebalancing request between two synchronized provider wallets. When `Treasury:RebalanceApprovalRequired` is enabled, the request must be approved by a different authenticated operator before it can be executed.
+
+Endpoints:
+
+- `GET /api/admin/treasury/rebalancing/suggestions`
+- `GET /api/admin/treasury/rebalancing`
+- `POST /api/admin/treasury/rebalancing`
+- `POST /api/admin/treasury/rebalancing/{id}/review`
+- `POST /api/admin/treasury/rebalancing/{id}/execute`
+
+Blaaiz swaps are submitted to `POST /api/external/swap` using the OAuth `swap:create` scope. KorridorX stores the provider swap ID, provider transaction ID, source amount, destination amount, exchange rate and provider reference for audit and treasury reporting.
+
+## Settlement statement imports
+
+A settlement batch can be reconciled against a CSV statement using:
+
+`POST /api/admin/treasury/settlements/{batchId}/statement`
+
+The multipart form contains a `file` and optional `note`. Required CSV columns are:
+
+`provider_transaction_id,direction,amount,currency`
+
+Optional columns are:
+
+`provider_reference,transaction_type,status,occurred_at`
+
+The statement file is SHA-256 hashed to prevent duplicate imports. KorridorX reports matched and unmatched rows and marks the batch as `Variance` when transactions do not match or the net difference exceeds `Treasury:SettlementVarianceTolerance`.
+
+A sample file is available at `Docs/settlement-statement-template.csv`.
+
+## Finance reporting
+
+Operations can retrieve a finance summary through `GET /api/admin/finance/summary` and export corridor-level CSV data through `GET /api/admin/finance/corridors.csv`.
+
+The `IndicativeSpreadValue` is an operational estimate calculated from the stored provider/customer rates. It is not presented as realized accounting profit because provider fees and other settlement costs may not yet be available in a normalized form.
