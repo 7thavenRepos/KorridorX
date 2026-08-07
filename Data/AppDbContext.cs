@@ -73,6 +73,10 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<Guid
     public DbSet<ComplianceCase> ComplianceCases => Set<ComplianceCase>();
     public DbSet<ComplianceCaseNote> ComplianceCaseNotes => Set<ComplianceCaseNote>();
     public DbSet<ComplianceCaseEvidence> ComplianceCaseEvidence => Set<ComplianceCaseEvidence>();
+    public DbSet<RegulatoryReport> RegulatoryReports => Set<RegulatoryReport>();
+    public DbSet<DataRetentionPolicy> DataRetentionPolicies => Set<DataRetentionPolicy>();
+    public DbSet<LegalHold> LegalHolds => Set<LegalHold>();
+    public DbSet<RetentionExecutionLog> RetentionExecutionLogs => Set<RetentionExecutionLog>();
 
     public DbSet<PaymentProvider> PaymentProviders => Set<PaymentProvider>();
     public DbSet<ProviderCustomer> ProviderCustomers => Set<ProviderCustomer>();

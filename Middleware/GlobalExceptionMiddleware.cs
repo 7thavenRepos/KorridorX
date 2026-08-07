@@ -125,13 +125,23 @@ public class GlobalExceptionMiddleware
         context.Response.ContentType = "application/json";
         context.Response.StatusCode = (int)statusCode;
 
-        var responseDetails = details is null
-            ? new { correlationId = context.TraceIdentifier }
-            : new
+        object responseDetails;
+
+        if (details is null)
+        {
+            responseDetails = new
+            {
+                correlationId = context.TraceIdentifier
+            };
+        }
+        else
+        {
+            responseDetails = new
             {
                 correlationId = context.TraceIdentifier,
                 context = details
             };
+        }
 
         var response = ApiResponses.Fail(message, code, responseDetails);
 

@@ -11,10 +11,9 @@ namespace KorridorX.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.Sql(
-                """
-                DROP INDEX IF EXISTS "IX_WebhookEvents_ProviderEventId";
-                """);
+            migrationBuilder.DropIndex(
+                name: "IX_WebhookEvents_ProviderEventId",
+                table: "WebhookEvents");
 
             migrationBuilder.AddColumn<string>(
                 name: "TimestampHeader",

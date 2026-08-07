@@ -38,3 +38,26 @@ ComplianceScreening__RescreeningBatchSize=50
 
 The built-in `ConfiguredWatchlistScreeningProvider` is intended for development and controlled testing. Production should register a maintained vendor-backed `ISanctionsScreeningProvider`. Production startup rejects an enabled empty configured watchlist.
 ComplianceScreening__BlockDeclaredPep=true
+
+## OpenSanctions screening
+
+```text
+ComplianceScreening__IsEnabled=true
+ComplianceScreening__ProviderCode=OpenSanctions
+OpenSanctions__IsEnabled=true
+OpenSanctions__ApiKey=<secret>
+OpenSanctions__BaseUrl=https://api.opensanctions.org
+OpenSanctions__Dataset=default
+```
+
+Do not store the API key in source-controlled JSON files. Keep `OpenSanctions__BlockPepMatches=false` unless the approved compliance policy explicitly requires an automatic PEP hold; PEP results should normally enter human review.
+
+## Data retention
+
+```text
+DataRetention__WorkerEnabled=false
+DataRetention__IntervalHours=24
+DataRetention__BatchSize=250
+```
+
+Keep the worker disabled until retention policies have been reviewed by legal and compliance teams. Start with `ReviewOnly` policies and dry-run executions.

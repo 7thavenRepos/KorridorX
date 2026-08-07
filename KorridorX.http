@@ -698,3 +698,29 @@ Content-Type: application/json
   "externalReference": "CASE-REFERENCE",
   "metadataJson": "{\"reviewed\":true}"
 }
+
+### Compliance management summary
+GET {{KorridorX_HostAddress}}/api/admin/compliance/management-summary
+Authorization: Bearer {{token}}
+
+### Create regulatory report draft
+POST {{KorridorX_HostAddress}}/api/admin/compliance/cases/{{complianceCaseId}}/regulatory-reports
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "reportType": 1,
+  "jurisdictionCode": "US",
+  "regulatoryAuthority": "Configured authority",
+  "narrative": "Internal regulatory report narrative.",
+  "suspicionReason": "Summary of the observed suspicious activity.",
+  "activityStartedAt": "2026-08-01T00:00:00Z",
+  "activityEndedAt": "2026-08-06T00:00:00Z",
+  "totalAmount": 12500,
+  "currencyCode": "USD",
+  "filingDueAt": "2026-08-10T00:00:00Z"
+}
+
+### Execute retention policy as dry run
+POST {{KorridorX_HostAddress}}/api/admin/compliance/retention/policies/{{retentionPolicyId}}/execute?dryRun=true
+Authorization: Bearer {{token}}

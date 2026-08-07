@@ -9,6 +9,7 @@ public sealed class StartupConfigurationValidationService : IHostedService
     private readonly IOptions<JwtOptions> _jwtOptions;
     private readonly IOptions<HostingOptions> _hostingOptions;
     private readonly IOptions<ComplianceScreeningOptions> _screeningOptions;
+    private readonly IOptions<OpenSanctionsOptions> _openSanctionsOptions;
     private readonly ILogger<StartupConfigurationValidationService> _logger;
 
     public StartupConfigurationValidationService(
@@ -17,6 +18,7 @@ public sealed class StartupConfigurationValidationService : IHostedService
         IOptions<JwtOptions> jwtOptions,
         IOptions<HostingOptions> hostingOptions,
         IOptions<ComplianceScreeningOptions> screeningOptions,
+        IOptions<OpenSanctionsOptions> openSanctionsOptions,
         ILogger<StartupConfigurationValidationService> logger)
     {
         _configuration = configuration;
@@ -24,6 +26,7 @@ public sealed class StartupConfigurationValidationService : IHostedService
         _jwtOptions = jwtOptions;
         _hostingOptions = hostingOptions;
         _screeningOptions = screeningOptions;
+        _openSanctionsOptions = openSanctionsOptions;
         _logger = logger;
     }
 
@@ -34,6 +37,7 @@ public sealed class StartupConfigurationValidationService : IHostedService
         var jwt = _jwtOptions.Value;
         var hosting = _hostingOptions.Value;
         var screening = _screeningOptions.Value;
+        var openSanctions = _openSanctionsOptions.Value;
 
         if (string.IsNullOrWhiteSpace(connectionString))
             errors.Add("ConnectionStrings:DefaultConnection is required.");
@@ -64,6 +68,26 @@ public sealed class StartupConfigurationValidationService : IHostedService
                 errors.Add(
                     "ComplianceScreening is enabled with ConfiguredWatchlist but no entries are configured. " +
                     "Configure a watchlist or replace ISanctionsScreeningProvider with a production provider.");
+            }
+        }
+
+        if (screening.IsEnabled &&
+            !string.Equals(screening.ProviderCode, "ConfiguredWatchlist", StringComparison.OrdinalIgnoreCase) &&
+            !string.Equals(screening.ProviderCode, "OpenSanctions", StringComparison.OrdinalIgnoreCase))
+        {
+            errors.Add(
+                "ComplianceScreening:ProviderCode must be either ConfiguredWatchlist or OpenSanctions.");
+        }
+
+        if (screening.IsEnabled &&
+            string.Equals(screening.ProviderCode, "OpenSanctions", StringComparison.OrdinalIgnoreCase))
+        {
+            if (!openSanctions.IsEnabled)
+                errors.Add("OpenSanctions must be enabled when ComplianceScreening:ProviderCode is OpenSanctions.");
+            if (string.IsNullOrWhiteSpace(openSanctions.ApiKey) ||
+                (_environment.IsProduction() && LooksLikePlaceholder(openSanctions.ApiKey)))
+            {
+                errors.Add("OpenSanctions:ApiKey must contain a valid API key.");
             }
         }
 

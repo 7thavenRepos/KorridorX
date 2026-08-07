@@ -102,6 +102,16 @@ builder.Services
     .Bind(builder.Configuration.GetSection(ComplianceScreeningOptions.SectionName))
     .ValidateOnStart();
 builder.Services.AddSingleton<IValidateOptions<ComplianceScreeningOptions>, ComplianceScreeningOptionsValidator>();
+builder.Services
+    .AddOptions<OpenSanctionsOptions>()
+    .Bind(builder.Configuration.GetSection(OpenSanctionsOptions.SectionName))
+    .ValidateOnStart();
+builder.Services.AddSingleton<IValidateOptions<OpenSanctionsOptions>, OpenSanctionsOptionsValidator>();
+builder.Services
+    .AddOptions<DataRetentionOptions>()
+    .Bind(builder.Configuration.GetSection(DataRetentionOptions.SectionName))
+    .ValidateOnStart();
+builder.Services.AddSingleton<IValidateOptions<DataRetentionOptions>, DataRetentionOptionsValidator>();
 builder.Services.AddMemoryCache();
 
 var dataProtection = builder.Services
@@ -216,6 +226,13 @@ builder.Services.AddHttpClient<IBlaaizApiClient, BlaaizApiClient>((serviceProvid
     client.Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds);
 });
 
+builder.Services.AddHttpClient(OpenSanctionsScreeningProvider.HttpClientName, (serviceProvider, client) =>
+{
+    var options = serviceProvider.GetRequiredService<IOptions<OpenSanctionsOptions>>().Value;
+    client.BaseAddress = new Uri(options.BaseUrl.TrimEnd('/') + "/");
+    client.Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds);
+});
+
 builder.Services.AddScoped<IJwtTokenService, JwtTokenService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 
@@ -243,8 +260,13 @@ builder.Services.AddScoped<IComplianceLimitService, ComplianceLimitService>();
 builder.Services.AddScoped<IComplianceCaseService, ComplianceCaseService>();
 builder.Services.AddScoped<IComplianceScreeningService, ComplianceScreeningService>();
 builder.Services.AddScoped<ITransactionMonitoringService, TransactionMonitoringService>();
+builder.Services.AddScoped<IRegulatoryReportingService, RegulatoryReportingService>();
+builder.Services.AddScoped<IDataRetentionService, DataRetentionService>();
+builder.Services.AddScoped<IComplianceManagementReportService, ComplianceManagementReportService>();
 builder.Services.AddScoped<ITransferRiskService, TransferRiskService>();
-builder.Services.AddSingleton<ISanctionsScreeningProvider, ConfiguredWatchlistScreeningProvider>();
+builder.Services.AddSingleton<ConfiguredWatchlistScreeningProvider>();
+builder.Services.AddSingleton<OpenSanctionsScreeningProvider>();
+builder.Services.AddSingleton<ISanctionsScreeningProvider, ScreeningProviderRouter>();
 builder.Services.AddScoped<ICollectionPaymentMethodPolicy, CollectionPaymentMethodPolicy>();
 builder.Services.AddScoped<ICollectionStatusService, CollectionStatusService>();
 builder.Services.AddScoped<ICollectionService, CollectionService>();
@@ -256,6 +278,7 @@ builder.Services.AddHostedService<PayoutDispatchWorker>();
 builder.Services.AddHostedService<BlaaizReconciliationWorker>();
 builder.Services.AddHostedService<NotificationDeliveryWorker>();
 builder.Services.AddHostedService<ComplianceRescreeningWorker>();
+builder.Services.AddHostedService<DataRetentionWorker>();
 
 builder.Services.AddDbContext<AppDbContext>(options =>
 {

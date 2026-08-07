@@ -4,11 +4,22 @@
 		<TargetFramework>net9.0</TargetFramework>
 		<Nullable>enable</Nullable>
 		<ImplicitUsings>enable</ImplicitUsings>
+
+		<!--
+			The test project lives below the web project directory. Exclude the
+			entire subtree from the web project's default item discovery so test
+			build outputs are never copied back into KorridorX/bin recursively.
+		-->
+		<DefaultItemExcludes>$(DefaultItemExcludes);Tests\**;Tests/**</DefaultItemExcludes>
 	</PropertyGroup>
 
 	<ItemGroup>
 	  <None Include="Dtos\Transfers\TransferDtos.cs" />
-	  <Compile Remove="Tests\**\*.cs" />
+
+	  <!-- Defensive exclusions in addition to DefaultItemExcludes. -->
+	  <Compile Remove="Tests\**\*" />
+	  <Content Remove="Tests\**\*" />
+	  <EmbeddedResource Remove="Tests\**\*" />
 	  <None Remove="Tests\**\*" />
 	</ItemGroup>
 
