@@ -11,6 +11,7 @@ using KorridorX.Models.Notifications;
 using KorridorX.Models.Payments;
 using KorridorX.Models.Providers;
 using KorridorX.Models.Recipients;
+using KorridorX.Models.Support;
 using KorridorX.Models.Transfers;
 using KorridorX.Models.Webhooks;
 using Microsoft.AspNetCore.Identity;
@@ -89,6 +90,11 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<Guid
 
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
     public DbSet<NotificationMessage> NotificationMessages => Set<NotificationMessage>();
+    public DbSet<SupportTicket> SupportTickets => Set<SupportTicket>();
+    public DbSet<SupportTicketMessage> SupportTicketMessages => Set<SupportTicketMessage>();
+    public DbSet<TransferDispute> TransferDisputes => Set<TransferDispute>();
+    public DbSet<TransferInvestigation> TransferInvestigations => Set<TransferInvestigation>();
+    public DbSet<SupportEvidence> SupportEvidence => Set<SupportEvidence>();
     public DbSet<Country> Countries => Set<Country>();
     public DbSet<Currency> Currencies => Set<Currency>();
     public DbSet<CountryCurrency> CountryCurrencies => Set<CountryCurrency>();

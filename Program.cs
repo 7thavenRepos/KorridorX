@@ -28,6 +28,7 @@ using KorridorX.Services.Providers;
 using KorridorX.Services.Reconciliation;
 using KorridorX.Services.Webhooks;
 using KorridorX.Services.Security;
+using KorridorX.Services.Support;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.HttpOverrides;
@@ -97,6 +98,11 @@ builder.Services
     .Bind(builder.Configuration.GetSection(SecurityOptions.SectionName))
     .ValidateOnStart();
 builder.Services.AddSingleton<IValidateOptions<SecurityOptions>, SecurityOptionsValidator>();
+builder.Services
+    .AddOptions<SupportOptions>()
+    .Bind(builder.Configuration.GetSection(SupportOptions.SectionName))
+    .ValidateOnStart();
+builder.Services.AddSingleton<IValidateOptions<SupportOptions>, SupportOptionsValidator>();
 builder.Services
     .AddOptions<ComplianceScreeningOptions>()
     .Bind(builder.Configuration.GetSection(ComplianceScreeningOptions.SectionName))
@@ -264,6 +270,8 @@ builder.Services.AddScoped<IRegulatoryReportingService, RegulatoryReportingServi
 builder.Services.AddScoped<IDataRetentionService, DataRetentionService>();
 builder.Services.AddScoped<IComplianceManagementReportService, ComplianceManagementReportService>();
 builder.Services.AddScoped<ITransferRiskService, TransferRiskService>();
+builder.Services.AddScoped<ISupportService, SupportService>();
+builder.Services.AddScoped<IAdminSupportService, AdminSupportService>();
 builder.Services.AddSingleton<ConfiguredWatchlistScreeningProvider>();
 builder.Services.AddSingleton<OpenSanctionsScreeningProvider>();
 builder.Services.AddSingleton<ISanctionsScreeningProvider, ScreeningProviderRouter>();
@@ -279,6 +287,7 @@ builder.Services.AddHostedService<BlaaizReconciliationWorker>();
 builder.Services.AddHostedService<NotificationDeliveryWorker>();
 builder.Services.AddHostedService<ComplianceRescreeningWorker>();
 builder.Services.AddHostedService<DataRetentionWorker>();
+builder.Services.AddHostedService<SupportSlaWorker>();
 
 builder.Services.AddDbContext<AppDbContext>(options =>
 {

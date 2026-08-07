@@ -1,4 +1,4 @@
-﻿namespace KorridorX.Services.References;
+namespace KorridorX.Services.References;
 
 public interface IReferenceGenerator
 {
@@ -6,4 +6,7 @@ public interface IReferenceGenerator
     string GenerateCollectionReference();
     string GeneratePayoutReference();
     string GenerateBusinessBatchReference();
+    string GenerateSupportTicketReference();
+    string GenerateDisputeReference();
+    string GenerateInvestigationReference();
 }

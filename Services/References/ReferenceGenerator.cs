@@ -1,4 +1,4 @@
-﻿namespace KorridorX.Services.References;
+namespace KorridorX.Services.References;
 
 public class ReferenceGenerator : IReferenceGenerator
 {
@@ -21,6 +21,10 @@ public class ReferenceGenerator : IReferenceGenerator
     {
         return Generate("KXBAT");
     }
+
+    public string GenerateSupportTicketReference() => Generate("KXSUP");
+    public string GenerateDisputeReference() => Generate("KXDSP");
+    public string GenerateInvestigationReference() => Generate("KXINV");
 
     private static string Generate(string prefix)
     {

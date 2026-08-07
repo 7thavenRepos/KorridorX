@@ -25,6 +25,7 @@ public class TransferConfiguration : IEntityTypeConfiguration<Transfer>
         builder.HasIndex(x => new { x.RecipientId, x.SourceAmount, x.CreatedAt });
         builder.HasIndex(x => new { x.BusinessBeneficiaryId, x.SourceAmount, x.CreatedAt });
         builder.HasIndex(x => x.IsComplianceHold);
+        builder.HasIndex(x => x.IsOperationalHold);
         builder.HasIndex(x => new { x.RiskDecision, x.RiskLevel });
 
         builder.Property(x => x.Reference).HasMaxLength(50);
@@ -40,8 +41,10 @@ public class TransferConfiguration : IEntityTypeConfiguration<Transfer>
         builder.Property(x => x.FailureReason).HasMaxLength(1000);
         builder.Property(x => x.ApprovalRejectionReason).HasMaxLength(1000);
         builder.Property(x => x.ComplianceHoldReason).HasMaxLength(1000);
+        builder.Property(x => x.OperationalHoldReason).HasMaxLength(1000);
         builder.Property(x => x.Status).IsConcurrencyToken();
         builder.Property(x => x.IsComplianceHold).IsConcurrencyToken();
+        builder.Property(x => x.IsOperationalHold).IsConcurrencyToken();
         builder.Property(x => x.ApprovalCount).IsConcurrencyToken();
 
         builder.Property(x => x.SourceAmount).HasPrecision(18, 2);

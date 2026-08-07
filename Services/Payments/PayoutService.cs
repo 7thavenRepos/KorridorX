@@ -97,6 +97,12 @@ public class PayoutService : IPayoutService
                 $"Payout cannot be dispatched while the transfer status is '{transfer.Status}'.");
         }
 
+        if (transfer.IsOperationalHold)
+        {
+            throw new InvalidOperationException(
+                $"Transfer payout is blocked by an operational hold: {transfer.OperationalHoldReason ?? "support review required"}.");
+        }
+
         _transferRiskService.EnsureCanProceedToPayout(transfer);
         await _screeningService.EnsureTransferCanProceedToPayoutAsync(transfer, ct);
 
@@ -303,6 +309,12 @@ public class PayoutService : IPayoutService
                 $"Payout retry requires the transfer to be in RefundPending, but it is '{payout.Transfer.Status}'.");
         }
 
+        if (payout.Transfer.IsOperationalHold)
+        {
+            throw new InvalidOperationException(
+                $"Payout retry is blocked by an operational hold: {payout.Transfer.OperationalHoldReason ?? "support review required"}.");
+        }
+
         await _businessFundingService.ReactivateTransferReservationAsync(
             payout.Transfer,
             changedByUserId,
@@ -348,6 +360,7 @@ public class PayoutService : IPayoutService
                 !x.IsDeleted &&
                 (x.Status == TransferStatus.PaymentReceived || x.Status == TransferStatus.Processing) &&
                 !x.IsComplianceHold &&
+                !x.IsOperationalHold &&
                 !_db.Payouts.Any(p => p.TransferId == x.Id && !p.IsDeleted))
             .Select(x => x.Id)
             .Take(batchSize)

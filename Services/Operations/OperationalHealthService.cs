@@ -33,7 +33,8 @@ public sealed class OperationalHealthService : IOperationalHealthService
                 new WalletHealthDto(0, 0, 0),
                 new PaymentHealthDto(0, 0, 0),
                 new RiskHealthDto(0, 0, 0, 0),
-                new ComplianceOperationsHealthDto(0, 0, 0, 0, 0));
+                new ComplianceOperationsHealthDto(0, 0, 0, 0, 0),
+                new SupportOperationsHealthDto(0, 0, 0, 0, 0));
         }
 
         var notifications = new NotificationHealthDto(
@@ -103,7 +104,7 @@ public sealed class OperationalHealthService : IOperationalHealthService
         var risk = new RiskHealthDto(
             await _db.AmlFlags.CountAsync(x => !x.IsDeleted && !x.IsResolved, ct),
             await _db.AmlFlags.CountAsync(x => !x.IsDeleted && !x.IsResolved && x.IsBlocking, ct),
-            await _db.Transfers.CountAsync(x => !x.IsDeleted && x.IsComplianceHold, ct),
+            await _db.Transfers.CountAsync(x => !x.IsDeleted && (x.IsComplianceHold || x.IsOperationalHold), ct),
             await _db.LoginHistories.CountAsync(x => !x.WasSuccessful && x.OccurredAt >= last24Hours, ct));
 
         var compliance = new ComplianceOperationsHealthDto(
@@ -138,6 +139,36 @@ public sealed class OperationalHealthService : IOperationalHealthService
                  x.Status == ScreeningStatus.ConfirmedMatch),
                 ct));
 
+        var support = new SupportOperationsHealthDto(
+            await _db.SupportTickets.CountAsync(x =>
+                !x.IsDeleted &&
+                x.Status != SupportTicketStatus.Resolved &&
+                x.Status != SupportTicketStatus.Closed,
+                ct),
+            await _db.SupportTickets.CountAsync(x =>
+                !x.IsDeleted &&
+                x.IsSlaBreached &&
+                x.Status != SupportTicketStatus.Resolved &&
+                x.Status != SupportTicketStatus.Closed,
+                ct),
+            await _db.TransferDisputes.CountAsync(x =>
+                !x.IsDeleted &&
+                x.Status != TransferDisputeStatus.Resolved &&
+                x.Status != TransferDisputeStatus.Rejected &&
+                x.Status != TransferDisputeStatus.Withdrawn,
+                ct),
+            await _db.TransferInvestigations.CountAsync(x =>
+                !x.IsDeleted &&
+                x.Status != TransferInvestigationStatus.Resolved &&
+                x.Status != TransferInvestigationStatus.Closed,
+                ct),
+            await _db.TransferInvestigations.CountAsync(x =>
+                !x.IsDeleted &&
+                x.DueAt < now &&
+                x.Status != TransferInvestigationStatus.Resolved &&
+                x.Status != TransferInvestigationStatus.Closed,
+                ct));
+
         var status = !connected
             ? "Critical"
             : notifications.DeadLetter > 0 ||
@@ -146,7 +177,9 @@ public sealed class OperationalHealthService : IOperationalHealthService
               risk.BlockingFlags > 0 ||
               compliance.BlockingCases > 0 ||
               compliance.OverdueCases > 0 ||
-              compliance.ScreeningFailuresLast24Hours > 0
+              compliance.ScreeningFailuresLast24Hours > 0 ||
+              support.SlaBreachedTickets > 0 ||
+              support.OverdueInvestigations > 0
                 ? "Degraded"
                 : "Healthy";
 
@@ -159,7 +192,8 @@ public sealed class OperationalHealthService : IOperationalHealthService
             wallets,
             payments,
             risk,
-            compliance);
+            compliance,
+            support);
     }
 
     private Task<int> CountNotificationsAsync(string status, CancellationToken ct) =>

@@ -89,6 +89,9 @@ public class Transfer : AuditableEntity
     public DateTime? ComplianceReviewedAt { get; set; }
     public Guid? ComplianceReviewedByUserId { get; set; }
 
+    public bool IsOperationalHold { get; set; }
+    public string? OperationalHoldReason { get; set; }
+
     public ICollection<TransferStatusHistory> StatusHistories { get; set; } = new List<TransferStatusHistory>();
     public ICollection<TransferTimelineEvent> TimelineEvents { get; set; } = new List<TransferTimelineEvent>();
 }
