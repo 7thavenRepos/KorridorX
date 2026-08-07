@@ -32,6 +32,41 @@ public class BlaaizApiClient : IBlaaizApiClient
         _auditService = auditService;
     }
 
+    public Task<BlaaizApiResult<List<BlaaizWalletData>>> ListWalletsAsync(
+        CancellationToken ct = default)
+    {
+        return SendAsync<object, List<BlaaizWalletData>>(
+            HttpMethod.Get,
+            "/api/external/wallet",
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            ct);
+    }
+
+    public Task<BlaaizApiResult<BlaaizWalletData>> GetWalletAsync(
+        string providerWalletId,
+        CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(providerWalletId))
+            throw new InvalidOperationException("Provider wallet ID is required.");
+
+        var endpoint = $"/api/external/wallet/{Uri.EscapeDataString(providerWalletId.Trim())}";
+        return SendAsync<object, BlaaizWalletData>(
+            HttpMethod.Get,
+            endpoint,
+            null,
+            JsonSerializer.Serialize(new { providerWalletId }),
+            null,
+            null,
+            null,
+            null,
+            ct);
+    }
+
     public Task<BlaaizApiResult<List<BlaaizBankData>>> ListBanksAsync(
         string? countryCode = null,
         string? currencyCode = null,

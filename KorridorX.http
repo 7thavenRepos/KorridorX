@@ -724,3 +724,15 @@ Content-Type: application/json
 ### Execute retention policy as dry run
 POST {{KorridorX_HostAddress}}/api/admin/compliance/retention/policies/{{retentionPolicyId}}/execute?dryRun=true
 Authorization: Bearer {{token}}
+
+### Treasury dashboard
+GET {{KorridorX_HostAddress}}/api/admin/treasury/dashboard
+Authorization: Bearer {{token}}
+
+### Sync Blaaiz provider wallets
+POST {{KorridorX_HostAddress}}/api/admin/treasury/provider-wallets/sync
+Authorization: Bearer {{token}}
+
+### FX operations dashboard
+GET {{KorridorX_HostAddress}}/api/admin/fx/dashboard
+Authorization: Bearer {{token}}

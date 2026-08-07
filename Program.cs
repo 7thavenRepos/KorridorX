@@ -29,6 +29,7 @@ using KorridorX.Services.Reconciliation;
 using KorridorX.Services.Webhooks;
 using KorridorX.Services.Security;
 using KorridorX.Services.Support;
+using KorridorX.Services.Treasury;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.HttpOverrides;
@@ -118,6 +119,11 @@ builder.Services
     .Bind(builder.Configuration.GetSection(DataRetentionOptions.SectionName))
     .ValidateOnStart();
 builder.Services.AddSingleton<IValidateOptions<DataRetentionOptions>, DataRetentionOptionsValidator>();
+builder.Services
+    .AddOptions<TreasuryOptions>()
+    .Bind(builder.Configuration.GetSection(TreasuryOptions.SectionName))
+    .ValidateOnStart();
+builder.Services.AddSingleton<IValidateOptions<TreasuryOptions>, TreasuryOptionsValidator>();
 builder.Services.AddMemoryCache();
 
 var dataProtection = builder.Services
@@ -258,6 +264,8 @@ builder.Services.AddScoped<IAuditService, AuditService>();
 builder.Services.AddScoped<IOperationalHealthService, OperationalHealthService>();
 builder.Services.AddScoped<IBusinessContextAccessor, HttpBusinessContextAccessor>();
 builder.Services.AddScoped<ITransferQuoteService, TransferQuoteService>();
+builder.Services.AddScoped<IFxOperationsService, FxOperationsService>();
+builder.Services.AddScoped<ITreasuryService, TreasuryService>();
 builder.Services.AddScoped<ITransferStatusService, TransferStatusService>();
 builder.Services.AddScoped<ITransferService, TransferService>();
 // Required by collection, payout, and business-funding services.
@@ -288,6 +296,7 @@ builder.Services.AddHostedService<NotificationDeliveryWorker>();
 builder.Services.AddHostedService<ComplianceRescreeningWorker>();
 builder.Services.AddHostedService<DataRetentionWorker>();
 builder.Services.AddHostedService<SupportSlaWorker>();
+builder.Services.AddHostedService<TreasurySyncWorker>();
 
 builder.Services.AddDbContext<AppDbContext>(options =>
 {

@@ -10,7 +10,8 @@ public record OperationalHealthDto(
     PaymentHealthDto Payments,
     RiskHealthDto Risk,
     ComplianceOperationsHealthDto Compliance,
-    SupportOperationsHealthDto Support);
+    SupportOperationsHealthDto Support,
+    TreasuryOperationsHealthDto Treasury);
 
 public record NotificationHealthDto(
     int Pending,
@@ -55,3 +56,9 @@ public record SupportOperationsHealthDto(
     int OpenDisputes,
     int OpenInvestigations,
     int OverdueInvestigations);
+
+public record TreasuryOperationsHealthDto(
+    int LowLiquidityWallets,
+    int StaleProviderWallets,
+    int StaleFxRates,
+    int SettlementVariances);

@@ -1,3 +1,5 @@
+using KorridorX.Configuration;
+using Microsoft.Extensions.Options;
 using KorridorX.Data;
 using KorridorX.Dtos.Operations;
 using KorridorX.Models.Enums;
@@ -9,10 +11,12 @@ namespace KorridorX.Services.Operations;
 public sealed class OperationalHealthService : IOperationalHealthService
 {
     private readonly AppDbContext _db;
+    private readonly TreasuryOptions _treasuryOptions;
 
-    public OperationalHealthService(AppDbContext db)
+    public OperationalHealthService(AppDbContext db, IOptions<TreasuryOptions> treasuryOptions)
     {
         _db = db;
+        _treasuryOptions = treasuryOptions.Value;
     }
 
     public async Task<OperationalHealthDto> GetAsync(CancellationToken ct = default)
@@ -34,7 +38,8 @@ public sealed class OperationalHealthService : IOperationalHealthService
                 new PaymentHealthDto(0, 0, 0),
                 new RiskHealthDto(0, 0, 0, 0),
                 new ComplianceOperationsHealthDto(0, 0, 0, 0, 0),
-                new SupportOperationsHealthDto(0, 0, 0, 0, 0));
+                new SupportOperationsHealthDto(0, 0, 0, 0, 0),
+                new TreasuryOperationsHealthDto(0, 0, 0, 0));
         }
 
         var notifications = new NotificationHealthDto(
@@ -169,6 +174,30 @@ public sealed class OperationalHealthService : IOperationalHealthService
                 x.Status != TransferInvestigationStatus.Closed,
                 ct));
 
+        var walletThresholds = await _db.LiquidityThresholds.AsNoTracking()
+            .Where(x => !x.IsDeleted && x.IsActive)
+            .ToListAsync(ct);
+        var providerWallets = await _db.ProviderWalletBalances.AsNoTracking()
+            .Where(x => !x.IsDeleted)
+            .ToListAsync(ct);
+        var providerWalletStaleBefore = now.AddMinutes(-_treasuryOptions.ProviderWalletStaleMinutes);
+        var fxRateStaleBefore = now.AddMinutes(-_treasuryOptions.FxRateStaleMinutes);
+        var lowLiquidityWallets = providerWallets.Count(wallet =>
+        {
+            var threshold = walletThresholds.FirstOrDefault(x =>
+                string.Equals(x.ProviderCode, wallet.ProviderCode, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(x.CurrencyCode, wallet.CurrencyCode, StringComparison.OrdinalIgnoreCase));
+            return threshold is not null && wallet.Balance < threshold.MinimumBalance;
+        });
+
+        var treasury = new TreasuryOperationsHealthDto(
+            lowLiquidityWallets,
+            providerWallets.Count(x => x.LastSyncedAt < providerWalletStaleBefore),
+            await _db.ExchangeRates.CountAsync(x =>
+                !x.IsDeleted && x.IsActive && x.EffectiveFrom < fxRateStaleBefore, ct),
+            await _db.SettlementBatches.CountAsync(x =>
+                !x.IsDeleted && x.Status == KorridorX.Models.Enums.SettlementBatchStatus.Variance, ct));
+
         var status = !connected
             ? "Critical"
             : notifications.DeadLetter > 0 ||
@@ -179,7 +208,10 @@ public sealed class OperationalHealthService : IOperationalHealthService
               compliance.OverdueCases > 0 ||
               compliance.ScreeningFailuresLast24Hours > 0 ||
               support.SlaBreachedTickets > 0 ||
-              support.OverdueInvestigations > 0
+              support.OverdueInvestigations > 0 ||
+              treasury.LowLiquidityWallets > 0 ||
+              treasury.StaleProviderWallets > 0 ||
+              treasury.SettlementVariances > 0
                 ? "Degraded"
                 : "Healthy";
 
@@ -193,7 +225,8 @@ public sealed class OperationalHealthService : IOperationalHealthService
             payments,
             risk,
             compliance,
-            support);
+            support,
+            treasury);
     }
 
     private Task<int> CountNotificationsAsync(string status, CancellationToken ct) =>

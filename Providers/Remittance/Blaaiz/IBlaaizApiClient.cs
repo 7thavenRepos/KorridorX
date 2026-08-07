@@ -4,6 +4,13 @@ namespace KorridorX.Providers.Remittance.Blaaiz;
 
 public interface IBlaaizApiClient
 {
+    Task<BlaaizApiResult<List<BlaaizWalletData>>> ListWalletsAsync(
+        CancellationToken ct = default);
+
+    Task<BlaaizApiResult<BlaaizWalletData>> GetWalletAsync(
+        string providerWalletId,
+        CancellationToken ct = default);
+
 
     Task<BlaaizApiResult<List<BlaaizBankData>>> ListBanksAsync(
         string? countryCode = null,

@@ -13,6 +13,7 @@ using KorridorX.Models.Providers;
 using KorridorX.Models.Recipients;
 using KorridorX.Models.Support;
 using KorridorX.Models.Transfers;
+using KorridorX.Models.Treasury;
 using KorridorX.Models.Webhooks;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
@@ -84,6 +85,11 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<Guid
     public DbSet<ProviderRequestLog> ProviderRequestLogs => Set<ProviderRequestLog>();
     public DbSet<ProviderTransaction> ProviderTransactions => Set<ProviderTransaction>();
     public DbSet<ProviderBank> ProviderBanks => Set<ProviderBank>();
+    public DbSet<ProviderWalletBalance> ProviderWalletBalances => Set<ProviderWalletBalance>();
+    public DbSet<LiquidityThreshold> LiquidityThresholds => Set<LiquidityThreshold>();
+    public DbSet<FxMarkupRule> FxMarkupRules => Set<FxMarkupRule>();
+    public DbSet<SettlementBatch> SettlementBatches => Set<SettlementBatch>();
+    public DbSet<SettlementBatchItem> SettlementBatchItems => Set<SettlementBatchItem>();
 
     public DbSet<WebhookEvent> WebhookEvents => Set<WebhookEvent>();
     public DbSet<WebhookProcessingAttempt> WebhookProcessingAttempts => Set<WebhookProcessingAttempt>();
