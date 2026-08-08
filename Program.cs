@@ -331,22 +331,30 @@ builder.Services
     .AddEntityFrameworkStores<AppDbContext>()
     .AddDefaultTokenProviders();
 
-var jwtOptions = builder.Configuration.GetSection("Jwt").Get<JwtOptions>()
-    ?? throw new InvalidOperationException("Jwt configuration is missing.");
-
-if (string.IsNullOrWhiteSpace(jwtOptions.Key) || jwtOptions.Key.Length < 32)
-{
-    throw new InvalidOperationException("Jwt:Key must be at least 32 characters.");
-}
-
 builder.Services
     .AddAuthentication(options =>
     {
         options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
         options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
     })
-    .AddJwtBearer(options =>
+    .AddJwtBearer();
+
+// Configure JWT options lazily so WebApplicationFactory/test-host configuration
+// overrides are available before the bearer handler is resolved. Eagerly reading
+// builder.Configuration here prevents ConfigureAppConfiguration(...) overrides in
+// integration tests from supplying Jwt settings.
+builder.Services
+    .AddOptions<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme)
+    .Configure<IConfiguration>((options, configuration) =>
     {
+        var jwtOptions = configuration.GetSection("Jwt").Get<JwtOptions>()
+            ?? throw new InvalidOperationException("Jwt configuration is missing.");
+
+        if (string.IsNullOrWhiteSpace(jwtOptions.Key) || jwtOptions.Key.Length < 32)
+        {
+            throw new InvalidOperationException("Jwt:Key must be at least 32 characters.");
+        }
+
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtOptions.Key));
 
         options.TokenValidationParameters = new TokenValidationParameters
