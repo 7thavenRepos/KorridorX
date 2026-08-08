@@ -63,6 +63,9 @@ public class ProviderOperationsQueryService : IProviderOperationsQueryService
                 x.ProviderStatus,
                 x.CurrencyCode,
                 x.Amount,
+                x.AmountWithoutFee,
+                x.ProviderFeeAmount,
+                x.ProviderFeeCurrencyCode,
                 x.ProviderCreatedAt,
                 x.LastSyncedAt,
                 x.CreatedAt))

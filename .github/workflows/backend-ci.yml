@@ -12,12 +12,28 @@ permissions:
 jobs:
   build-test-and-validate-migrations:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: korridorx_ci
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d korridorx_ci"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
 
     env:
       DOTNET_NOLOGO: true
       DOTNET_CLI_TELEMETRY_OPTOUT: true
       ConnectionStrings__DefaultConnection: Host=localhost;Port=5432;Database=korridorx_ci;Username=postgres;Password=postgres
+      KORRIDORX_TEST_CONNECTION_STRING: Host=localhost;Port=5432;Database=korridorx_ci;Username=postgres;Password=postgres
       Jwt__Issuer: KorridorX.CI
       Jwt__Audience: KorridorX.CI.Clients
       Jwt__Key: ci-only-key-that-is-longer-than-thirty-two-characters
@@ -26,7 +42,14 @@ jobs:
       Hosting__SwaggerEnabled: false
       Hosting__JsonConsoleLogging: true
       Blaaiz__IsEnabled: false
+      ComplianceScreening__IsEnabled: false
+      ComplianceScreening__TransactionMonitoring__IsEnabled: false
+      Security__TransferRisk__IsEnabled: false
       NotificationDelivery__WorkerEnabled: false
+      DataRetention__WorkerEnabled: false
+      Support__SlaWorkerEnabled: false
+      Treasury__WalletSyncWorkerEnabled: false
+      Accounting__SyncWorkerEnabled: false
 
     steps:
       - name: Checkout
@@ -43,14 +66,27 @@ jobs:
       - name: Build
         run: dotnet build KorridorX.slnx --configuration Release --no-restore
 
-      - name: Test
-        run: dotnet test KorridorX.slnx --configuration Release --no-build --logger "trx;LogFileName=test-results.trx" --results-directory artifacts/test-results
-
       - name: Install EF Core CLI
         run: dotnet tool install --global dotnet-ef --version 9.0.7
 
+      - name: Apply migrations to clean CI database
+        run: dotnet ef database update --no-build --configuration Release
+
+      - name: Test
+        run: dotnet test KorridorX.slnx --configuration Release --no-build --logger "trx;LogFileName=test-results.trx" --results-directory artifacts/test-results
+
       - name: Generate idempotent migration script
         run: dotnet ef migrations script --idempotent --no-build --configuration Release --output artifacts/migrations.sql
+
+      - name: Report pending EF model changes
+        id: model_drift
+        continue-on-error: true
+        run: dotnet ef migrations has-pending-model-changes --no-build --configuration Release
+
+      - name: Surface migration drift warning
+        if: steps.model_drift.outcome == 'failure'
+        run: |
+          echo "::warning::EF Core reports pending model changes. Generate and review the release-candidate schema migration before enabling the migration-drift gate as blocking."
 
       - name: Upload validation artifacts
         if: always()

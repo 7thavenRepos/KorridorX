@@ -54,6 +54,27 @@ public sealed class FinanceReportingService : IFinanceReportingService
             .Select(x => x.VarianceAmount!.Value)
             .ToListAsync(ct);
 
+        var accounting = await _db.JournalLines.AsNoTracking()
+            .Where(x => !x.IsDeleted && !x.JournalEntry.IsDeleted && x.JournalEntry.EntryDate >= start && x.JournalEntry.EntryDate < end)
+            .GroupBy(x => new { x.JournalEntry.CurrencyCode, x.AccountingAccount.Type })
+            .Select(g => new
+            {
+                g.Key.CurrencyCode,
+                g.Key.Type,
+                Amount = g.Sum(x => x.CreditAmount - x.DebitAmount)
+            }).ToListAsync(ct);
+
+        var realizedRevenue = accounting.Where(x => x.Type == AccountingAccountType.Revenue)
+            .GroupBy(x => x.CurrencyCode).Select(g => new FinanceCurrencyAmountDto { CurrencyCode = g.Key, Amount = g.Sum(x => x.Amount) }).OrderBy(x => x.CurrencyCode).ToList();
+        var providerCosts = accounting.Where(x => x.Type == AccountingAccountType.Expense)
+            .GroupBy(x => x.CurrencyCode).Select(g => new FinanceCurrencyAmountDto { CurrencyCode = g.Key, Amount = g.Sum(x => -x.Amount) }).OrderBy(x => x.CurrencyCode).ToList();
+        var currencies = realizedRevenue.Select(x => x.CurrencyCode).Union(providerCosts.Select(x => x.CurrencyCode)).Distinct().OrderBy(x => x).ToList();
+        var netContribution = currencies.Select(currency => new FinanceCurrencyAmountDto
+        {
+            CurrencyCode = currency,
+            Amount = realizedRevenue.Where(x => x.CurrencyCode == currency).Sum(x => x.Amount) - providerCosts.Where(x => x.CurrencyCode == currency).Sum(x => x.Amount)
+        }).ToList();
+
         return new FinanceSummaryDto
         {
             From = start,
@@ -68,6 +89,9 @@ public sealed class FinanceReportingService : IFinanceReportingService
                 .Select(g => new FinanceCurrencyAmountDto { CurrencyCode = g.Key, Amount = g.Sum(x => x.FeeAmount) })
                 .OrderBy(x => x.CurrencyCode).ToList(),
             Corridors = corridorRows,
+            RealizedRevenue = realizedRevenue,
+            ProviderCosts = providerCosts,
+            NetContribution = netContribution,
             SettlementVarianceAbsoluteTotal = settlementVariance.Sum(x => Math.Abs(x))
         };
     }

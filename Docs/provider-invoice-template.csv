@@ -1,0 +1,2 @@
+provider_transaction_id,provider_reference,description,net_amount,tax_amount,total_amount
+txn_example_001,ref_example_001,Collection processing fee,10.00,1.30,11.30

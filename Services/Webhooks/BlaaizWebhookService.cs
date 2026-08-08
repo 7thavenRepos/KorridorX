@@ -276,6 +276,8 @@ public class BlaaizWebhookService : IBlaaizWebhookService
             ?? EventStatus(eventType);
         var mappedStatus = MapCollectionStatus(eventType, providerStatus);
         var amount = ReadOptionalDecimal(data, root, "transaction_amount", "amount");
+        var providerFee = ReadOptionalDecimal(data, root, "fee", "transaction_fee");
+        var amountWithoutFee = ReadOptionalDecimal(data, root, "amount_without_fee");
         var currency = ReadOptionalString(data, root, "transaction_currency", "currency");
         var failureReason = ReadOptionalString(data, root, "failure_reason", "reason", "message");
         var occurredAt = ReadOptionalDateTime(data, root, "updated_at", "date", "timestamp")
@@ -345,6 +347,9 @@ public class BlaaizWebhookService : IBlaaizWebhookService
                 providerStatus,
                 currency ?? collection.CurrencyCode,
                 amount ?? collection.Amount,
+                amountWithoutFee,
+                providerFee,
+                currency ?? collection.CurrencyCode,
                 rawPayload,
                 occurredAt,
                 ct);
@@ -388,6 +393,8 @@ public class BlaaizWebhookService : IBlaaizWebhookService
             ?? EventStatus(eventType);
         var mappedStatus = MapPayoutStatus(eventType, providerStatus);
         var amount = ReadRecipientAmount(data) ?? ReadOptionalDecimal(data, root, "transaction_amount", "amount");
+        var providerFee = ReadOptionalDecimal(data, root, "fee", "transaction_fee");
+        var amountWithoutFee = ReadOptionalDecimal(data, root, "amount_without_fee");
         var currency = ReadRecipientString(data, "currency")
             ?? ReadOptionalString(data, root, "transaction_currency", "currency");
         var failureReason = ReadOptionalString(data, root, "failure_reason", "reason", "message");
@@ -442,6 +449,9 @@ public class BlaaizWebhookService : IBlaaizWebhookService
                 providerStatus,
                 currency ?? payout.CurrencyCode,
                 amount ?? payout.Amount,
+                amountWithoutFee,
+                providerFee,
+                ReadOptionalString(data, root, "transaction_currency", "currency") ?? payout.Transfer.SourceCurrencyCode,
                 rawPayload,
                 occurredAt,
                 ct);
@@ -775,6 +785,9 @@ public class BlaaizWebhookService : IBlaaizWebhookService
         string providerStatus,
         string currencyCode,
         decimal amount,
+        decimal? amountWithoutFee,
+        decimal? providerFeeAmount,
+        string? providerFeeCurrencyCode,
         string rawPayload,
         DateTime providerCreatedAt,
         CancellationToken ct)
@@ -803,6 +816,9 @@ public class BlaaizWebhookService : IBlaaizWebhookService
         transaction.ProviderStatus = providerStatus;
         transaction.CurrencyCode = currencyCode;
         transaction.Amount = amount;
+        transaction.AmountWithoutFee = amountWithoutFee ?? transaction.AmountWithoutFee;
+        transaction.ProviderFeeAmount = providerFeeAmount ?? transaction.ProviderFeeAmount;
+        transaction.ProviderFeeCurrencyCode = providerFeeCurrencyCode ?? transaction.ProviderFeeCurrencyCode;
         transaction.RawPayloadJson = rawPayload;
         transaction.ProviderCreatedAt = providerCreatedAt;
         transaction.LastSyncedAt = DateTime.UtcNow;

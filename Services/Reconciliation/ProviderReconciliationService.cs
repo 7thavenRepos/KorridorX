@@ -135,6 +135,9 @@ public class ProviderReconciliationService : IProviderReconciliationService
             : result.TransactionType;
         providerTransaction.CurrencyCode = result.CurrencyCode;
         providerTransaction.Amount = result.Amount;
+        providerTransaction.AmountWithoutFee = result.AmountWithoutFee;
+        providerTransaction.ProviderFeeAmount = result.ProviderFeeAmount;
+        providerTransaction.ProviderFeeCurrencyCode = result.ProviderFeeCurrencyCode;
         providerTransaction.RawPayloadJson = result.RawResponseJson;
         providerTransaction.ProviderCreatedAt = result.ProviderCreatedAt ?? providerTransaction.ProviderCreatedAt;
         providerTransaction.LastSyncedAt = DateTime.UtcNow;

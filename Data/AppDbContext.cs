@@ -5,6 +5,7 @@ using KorridorX.Models.BusinessFunding;
 using KorridorX.Models.Compliance;
 using KorridorX.Models.Customers;
 using KorridorX.Models.Fx;
+using KorridorX.Models.Finance;
 using KorridorX.Models.Identity;
 using KorridorX.Models.Lookups;
 using KorridorX.Models.Notifications;
@@ -85,6 +86,17 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<Guid
     public DbSet<ProviderRequestLog> ProviderRequestLogs => Set<ProviderRequestLog>();
     public DbSet<ProviderTransaction> ProviderTransactions => Set<ProviderTransaction>();
     public DbSet<ProviderBank> ProviderBanks => Set<ProviderBank>();
+    public DbSet<AccountingAccount> AccountingAccounts => Set<AccountingAccount>();
+    public DbSet<AccountingPeriod> AccountingPeriods => Set<AccountingPeriod>();
+    public DbSet<JournalEntry> JournalEntries => Set<JournalEntry>();
+    public DbSet<JournalLine> JournalLines => Set<JournalLine>();
+    public DbSet<FinanceTranslationRate> FinanceTranslationRates => Set<FinanceTranslationRate>();
+    public DbSet<ProviderInvoice> ProviderInvoices => Set<ProviderInvoice>();
+    public DbSet<ProviderInvoiceLine> ProviderInvoiceLines => Set<ProviderInvoiceLine>();
+    public DbSet<TaxRule> TaxRules => Set<TaxRule>();
+    public DbSet<FinanceCloseChecklistItem> FinanceCloseChecklistItems => Set<FinanceCloseChecklistItem>();
+    public DbSet<FinanceCloseRequest> FinanceCloseRequests => Set<FinanceCloseRequest>();
+
     public DbSet<ProviderWalletBalance> ProviderWalletBalances => Set<ProviderWalletBalance>();
     public DbSet<LiquidityThreshold> LiquidityThresholds => Set<LiquidityThreshold>();
     public DbSet<FxMarkupRule> FxMarkupRules => Set<FxMarkupRule>();

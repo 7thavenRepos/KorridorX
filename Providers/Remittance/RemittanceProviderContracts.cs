@@ -127,7 +127,10 @@ public sealed record RemittanceTransactionStatusResult(
     string? FailureReason,
     DateTime? ProviderCreatedAt,
     string RawResponseJson,
-    Guid ProviderRequestLogId);
+    Guid ProviderRequestLogId,
+    decimal? AmountWithoutFee = null,
+    decimal? ProviderFeeAmount = null,
+    string? ProviderFeeCurrencyCode = null);
 
 
 public sealed record RemittanceBank(

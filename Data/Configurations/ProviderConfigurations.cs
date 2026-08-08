@@ -1,4 +1,4 @@
-﻿using KorridorX.Models.Providers;
+using KorridorX.Models.Providers;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -73,6 +73,9 @@ public class ProviderTransactionConfiguration : IEntityTypeConfiguration<Provide
         builder.Property(x => x.CurrencyCode).HasMaxLength(10);
 
         builder.Property(x => x.Amount).HasPrecision(18, 2);
+        builder.Property(x => x.AmountWithoutFee).HasPrecision(18, 2);
+        builder.Property(x => x.ProviderFeeAmount).HasPrecision(18, 2);
+        builder.Property(x => x.ProviderFeeCurrencyCode).HasMaxLength(10);
 
         builder.HasOne(x => x.Transfer)
             .WithMany()

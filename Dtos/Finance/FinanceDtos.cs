@@ -10,6 +10,9 @@ public sealed class FinanceSummaryDto
     public List<FinanceCurrencyAmountDto> SourceVolumes { get; set; } = new();
     public List<FinanceCurrencyAmountDto> FeeRevenue { get; set; } = new();
     public List<FinanceCorridorDto> Corridors { get; set; } = new();
+    public List<FinanceCurrencyAmountDto> RealizedRevenue { get; set; } = new();
+    public List<FinanceCurrencyAmountDto> ProviderCosts { get; set; } = new();
+    public List<FinanceCurrencyAmountDto> NetContribution { get; set; } = new();
     public decimal SettlementVarianceAbsoluteTotal { get; set; }
 }
 

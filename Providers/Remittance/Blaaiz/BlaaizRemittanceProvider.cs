@@ -781,7 +781,10 @@ public class BlaaizRemittanceProvider : IRemittanceProvider
             transaction.FailureReason,
             transaction.Date,
             response.RawResponseJson,
-            response.RequestLogId);
+            response.RequestLogId,
+            transaction.AmountWithoutFee,
+            transaction.Fee,
+            transaction.Currency);
     }
 
     private static string MapPayoutMethod(PaymentMethod paymentMethod) => paymentMethod switch

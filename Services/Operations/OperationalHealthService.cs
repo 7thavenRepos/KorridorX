@@ -71,7 +71,7 @@ public sealed class OperationalHealthService : IOperationalHealthService
                 ct),
             await _db.ProviderTransactions.CountAsync(x =>
                 !x.IsDeleted &&
-                (x.LastSyncedAt == null || x.LastSyncedAt < staleBefore),
+                x.LastSyncedAt < staleBefore,
                 ct));
 
         var wallets = new WalletHealthDto(

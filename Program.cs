@@ -125,6 +125,11 @@ builder.Services
     .Bind(builder.Configuration.GetSection(TreasuryOptions.SectionName))
     .ValidateOnStart();
 builder.Services.AddSingleton<IValidateOptions<TreasuryOptions>, TreasuryOptionsValidator>();
+builder.Services
+    .AddOptions<AccountingOptions>()
+    .Bind(builder.Configuration.GetSection(AccountingOptions.SectionName))
+    .ValidateOnStart();
+builder.Services.AddSingleton<IValidateOptions<AccountingOptions>, AccountingOptionsValidator>();
 builder.Services.AddMemoryCache();
 
 var dataProtection = builder.Services
@@ -267,6 +272,8 @@ builder.Services.AddScoped<IBusinessContextAccessor, HttpBusinessContextAccessor
 builder.Services.AddScoped<ITransferQuoteService, TransferQuoteService>();
 builder.Services.AddScoped<IFxOperationsService, FxOperationsService>();
 builder.Services.AddScoped<IFinanceReportingService, FinanceReportingService>();
+builder.Services.AddScoped<IAccountingService, AccountingService>();
+builder.Services.AddScoped<IFinancialCloseService, FinancialCloseService>();
 builder.Services.AddScoped<ITreasuryService, TreasuryService>();
 builder.Services.AddScoped<ITransferStatusService, TransferStatusService>();
 builder.Services.AddScoped<ITransferService, TransferService>();
@@ -299,6 +306,7 @@ builder.Services.AddHostedService<ComplianceRescreeningWorker>();
 builder.Services.AddHostedService<DataRetentionWorker>();
 builder.Services.AddHostedService<SupportSlaWorker>();
 builder.Services.AddHostedService<TreasurySyncWorker>();
+builder.Services.AddHostedService<AccountingSyncWorker>();
 
 builder.Services.AddDbContext<AppDbContext>(options =>
 {

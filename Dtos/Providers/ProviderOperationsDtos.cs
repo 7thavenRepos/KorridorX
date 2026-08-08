@@ -44,6 +44,9 @@ public record ProviderTransactionDto(
     string ProviderStatus,
     string CurrencyCode,
     decimal Amount,
+    decimal? AmountWithoutFee,
+    decimal? ProviderFeeAmount,
+    string? ProviderFeeCurrencyCode,
     DateTime? ProviderCreatedAt,
     DateTime LastSyncedAt,
     DateTime CreatedAt);

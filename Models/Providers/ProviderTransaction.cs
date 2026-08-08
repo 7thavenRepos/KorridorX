@@ -1,4 +1,4 @@
-﻿using KorridorX.Models.Common;
+using KorridorX.Models.Common;
 using KorridorX.Models.Enums;
 using KorridorX.Models.Payments;
 using KorridorX.Models.Transfers;
@@ -26,6 +26,9 @@ public class ProviderTransaction : BaseEntity
 
     public string CurrencyCode { get; set; } = "";
     public decimal Amount { get; set; }
+    public decimal? AmountWithoutFee { get; set; }
+    public decimal? ProviderFeeAmount { get; set; }
+    public string? ProviderFeeCurrencyCode { get; set; }
 
     public string? RawPayloadJson { get; set; }
 
