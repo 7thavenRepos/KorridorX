@@ -8,7 +8,7 @@ public sealed class HostingOptions
     public const string SectionName = "Hosting";
 
     public string ApplicationName { get; set; } = "KorridorX";
-    public string[] AllowedOrigins { get; set; } = ["http://localhost:4200"];
+    public string[] AllowedOrigins { get; set; } = [];
     public bool RequireHttpsRedirection { get; set; } = true;
     public bool SwaggerEnabled { get; set; }
     public bool JsonConsoleLogging { get; set; } = true;
