@@ -44,6 +44,10 @@ public sealed class ConsumerRemittanceWorkflowTests
 
         var meResponse = await client.GetAsync("/api/auth/me");
         Assert.Equal(HttpStatusCode.OK, meResponse.StatusCode);
+        var meEnvelope = await meResponse.ReadApiResponseAsync<CurrentUserDto>();
+        var currentUser = Assert.IsType<CurrentUserDto>(meEnvelope.Data);
+        Assert.Equal(registered.Data!.UserId, currentUser.UserId);
+        Assert.Equal(new[] { "Consumer" }, currentUser.Roles);
 
         var recipientResponse = await client.PostJsonAsync(
             "/api/recipients",

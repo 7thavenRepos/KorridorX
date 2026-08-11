@@ -11,5 +11,6 @@ public record CurrentUserDto
     string? PhoneNumber,
     string? CountryCode,
     UserType UserType,
-    UserStatus Status
+    UserStatus Status,
+    IReadOnlyList<string> Roles
 );

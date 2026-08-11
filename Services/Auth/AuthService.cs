@@ -223,6 +223,14 @@ public class AuthService : IAuthService
         var user = await _db.Users.AsNoTracking().FirstOrDefaultAsync(x => x.Id == userId, ct)
             ?? throw new UnauthorizedAccessException("User not found.");
 
+        var roles = await (
+                from userRole in _db.UserRoles.AsNoTracking()
+                join role in _db.Roles.AsNoTracking() on userRole.RoleId equals role.Id
+                where userRole.UserId == userId && role.Name != null
+                orderby role.Name
+                select role.Name!)
+            .ToListAsync(ct);
+
         return new CurrentUserDto(
             user.Id,
             user.Email ?? "",
@@ -231,7 +239,8 @@ public class AuthService : IAuthService
             user.PhoneNumber,
             user.CountryCode,
             user.UserType,
-            user.Status);
+            user.Status,
+            roles);
     }
 
     public async Task<IReadOnlyList<UserSessionDto>> GetSessionsAsync(
