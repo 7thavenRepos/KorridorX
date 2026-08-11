@@ -36,6 +36,8 @@ check_endpoint() {
 
 check_endpoint "/health/live"
 check_endpoint "/health/ready"
+check_endpoint "/swagger/index.html"
+check_endpoint "/swagger/v1/swagger.json"
 
 unauthorized_status="$(curl --silent --show-error \
   --output /dev/null \

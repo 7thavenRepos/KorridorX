@@ -7,7 +7,22 @@ cd "$project_dir"
 
 env_file=".env.staging"
 compose_file="docker-compose.staging.yml"
-migration_file="artifacts/migrations.sql"
+migration_file="${KORRIDORX_MIGRATION_FILE:-artifacts/migrations.sql}"
+rollback_armed=false
+
+rollback_failed_deployment() {
+  local status="$?"
+
+  if [[ "$status" -ne 0 && "$rollback_armed" == true ]]; then
+    echo "Deployment failed; restoring the previously running API image." >&2
+    if ! "$script_dir/staging-rollback.sh"; then
+      echo "Automatic API rollback also failed. Manual intervention is required." >&2
+    fi
+  fi
+
+  exit "$status"
+}
+trap rollback_failed_deployment EXIT
 
 if [[ ! -f "$env_file" ]]; then
   echo "Missing $env_file. Copy .env.staging.example and replace every placeholder." >&2
@@ -36,21 +51,32 @@ compose=(docker compose --env-file "$env_file" -f "$compose_file")
 mkdir -p backups
 chmod 700 backups
 
-"${compose[@]}" up -d --wait --wait-timeout 120 postgres
-
-if "${compose[@]}" ps --status running --services | grep -qx postgres; then
-  timestamp="$(date -u +%Y%m%d-%H%M%S)"
-  backup_file="backups/korridorx-staging-$timestamp.dump"
-  "${compose[@]}" exec -T postgres sh -c \
-    'PGPASSWORD="$POSTGRES_PASSWORD" pg_dump --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" --format=custom --compress=9 --no-owner --no-privileges' \
-    > "$backup_file"
-  chmod 600 "$backup_file"
-  echo "Database backup created: $backup_file"
+if ! "${compose[@]}" ps --status running --services | grep -qx postgres; then
+  echo "The staging PostgreSQL service is not running; refusing to restart it automatically." >&2
+  exit 1
 fi
 
-if docker image inspect korridorx-api:staging >/dev/null 2>&1; then
-  docker image tag korridorx-api:staging korridorx-api:staging-rollback
+if ! "${compose[@]}" exec -T postgres sh -c \
+    'PGPASSWORD="$POSTGRES_PASSWORD" pg_isready --username "$POSTGRES_USER" --dbname "$POSTGRES_DB"' \
+    >/dev/null; then
+  echo "The staging PostgreSQL service is not ready; refusing deployment." >&2
+  exit 1
+fi
+
+timestamp="$(date -u +%Y%m%d-%H%M%S)"
+backup_file="backups/korridorx-staging-$timestamp.dump"
+"${compose[@]}" exec -T postgres sh -c \
+  'PGPASSWORD="$POSTGRES_PASSWORD" pg_dump --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" --format=custom --compress=9 --no-owner --no-privileges' \
+  > "$backup_file"
+chmod 600 "$backup_file"
+echo "Database backup created: $backup_file"
+
+api_container="$("${compose[@]}" ps -q api)"
+if [[ -n "$api_container" ]]; then
+  current_image_id="$(docker inspect --format '{{.Image}}' "$api_container")"
+  docker image tag "$current_image_id" korridorx-api:staging-rollback
   echo "Previous API image preserved as korridorx-api:staging-rollback"
+  rollback_armed=true
 fi
 
 echo "Applying reviewed idempotent migration script..."
@@ -59,7 +85,7 @@ echo "Applying reviewed idempotent migration script..."
   < "$migration_file"
 
 "${compose[@]}" build --pull api
-"${compose[@]}" up -d --no-deps api
+"${compose[@]}" up -d --no-deps --force-recreate api
 
 api_port="$(sed -n 's/^API_PORT=//p' "$env_file" | tail -n 1)"
 api_port="${api_port:-8080}"
