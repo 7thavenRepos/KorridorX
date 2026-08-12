@@ -1,4 +1,5 @@
 using KorridorX.Configuration;
+using KorridorX.Data.Seed;
 using KorridorX.Models.Notifications;
 using KorridorX.Services.Auth;
 using KorridorX.Services.Notifications;
@@ -8,6 +9,14 @@ namespace KorridorX.Tests;
 
 public sealed class AccountSecurityPolicyTests
 {
+    [Fact]
+    public void Privileged_web_roles_require_mfa_but_consumer_access_is_deferred()
+    {
+        Assert.True(MfaSecurityPolicy.RequiresMfa([IdentityRoleNames.Business]));
+        Assert.True(MfaSecurityPolicy.RequiresMfa([IdentityRoleNames.SuperAdmin]));
+        Assert.False(MfaSecurityPolicy.RequiresMfa([IdentityRoleNames.Consumer]));
+    }
+
     [Fact]
     public void Identity_token_codec_round_trips_transport_unsafe_tokens()
     {

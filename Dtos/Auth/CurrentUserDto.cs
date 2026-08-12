@@ -13,5 +13,7 @@ public record CurrentUserDto
     UserType UserType,
     UserStatus Status,
     IReadOnlyList<string> Roles,
-    bool EmailConfirmed
+    bool EmailConfirmed,
+    bool MfaRequired,
+    bool MfaEnabled
 );

@@ -201,32 +201,44 @@ builder.Services.AddRateLimiter(options =>
     };
 
     options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(httpContext =>
-        RateLimitPartition.GetFixedWindowLimiter(
+    {
+        var rateLimits = ResolveRateLimits(httpContext);
+        return RateLimitPartition.GetFixedWindowLimiter(
             ResolveRateLimitKey(httpContext),
             _ => CreateFixedWindowOptions(
-                securityOptions.RateLimits.GlobalPermitLimit,
-                securityOptions.RateLimits.GlobalWindowMinutes)));
+                rateLimits.GlobalPermitLimit,
+                rateLimits.GlobalWindowMinutes));
+    });
 
     options.AddPolicy(SecurityRateLimitPolicies.Authentication, httpContext =>
-        RateLimitPartition.GetFixedWindowLimiter(
+    {
+        var rateLimits = ResolveRateLimits(httpContext);
+        return RateLimitPartition.GetFixedWindowLimiter(
             httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
             _ => CreateFixedWindowOptions(
-                securityOptions.RateLimits.AuthenticationPermitLimit,
-                securityOptions.RateLimits.AuthenticationWindowMinutes)));
+                rateLimits.AuthenticationPermitLimit,
+                rateLimits.AuthenticationWindowMinutes));
+    });
 
     options.AddPolicy(SecurityRateLimitPolicies.Sensitive, httpContext =>
-        RateLimitPartition.GetFixedWindowLimiter(
+    {
+        var rateLimits = ResolveRateLimits(httpContext);
+        return RateLimitPartition.GetFixedWindowLimiter(
             ResolveRateLimitKey(httpContext),
             _ => CreateFixedWindowOptions(
-                securityOptions.RateLimits.SensitivePermitLimit,
-                securityOptions.RateLimits.SensitiveWindowMinutes)));
+                rateLimits.SensitivePermitLimit,
+                rateLimits.SensitiveWindowMinutes));
+    });
 
     options.AddPolicy(SecurityRateLimitPolicies.Webhook, httpContext =>
-        RateLimitPartition.GetFixedWindowLimiter(
+    {
+        var rateLimits = ResolveRateLimits(httpContext);
+        return RateLimitPartition.GetFixedWindowLimiter(
             httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
             _ => CreateFixedWindowOptions(
-                securityOptions.RateLimits.WebhookPermitLimit,
-                securityOptions.RateLimits.WebhookWindowMinutes)));
+                rateLimits.WebhookPermitLimit,
+                rateLimits.WebhookWindowMinutes));
+    });
 });
 
 builder.Services.AddScoped<IReferenceGenerator, ReferenceGenerator>();
@@ -264,6 +276,7 @@ builder.Services.AddHttpClient(OpenSanctionsScreeningProvider.HttpClientName, (s
 });
 
 builder.Services.AddScoped<IJwtTokenService, JwtTokenService>();
+builder.Services.AddScoped<IMfaChallengeStore, MfaChallengeStore>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IRoleSeeder, RoleSeeder>();
 builder.Services.AddScoped<ISeedUserProvisioner, SeedUserProvisioner>();
@@ -374,6 +387,10 @@ builder.Services
 
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtOptions.Key));
 
+        // Keep standard JWT claim names such as "amr" intact. The MFA
+        // validation below reads the RFC claim directly.
+        options.MapInboundClaims = false;
+
         options.TokenValidationParameters = new TokenValidationParameters
         {
             ValidateIssuer = true,
@@ -478,8 +495,11 @@ builder.Services.AddSwaggerGen(options =>
 builder.Services.AddHttpContextAccessor();
 
 var app = builder.Build();
+var runtimeHostingOptions = app.Services
+    .GetRequiredService<IOptions<HostingOptions>>()
+    .Value;
 
-if (hostingOptions.SwaggerEnabled)
+if (runtimeHostingOptions.SwaggerEnabled)
 {
     app.UseSwagger();
     app.UseSwaggerUI(options =>
@@ -489,7 +509,7 @@ if (hostingOptions.SwaggerEnabled)
     });
 }
 
-if (hostingOptions.TrustedProxies.Length > 0)
+if (runtimeHostingOptions.TrustedProxies.Length > 0)
     app.UseForwardedHeaders();
 
 app.UseMiddleware<SecurityHeadersMiddleware>();
@@ -499,7 +519,7 @@ app.UseMiddleware<GlobalExceptionMiddleware>();
 
 app.UseCors("AngularClient");
 
-if (hostingOptions.RequireHttpsRedirection)
+if (runtimeHostingOptions.RequireHttpsRedirection)
     app.UseHttpsRedirection();
 
 app.UseAuthentication();
@@ -544,6 +564,12 @@ static string ResolveRateLimitKey(HttpContext context) =>
     ?? context.Connection.RemoteIpAddress?.ToString()
     ?? "unknown";
 
+static RateLimitOptions ResolveRateLimits(HttpContext context) =>
+    context.RequestServices
+        .GetRequiredService<IOptions<SecurityOptions>>()
+        .Value
+        .RateLimits;
+
 static async Task ValidateAccessTokenAsync(TokenValidatedContext context)
 {
     var userIdValue = context.Principal?.FindFirstValue(ClaimTypes.NameIdentifier);
@@ -563,6 +589,12 @@ static async Task ValidateAccessTokenAsync(TokenValidatedContext context)
         return;
     }
 
+    if (await userManager.IsLockedOutAsync(user))
+    {
+        context.Fail("The account is temporarily locked.");
+        return;
+    }
+
     var claimedStamp = context.Principal?.FindFirstValue(SecurityStampSecurity.ClaimType);
     var currentStamp = await userManager.GetSecurityStampAsync(user);
     if (!SecurityStampSecurity.Matches(claimedStamp, currentStamp))
@@ -571,11 +603,29 @@ static async Task ValidateAccessTokenAsync(TokenValidatedContext context)
         return;
     }
 
-    var accountOptions = context.HttpContext.RequestServices
+    var securityOptions = context.HttpContext.RequestServices
         .GetRequiredService<IOptions<SecurityOptions>>()
-        .Value.Accounts;
-    if (accountOptions.RequireConfirmedEmail && !user.EmailConfirmed)
+        .Value;
+    if (securityOptions.Accounts.RequireConfirmedEmail && !user.EmailConfirmed)
+    {
         context.Fail("Email confirmation is required before this account can be used.");
+        return;
+    }
+
+    var currentRoles = await userManager.GetRolesAsync(user);
+    var requiresMfa =
+        user.TwoFactorEnabled ||
+        (securityOptions.Mfa.EnforceForPrivilegedRoles &&
+         MfaSecurityPolicy.RequiresMfa(currentRoles));
+    var usedMfa = context.Principal?
+        .FindAll(MfaSecurityPolicy.AuthenticationMethodClaim)
+        .Any(x => string.Equals(
+            x.Value,
+            MfaSecurityPolicy.MfaAuthenticationMethod,
+            StringComparison.Ordinal)) == true;
+
+    if (requiresMfa && (!user.TwoFactorEnabled || !usedMfa))
+        context.Fail("Multi-factor authentication is required for this account.");
 }
 
 public partial class Program { }

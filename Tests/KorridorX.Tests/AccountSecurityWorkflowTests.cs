@@ -56,8 +56,8 @@ public sealed partial class AccountSecurityWorkflowTests
         using var knownConfirmationRequest = await client.PostJsonAsync(
             "/api/auth/email-confirmation/request",
             new EmailConfirmationRequestDto(email));
-        Assert.Equal(HttpStatusCode.OK, unknownConfirmationRequest.StatusCode);
-        Assert.Equal(HttpStatusCode.OK, knownConfirmationRequest.StatusCode);
+        await AssertStatusAsync(HttpStatusCode.OK, unknownConfirmationRequest);
+        await AssertStatusAsync(HttpStatusCode.OK, knownConfirmationRequest);
         var unknownConfirmationEnvelope =
             await unknownConfirmationRequest.ReadApiResponseAsync<AccountSecurityRequestResultDto>();
         var knownConfirmationEnvelope =
@@ -87,8 +87,10 @@ public sealed partial class AccountSecurityWorkflowTests
 
         using var loginResponse = await LoginAsync(client, email, oldPassword);
         Assert.Equal(HttpStatusCode.OK, loginResponse.StatusCode);
-        var loginEnvelope = await loginResponse.ReadApiResponseAsync<AuthResponseDto>();
-        var authentication = Assert.IsType<AuthResponseDto>(loginEnvelope.Data);
+        var loginEnvelope = await loginResponse.ReadApiResponseAsync<LoginResultDto>();
+        var login = Assert.IsType<LoginResultDto>(loginEnvelope.Data);
+        Assert.Equal(LoginStatuses.Authenticated, login.Status);
+        var authentication = Assert.IsType<AuthResponseDto>(login.Authentication);
         client.UseBearerToken(authentication.AccessToken);
 
         using var unknownResetResponse = await client.PostJsonAsync(
@@ -187,6 +189,19 @@ public sealed partial class AccountSecurityWorkflowTests
         client.PostJsonAsync(
             "/api/auth/login",
             new LoginRequestDto(email, password, "rc-device", "RC Test Device"));
+
+    private static async Task AssertStatusAsync(
+        HttpStatusCode expected,
+        HttpResponseMessage response)
+    {
+        var body = expected == response.StatusCode
+            ? ""
+            : await response.Content.ReadAsStringAsync();
+        Assert.True(
+            expected == response.StatusCode,
+            $"Expected {(int)expected} ({expected}), got " +
+            $"{(int)response.StatusCode} ({response.StatusCode}). Body: {body}");
+    }
 
     private static Dictionary<string, Microsoft.Extensions.Primitives.StringValues> ParseFragment(
         Uri link) =>

@@ -16,6 +16,8 @@ ASP.NET Core maps double underscores to configuration sections.
 | `Security__Accounts__RequireConfirmedEmail` | Production | Must be `true`; prevents token issuance until email confirmation. |
 | `Security__Accounts__FrontendBaseUrl` | Yes | Canonical frontend URL used in confirmation and password-reset links; HTTPS is required in Production. |
 | `Security__Accounts__TokenLifespanMinutes` | No | Identity confirmation/reset token lifetime; defaults to 120 minutes. |
+| `Security__Mfa__EnforceForPrivilegedRoles` | Production | Must be `true`; requires MFA for business and internal web roles. |
+| `Security__Mfa__CodeReplayPepper` | Yes | Random secret of at least 32 characters used to make accepted authenticator codes non-replayable. |
 | `Blaaiz__IsEnabled` | No | Enables live provider calls. |
 | `Blaaiz__ClientId` | When enabled | OAuth client ID. |
 | `Blaaiz__ClientSecret` | When enabled | OAuth client secret. |

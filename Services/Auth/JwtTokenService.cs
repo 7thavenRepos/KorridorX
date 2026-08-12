@@ -24,7 +24,9 @@ public class JwtTokenService : IJwtTokenService
         _userManager = userManager;
     }
 
-    public async Task<(string Token, DateTime ExpiresAt)> GenerateAccessTokenAsync(ApplicationUser user)
+    public async Task<(string Token, DateTime ExpiresAt)> GenerateAccessTokenAsync(
+        ApplicationUser user,
+        bool mfaAuthenticated = false)
     {
         var expiresAt = DateTime.UtcNow.AddMinutes(_jwtOptions.AccessTokenMinutes);
 
@@ -42,8 +44,17 @@ public class JwtTokenService : IJwtTokenService
             new("lastName", user.LastName),
             new("userType", user.UserType.ToString()),
             new("email_confirmed", user.EmailConfirmed ? "true" : "false"),
+            new(MfaSecurityPolicy.AuthenticationMethodClaim,
+                MfaSecurityPolicy.PasswordAuthenticationMethod),
             new(SecurityStampSecurity.ClaimType, SecurityStampSecurity.Hash(securityStamp))
         };
+
+        if (mfaAuthenticated)
+        {
+            claims.Add(new Claim(
+                MfaSecurityPolicy.AuthenticationMethodClaim,
+                MfaSecurityPolicy.MfaAuthenticationMethod));
+        }
 
         foreach (var role in roles)
         {

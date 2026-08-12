@@ -60,6 +60,25 @@ public static class AccountSecurityEmailFactory
             "<p>Your KorridorX password was changed and all existing sessions were signed out.</p>" +
             "<p>If you did not make this change, contact KorridorX support immediately.</p>");
 
+    public static (string Subject, string Body) CreateMfaEnabled(string firstName) =>
+        CreateSecurityNotice(
+            "Multi-factor authentication was enabled",
+            firstName,
+            "Authenticator-based multi-factor authentication was enabled for your KorridorX account.");
+
+    public static (string Subject, string Body) CreateMfaRecoveryCodesRegenerated(
+        string firstName) =>
+        CreateSecurityNotice(
+            "Your KorridorX recovery codes were regenerated",
+            firstName,
+            "A new set of MFA recovery codes was generated and every previous recovery code is now invalid.");
+
+    public static (string Subject, string Body) CreateMfaReset(string firstName) =>
+        CreateSecurityNotice(
+            "Multi-factor authentication was reset",
+            firstName,
+            "Multi-factor authentication was reset and every active KorridorX session was signed out. Privileged accounts must enroll again at the next sign-in.");
+
     private static string CreateBody(
         string firstName,
         string heading,
@@ -73,6 +92,19 @@ public static class AccountSecurityEmailFactory
                $"<p><a href=\"{encoder.Encode(link)}\">{encoder.Encode(actionLabel)}</a></p>" +
                "<p>This link is single-use and expires automatically.</p>" +
                $"<p>{encoder.Encode(fallback)}</p>";
+    }
+
+    private static (string Subject, string Body) CreateSecurityNotice(
+        string subject,
+        string firstName,
+        string message)
+    {
+        var encoder = HtmlEncoder.Default;
+        return (
+            subject,
+            $"<p>Hello {encoder.Encode(firstName)},</p>" +
+            $"<p>{encoder.Encode(message)}</p>" +
+            "<p>If you did not make this change, contact KorridorX support immediately.</p>");
     }
 
     private static string BuildFragmentLink(

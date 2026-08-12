@@ -76,6 +76,15 @@ public sealed class StartupConfigurationValidationService : IHostedService
             if (!security.Accounts.RequireConfirmedEmail)
                 errors.Add("Security:Accounts:RequireConfirmedEmail must be true outside Development.");
 
+            if (!security.Mfa.EnforceForPrivilegedRoles)
+                errors.Add("Security:Mfa:EnforceForPrivilegedRoles must be true outside Development.");
+
+            if (LooksLikePlaceholder(security.Mfa.CodeReplayPepper))
+            {
+                errors.Add(
+                    "Security:Mfa:CodeReplayPepper must be a deployment secret outside Development.");
+            }
+
             if (!Uri.TryCreate(security.Accounts.FrontendBaseUrl, UriKind.Absolute, out var frontendUri) ||
                 frontendUri.Scheme != Uri.UriSchemeHttps ||
                 frontendUri.IsLoopback ||

@@ -20,6 +20,7 @@ ConnectionStrings__DefaultConnection
 Jwt__Issuer
 Jwt__Audience
 Jwt__Key
+Security__Mfa__CodeReplayPepper
 AllowedHosts
 Hosting__AllowedOrigins__0
 Hosting__DataProtectionKeysPath

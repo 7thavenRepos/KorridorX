@@ -9,8 +9,24 @@ public interface IAuthService
         string? ipAddress,
         CancellationToken ct = default);
 
-    Task<AuthResponseDto> LoginAsync(
+    Task<LoginResultDto> LoginAsync(
         LoginRequestDto request,
+        string? ipAddress,
+        string? userAgent,
+        CancellationToken ct = default);
+
+    Task<MfaEnrollmentSetupDto> GetMfaEnrollmentSetupAsync(
+        MfaEnrollmentSetupRequestDto request,
+        CancellationToken ct = default);
+
+    Task<MfaCompletionDto> ConfirmMfaEnrollmentAsync(
+        MfaVerificationRequestDto request,
+        string? ipAddress,
+        string? userAgent,
+        CancellationToken ct = default);
+
+    Task<MfaCompletionDto> VerifyMfaChallengeAsync(
+        MfaVerificationRequestDto request,
         string? ipAddress,
         string? userAgent,
         CancellationToken ct = default);
@@ -23,6 +39,21 @@ public interface IAuthService
 
     Task<CurrentUserDto> GetCurrentUserAsync(
         Guid userId,
+        CancellationToken ct = default);
+
+    Task<MfaStatusDto> GetMfaStatusAsync(
+        Guid userId,
+        CancellationToken ct = default);
+
+    Task<MfaRecoveryCodesDto> RegenerateMfaRecoveryCodesAsync(
+        Guid userId,
+        MfaManagementVerificationDto request,
+        CancellationToken ct = default);
+
+    Task ResetMfaAsync(
+        Guid userId,
+        MfaManagementVerificationDto request,
+        string? ipAddress,
         CancellationToken ct = default);
 
     Task<IReadOnlyList<UserSessionDto>> GetSessionsAsync(

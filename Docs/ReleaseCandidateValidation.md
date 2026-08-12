@@ -59,6 +59,12 @@ Current connected workflow coverage includes:
 - refresh-token rotation;
 - refresh-token reuse detection;
 - session revocation after token reuse.
+- privileged-role authenticator enrollment;
+- challenge and accepted-code replay rejection;
+- authenticator and single-use recovery-code login;
+- recovery-code regeneration with reauthentication;
+- MFA reset, session invalidation, and mandatory re-enrollment;
+- MFA audit-event persistence.
 
 ## Provider sandbox release checklist
 

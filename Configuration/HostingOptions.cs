@@ -8,7 +8,10 @@ public sealed class HostingOptions
     public const string SectionName = "Hosting";
 
     public string ApplicationName { get; set; } = "KorridorX";
-    public string[] AllowedOrigins { get; set; } = ["http://localhost:4200"];
+    // Keep collection defaults empty so configuration binding replaces rather
+    // than appends to an in-code localhost entry. Development's localhost
+    // origin is supplied explicitly by appsettings.Development.json.
+    public string[] AllowedOrigins { get; set; } = [];
     public bool RequireHttpsRedirection { get; set; } = true;
     public bool SwaggerEnabled { get; set; }
     public bool JsonConsoleLogging { get; set; } = true;

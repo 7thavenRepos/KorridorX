@@ -16,6 +16,7 @@ public sealed class SecurityOptions
     public RateLimitOptions RateLimits { get; set; } = new();
     public SessionSecurityOptions Sessions { get; set; } = new();
     public AccountSecurityOptions Accounts { get; set; } = new();
+    public MfaSecurityOptions Mfa { get; set; } = new();
     public TransferRiskOptions TransferRisk { get; set; } = new();
 }
 
@@ -41,6 +42,17 @@ public sealed class AccountSecurityOptions
     public bool RequireConfirmedEmail { get; set; } = true;
     public string FrontendBaseUrl { get; set; } = "http://localhost:4200";
     public int TokenLifespanMinutes { get; set; } = 120;
+}
+
+public sealed class MfaSecurityOptions
+{
+    public bool EnforceForPrivilegedRoles { get; set; } = true;
+    public int ChallengeLifespanMinutes { get; set; } = 5;
+    public int MaximumVerificationAttempts { get; set; } = 5;
+    public int RecoveryCodeCount { get; set; } = 10;
+    public string Issuer { get; set; } = "KorridorX";
+    public string CodeReplayPepper { get; set; } =
+        "change-me-development-mfa-code-replay-pepper";
 }
 
 public sealed class TransferRiskOptions
@@ -95,6 +107,20 @@ public sealed class SecurityOptionsValidator : IValidateOptions<SecurityOptions>
 
         if (options.Accounts.TokenLifespanMinutes is < 15 or > 1440)
             errors.Add("Security:Accounts:TokenLifespanMinutes must be between 15 and 1440.");
+
+        if (options.Mfa.ChallengeLifespanMinutes is < 1 or > 15)
+            errors.Add("Security:Mfa:ChallengeLifespanMinutes must be between 1 and 15.");
+        if (options.Mfa.MaximumVerificationAttempts is < 3 or > 10)
+            errors.Add("Security:Mfa:MaximumVerificationAttempts must be between 3 and 10.");
+        if (options.Mfa.RecoveryCodeCount is < 8 or > 20)
+            errors.Add("Security:Mfa:RecoveryCodeCount must be between 8 and 20.");
+        if (string.IsNullOrWhiteSpace(options.Mfa.Issuer) || options.Mfa.Issuer.Length > 64)
+            errors.Add("Security:Mfa:Issuer is required and must not exceed 64 characters.");
+        if (string.IsNullOrWhiteSpace(options.Mfa.CodeReplayPepper) ||
+            options.Mfa.CodeReplayPepper.Length < 32)
+        {
+            errors.Add("Security:Mfa:CodeReplayPepper must contain at least 32 characters.");
+        }
 
         if (options.TransferRisk.ReviewScore < 0 || options.TransferRisk.ReviewScore > 100)
             errors.Add("Security:TransferRisk:ReviewScore must be between 0 and 100.");

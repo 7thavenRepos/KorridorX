@@ -40,6 +40,8 @@ services:
       Security__Accounts__RequireConfirmedEmail: ${REQUIRE_CONFIRMED_EMAIL:-false}
       Security__Accounts__FrontendBaseUrl: ${ACCOUNT_FRONTEND_BASE_URL:-http://localhost:4200}
       Security__Accounts__TokenLifespanMinutes: ${ACCOUNT_TOKEN_LIFESPAN_MINUTES:-120}
+      Security__Mfa__EnforceForPrivilegedRoles: ${MFA_ENFORCE_FOR_PRIVILEGED_ROLES:-true}
+      Security__Mfa__CodeReplayPepper: ${MFA_CODE_REPLAY_PEPPER:?MFA_CODE_REPLAY_PEPPER is required}
       IdentitySeed__SeedTestUsers: ${IdentitySeed__SeedTestUsers:-false}
       IdentitySeed__SuperAdmin__FirstName: ${IdentitySeed__SuperAdmin__FirstName:-}
       IdentitySeed__SuperAdmin__LastName: ${IdentitySeed__SuperAdmin__LastName:-}

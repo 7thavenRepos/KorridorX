@@ -47,7 +47,52 @@ public class AuthController : ControllerBase
             Request.Headers.UserAgent.ToString(),
             ct);
 
-        return Ok(ApiResponses.Ok(response, "Login successful."));
+        var message = response.Status switch
+        {
+            LoginStatuses.MfaEnrollmentRequired => "Authenticator enrollment is required to complete sign-in.",
+            LoginStatuses.MfaRequired => "Multi-factor verification is required to complete sign-in.",
+            _ => "Login successful."
+        };
+
+        return Ok(ApiResponses.Ok(response, message));
+    }
+
+    [EnableRateLimiting(SecurityRateLimitPolicies.Authentication)]
+    [HttpPost("mfa/enrollment/setup")]
+    public async Task<IActionResult> GetMfaEnrollmentSetup(
+        MfaEnrollmentSetupRequestDto request,
+        CancellationToken ct)
+    {
+        var response = await _authService.GetMfaEnrollmentSetupAsync(request, ct);
+        return Ok(ApiResponses.Ok(response, "Authenticator enrollment initialized."));
+    }
+
+    [EnableRateLimiting(SecurityRateLimitPolicies.Authentication)]
+    [HttpPost("mfa/enrollment/confirm")]
+    public async Task<IActionResult> ConfirmMfaEnrollment(
+        MfaVerificationRequestDto request,
+        CancellationToken ct)
+    {
+        var response = await _authService.ConfirmMfaEnrollmentAsync(
+            request,
+            HttpContext.Connection.RemoteIpAddress?.ToString(),
+            Request.Headers.UserAgent.ToString(),
+            ct);
+        return Ok(ApiResponses.Ok(response, "Multi-factor authentication enabled."));
+    }
+
+    [EnableRateLimiting(SecurityRateLimitPolicies.Authentication)]
+    [HttpPost("mfa/challenge/verify")]
+    public async Task<IActionResult> VerifyMfaChallenge(
+        MfaVerificationRequestDto request,
+        CancellationToken ct)
+    {
+        var response = await _authService.VerifyMfaChallengeAsync(
+            request,
+            HttpContext.Connection.RemoteIpAddress?.ToString(),
+            Request.Headers.UserAgent.ToString(),
+            ct);
+        return Ok(ApiResponses.Ok(response, "Multi-factor verification successful."));
     }
 
     [EnableRateLimiting(SecurityRateLimitPolicies.Authentication)]
@@ -124,6 +169,46 @@ public class AuthController : ControllerBase
     {
         var response = await _authService.GetCurrentUserAsync(GetUserId(), ct);
         return Ok(ApiResponses.Ok(response, "Current user retrieved successfully."));
+    }
+
+    [Authorize]
+    [EnableRateLimiting(SecurityRateLimitPolicies.Sensitive)]
+    [HttpGet("mfa/status")]
+    public async Task<IActionResult> GetMfaStatus(CancellationToken ct)
+    {
+        var response = await _authService.GetMfaStatusAsync(GetUserId(), ct);
+        return Ok(ApiResponses.Ok(response, "MFA status retrieved successfully."));
+    }
+
+    [Authorize]
+    [EnableRateLimiting(SecurityRateLimitPolicies.Sensitive)]
+    [HttpPost("mfa/recovery-codes/regenerate")]
+    public async Task<IActionResult> RegenerateMfaRecoveryCodes(
+        MfaManagementVerificationDto request,
+        CancellationToken ct)
+    {
+        var response = await _authService.RegenerateMfaRecoveryCodesAsync(
+            GetUserId(),
+            request,
+            ct);
+        return Ok(ApiResponses.Ok(response, "New recovery codes generated successfully."));
+    }
+
+    [Authorize]
+    [EnableRateLimiting(SecurityRateLimitPolicies.Sensitive)]
+    [HttpPost("mfa/reset")]
+    public async Task<IActionResult> ResetMfa(
+        MfaManagementVerificationDto request,
+        CancellationToken ct)
+    {
+        await _authService.ResetMfaAsync(
+            GetUserId(),
+            request,
+            HttpContext.Connection.RemoteIpAddress?.ToString(),
+            ct);
+        return Ok(ApiResponses.Ok(
+            new AccountSecurityActionResultDto(),
+            "Multi-factor authentication reset. Sign in again to re-enroll."));
     }
 
     [Authorize]

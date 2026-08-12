@@ -45,6 +45,21 @@ public static class ApiTestClient
         CancellationToken ct = default) =>
         await client.PutAsJsonAsync(requestUri, payload, JsonOptions, ct);
 
+    public static async Task EnsureSuccessWithBodyAsync(
+        this HttpResponseMessage response,
+        CancellationToken ct = default)
+    {
+        if (response.IsSuccessStatusCode)
+            return;
+
+        var body = await response.Content.ReadAsStringAsync(ct);
+        throw new HttpRequestException(
+            $"Response status code does not indicate success: " +
+            $"{(int)response.StatusCode} ({response.ReasonPhrase}). Body: {body}",
+            null,
+            response.StatusCode);
+    }
+
     public static async Task<(RegistrationResultDto Registration, AuthResponseDto Authentication)>
         RegisterConfirmAndLoginAsync(
             this HttpClient client,
@@ -53,7 +68,7 @@ public static class ApiTestClient
             CancellationToken ct = default)
     {
         using var registerResponse = await client.PostJsonAsync("/api/auth/register", request, ct);
-        registerResponse.EnsureSuccessStatusCode();
+        await registerResponse.EnsureSuccessWithBodyAsync(ct);
         var registerEnvelope = await registerResponse.ReadApiResponseAsync<RegistrationResultDto>(ct);
         var registration = registerEnvelope.Data
             ?? throw new InvalidOperationException("Registration returned no data.");
@@ -71,7 +86,7 @@ public static class ApiTestClient
                 "/api/auth/email-confirmation/confirm",
                 new EmailConfirmationDto(user.Id, IdentityTokenCodec.Encode(rawToken)),
                 ct);
-            confirmationResponse.EnsureSuccessStatusCode();
+            await confirmationResponse.EnsureSuccessWithBodyAsync(ct);
         }
 
         using var loginResponse = await client.PostJsonAsync(
@@ -82,9 +97,13 @@ public static class ApiTestClient
                 "rc-device",
                 "RC Test Device"),
             ct);
-        loginResponse.EnsureSuccessStatusCode();
-        var loginEnvelope = await loginResponse.ReadApiResponseAsync<AuthResponseDto>(ct);
-        var authentication = loginEnvelope.Data
+        await loginResponse.EnsureSuccessWithBodyAsync(ct);
+        var loginEnvelope = await loginResponse.ReadApiResponseAsync<LoginResultDto>(ct);
+        var login = loginEnvelope.Data
+            ?? throw new InvalidOperationException("Login returned no result.");
+        if (login.Status != LoginStatuses.Authenticated)
+            throw new InvalidOperationException($"Login returned unexpected status '{login.Status}'.");
+        var authentication = login.Authentication
             ?? throw new InvalidOperationException("Login returned no authentication data.");
 
         return (registration, authentication);
