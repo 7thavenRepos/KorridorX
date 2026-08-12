@@ -4,6 +4,7 @@ using System.Security.Cryptography;
 using System.Text;
 using KorridorX.Configuration;
 using KorridorX.Models.Identity;
+using KorridorX.Services.Security;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
@@ -28,6 +29,7 @@ public class JwtTokenService : IJwtTokenService
         var expiresAt = DateTime.UtcNow.AddMinutes(_jwtOptions.AccessTokenMinutes);
 
         var roles = await _userManager.GetRolesAsync(user);
+        var securityStamp = await _userManager.GetSecurityStampAsync(user);
 
         var claims = new List<Claim>
         {
@@ -38,7 +40,9 @@ public class JwtTokenService : IJwtTokenService
             new(ClaimTypes.Name, user.Email ?? ""),
             new("firstName", user.FirstName),
             new("lastName", user.LastName),
-            new("userType", user.UserType.ToString())
+            new("userType", user.UserType.ToString()),
+            new("email_confirmed", user.EmailConfirmed ? "true" : "false"),
+            new(SecurityStampSecurity.ClaimType, SecurityStampSecurity.Hash(securityStamp))
         };
 
         foreach (var role in roles)

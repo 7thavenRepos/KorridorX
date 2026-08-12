@@ -15,6 +15,7 @@ public sealed class SecurityOptions
 
     public RateLimitOptions RateLimits { get; set; } = new();
     public SessionSecurityOptions Sessions { get; set; } = new();
+    public AccountSecurityOptions Accounts { get; set; } = new();
     public TransferRiskOptions TransferRisk { get; set; } = new();
 }
 
@@ -33,6 +34,13 @@ public sealed class RateLimitOptions
 public sealed class SessionSecurityOptions
 {
     public int MaximumActiveSessionsPerUser { get; set; } = 10;
+}
+
+public sealed class AccountSecurityOptions
+{
+    public bool RequireConfirmedEmail { get; set; } = true;
+    public string FrontendBaseUrl { get; set; } = "http://localhost:4200";
+    public int TokenLifespanMinutes { get; set; } = 120;
 }
 
 public sealed class TransferRiskOptions
@@ -75,6 +83,18 @@ public sealed class SecurityOptionsValidator : IValidateOptions<SecurityOptions>
         ValidatePositive(options.RateLimits.WebhookPermitLimit, "Security:RateLimits:WebhookPermitLimit", errors);
         ValidatePositive(options.RateLimits.WebhookWindowMinutes, "Security:RateLimits:WebhookWindowMinutes", errors);
         ValidatePositive(options.Sessions.MaximumActiveSessionsPerUser, "Security:Sessions:MaximumActiveSessionsPerUser", errors);
+
+        if (!Uri.TryCreate(options.Accounts.FrontendBaseUrl, UriKind.Absolute, out var frontendUri) ||
+            (frontendUri.Scheme != Uri.UriSchemeHttp && frontendUri.Scheme != Uri.UriSchemeHttps) ||
+            !string.IsNullOrEmpty(frontendUri.UserInfo) ||
+            !string.IsNullOrEmpty(frontendUri.Query) ||
+            !string.IsNullOrEmpty(frontendUri.Fragment))
+        {
+            errors.Add("Security:Accounts:FrontendBaseUrl must be an absolute HTTP or HTTPS URL without a query or fragment.");
+        }
+
+        if (options.Accounts.TokenLifespanMinutes is < 15 or > 1440)
+            errors.Add("Security:Accounts:TokenLifespanMinutes must be between 15 and 1440.");
 
         if (options.TransferRisk.ReviewScore < 0 || options.TransferRisk.ReviewScore > 100)
             errors.Add("Security:TransferRisk:ReviewScore must be between 0 and 100.");

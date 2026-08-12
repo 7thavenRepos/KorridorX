@@ -1,13 +1,17 @@
 using KorridorX.Configuration;
 using KorridorX.Data;
+using KorridorX.Dtos.Audit;
 using KorridorX.Dtos.Auth;
 using KorridorX.Models.Customers;
 using KorridorX.Models.Enums;
 using KorridorX.Models.Identity;
+using KorridorX.Services.Audit;
+using KorridorX.Services.Notifications;
 using KorridorX.Services.Security;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
+using System.Diagnostics;
 
 namespace KorridorX.Services.Auth;
 
@@ -16,21 +20,29 @@ public class AuthService : IAuthService
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly AppDbContext _db;
     private readonly IJwtTokenService _jwtTokenService;
+    private readonly INotificationQueueService _notifications;
+    private readonly IAuditService _audit;
     private readonly SessionSecurityOptions _sessionOptions;
+    private readonly AccountSecurityOptions _accountOptions;
 
     public AuthService(
         UserManager<ApplicationUser> userManager,
         AppDbContext db,
         IJwtTokenService jwtTokenService,
+        INotificationQueueService notifications,
+        IAuditService audit,
         IOptions<SecurityOptions> securityOptions)
     {
         _userManager = userManager;
         _db = db;
         _jwtTokenService = jwtTokenService;
+        _notifications = notifications;
+        _audit = audit;
         _sessionOptions = securityOptions.Value.Sessions;
+        _accountOptions = securityOptions.Value.Accounts;
     }
 
-    public async Task<AuthResponseDto> RegisterAsync(
+    public async Task<RegistrationResultDto> RegisterAsync(
         RegisterRequestDto request,
         string? ipAddress,
         CancellationToken ct = default)
@@ -54,6 +66,7 @@ public class AuthService : IAuthService
             Status = UserStatus.Active
         };
 
+        await using var transaction = await _db.Database.BeginTransactionAsync(ct);
         var result = await _userManager.CreateAsync(user, request.Password);
 
         if (!result.Succeeded)
@@ -87,20 +100,51 @@ public class AuthService : IAuthService
             });
         }
 
-        var refresh = _jwtTokenService.GenerateRefreshToken();
-        _db.RefreshTokens.Add(CreateRefreshToken(
-            user.Id,
-            refresh.Token,
-            refresh.ExpiresAt,
-            ipAddress,
-            null,
-            null,
-            null));
+        if (_accountOptions.RequireConfirmedEmail)
+        {
+            await QueueEmailConfirmationAsync(user, ct);
+        }
+        else
+        {
+            user.EmailConfirmed = true;
+        }
+        _audit.Stage(new AuditRecordRequest(
+            Action: "ACCOUNT_REGISTERED",
+            Category: "Authentication",
+            EntityName: nameof(ApplicationUser),
+            EntityId: user.Id.ToString(),
+            NewValues: new
+            {
+                user.UserType,
+                EmailConfirmationRequired = _accountOptions.RequireConfirmedEmail
+            },
+            UserId: user.Id));
+
+        AuthResponseDto? authentication = null;
+        if (!_accountOptions.RequireConfirmedEmail)
+        {
+            var refresh = _jwtTokenService.GenerateRefreshToken();
+            _db.RefreshTokens.Add(CreateRefreshToken(
+                user.Id,
+                refresh.Token,
+                refresh.ExpiresAt,
+                ipAddress,
+                null,
+                null,
+                null));
+
+            var access = await _jwtTokenService.GenerateAccessTokenAsync(user);
+            authentication = ToAuthResponse(user, access, refresh);
+        }
 
         await _db.SaveChangesAsync(ct);
+        await transaction.CommitAsync(ct);
 
-        var access = await _jwtTokenService.GenerateAccessTokenAsync(user);
-        return ToAuthResponse(user, access, refresh);
+        return new RegistrationResultDto(
+            user.Id,
+            user.Email ?? email,
+            _accountOptions.RequireConfirmedEmail,
+            authentication);
     }
 
     public async Task<AuthResponseDto> LoginAsync(
@@ -133,6 +177,13 @@ public class AuthService : IAuthService
         }
 
         await _userManager.ResetAccessFailedCountAsync(user);
+
+        if (_accountOptions.RequireConfirmedEmail && !await _userManager.IsEmailConfirmedAsync(user))
+        {
+            await RecordLoginAsync(user.Id, request, ipAddress, userAgent, false, "Email not confirmed", ct);
+            throw new UnauthorizedAccessException("Email confirmation is required before sign-in.");
+        }
+
         await RecordLoginAsync(user.Id, request, ipAddress, userAgent, true, null, ct, saveImmediately: false);
 
         var refresh = _jwtTokenService.GenerateRefreshToken();
@@ -187,6 +238,8 @@ public class AuthService : IAuthService
         var user = existing.User;
         if (user.Status != UserStatus.Active)
             throw new UnauthorizedAccessException("Account is not active.");
+        if (_accountOptions.RequireConfirmedEmail && !await _userManager.IsEmailConfirmedAsync(user))
+            throw new UnauthorizedAccessException("Email confirmation is required before sign-in.");
 
         var replacement = _jwtTokenService.GenerateRefreshToken();
         var replacementHash = RefreshTokenSecurity.Hash(replacement.Token);
@@ -240,7 +293,8 @@ public class AuthService : IAuthService
             user.CountryCode,
             user.UserType,
             user.Status,
-            roles);
+            roles,
+            user.EmailConfirmed);
     }
 
     public async Task<IReadOnlyList<UserSessionDto>> GetSessionsAsync(
@@ -298,6 +352,214 @@ public class AuthService : IAuthService
             ct);
         await _db.SaveChangesAsync(ct);
         return count;
+    }
+
+    public async Task RequestPasswordResetAsync(
+        PasswordResetRequestDto request,
+        CancellationToken ct = default)
+    {
+        var startedAt = Stopwatch.GetTimestamp();
+        try
+        {
+            var email = request.Email.Trim().ToLowerInvariant();
+            var user = await _userManager.FindByEmailAsync(email);
+
+            if (user is null || user.Status != UserStatus.Active)
+                return;
+
+            var token = await _userManager.GeneratePasswordResetTokenAsync(user);
+            var message = AccountSecurityEmailFactory.CreatePasswordReset(
+                _accountOptions.FrontendBaseUrl,
+                user.Id,
+                IdentityTokenCodec.Encode(token),
+                user.FirstName);
+
+            await _notifications.QueueUserAsync(
+                user.Id,
+                message.Subject,
+                message.Body,
+                NotificationSecurityPolicy.AccountSecurityEntityType,
+                user.Id,
+                ct);
+
+            _audit.Stage(new AuditRecordRequest(
+                Action: "PASSWORD_RESET_REQUESTED",
+                Category: "Authentication",
+                EntityName: nameof(ApplicationUser),
+                EntityId: user.Id.ToString(),
+                UserId: user.Id));
+
+            await _db.SaveChangesAsync(ct);
+        }
+        finally
+        {
+            await ApplyEnumerationSafeDelayAsync(startedAt, ct);
+        }
+    }
+
+    public async Task ConfirmPasswordResetAsync(
+        PasswordResetConfirmationDto request,
+        string? ipAddress,
+        CancellationToken ct = default)
+    {
+        if (request.UserId == Guid.Empty ||
+            !IdentityTokenCodec.TryDecode(request.Token, out var token))
+        {
+            throw InvalidPasswordReset();
+        }
+
+        var user = await _userManager.FindByIdAsync(request.UserId.ToString());
+        if (user is null || user.Status != UserStatus.Active)
+            throw InvalidPasswordReset();
+
+        await using var transaction = await _db.Database.BeginTransactionAsync(ct);
+
+        user.LockoutEnd = null;
+        user.AccessFailedCount = 0;
+        var result = await _userManager.ResetPasswordAsync(user, token, request.NewPassword);
+        if (!result.Succeeded)
+        {
+            if (result.Errors.Any(x => string.Equals(x.Code, "InvalidToken", StringComparison.Ordinal)))
+                throw InvalidPasswordReset();
+
+            var errors = string.Join("; ", result.Errors.Select(x => x.Description));
+            throw new InvalidOperationException(
+                string.IsNullOrWhiteSpace(errors)
+                    ? "The new password does not meet account security requirements."
+                    : errors);
+        }
+
+        var revokedSessions = await RevokeAllActiveSessionsInternalAsync(
+            user.Id,
+            ipAddress,
+            "Password changed.",
+            ct);
+
+        _audit.Stage(new AuditRecordRequest(
+            Action: "PASSWORD_RESET_COMPLETED",
+            Category: "Authentication",
+            EntityName: nameof(ApplicationUser),
+            EntityId: user.Id.ToString(),
+            Metadata: new { RevokedSessions = revokedSessions },
+            UserId: user.Id));
+
+        var changedMessage = AccountSecurityEmailFactory.CreatePasswordChanged(user.FirstName);
+        await _notifications.QueueUserAsync(
+            user.Id,
+            changedMessage.Subject,
+            changedMessage.Body,
+            "AccountSecurityNotice",
+            user.Id,
+            ct);
+
+        await _db.SaveChangesAsync(ct);
+        await transaction.CommitAsync(ct);
+    }
+
+    public async Task RequestEmailConfirmationAsync(
+        EmailConfirmationRequestDto request,
+        CancellationToken ct = default)
+    {
+        var startedAt = Stopwatch.GetTimestamp();
+        try
+        {
+            var email = request.Email.Trim().ToLowerInvariant();
+            var user = await _userManager.FindByEmailAsync(email);
+
+            if (user is null ||
+                user.Status != UserStatus.Active ||
+                await _userManager.IsEmailConfirmedAsync(user))
+            {
+                return;
+            }
+
+            await QueueEmailConfirmationAsync(user, ct);
+            _audit.Stage(new AuditRecordRequest(
+                Action: "EMAIL_CONFIRMATION_REQUESTED",
+                Category: "Authentication",
+                EntityName: nameof(ApplicationUser),
+                EntityId: user.Id.ToString(),
+                UserId: user.Id));
+
+            await _db.SaveChangesAsync(ct);
+        }
+        finally
+        {
+            await ApplyEnumerationSafeDelayAsync(startedAt, ct);
+        }
+    }
+
+    public async Task ConfirmEmailAsync(
+        EmailConfirmationDto request,
+        CancellationToken ct = default)
+    {
+        if (request.UserId == Guid.Empty ||
+            !IdentityTokenCodec.TryDecode(request.Token, out var token))
+        {
+            throw InvalidEmailConfirmation();
+        }
+
+        var user = await _userManager.FindByIdAsync(request.UserId.ToString());
+        if (user is null || user.Status != UserStatus.Active)
+            throw InvalidEmailConfirmation();
+
+        if (await _userManager.IsEmailConfirmedAsync(user))
+            throw InvalidEmailConfirmation();
+
+        await using var transaction = await _db.Database.BeginTransactionAsync(ct);
+        var result = await _userManager.ConfirmEmailAsync(user, token);
+        if (!result.Succeeded)
+            throw InvalidEmailConfirmation();
+
+        var securityStampResult = await _userManager.UpdateSecurityStampAsync(user);
+        if (!securityStampResult.Succeeded)
+            throw new InvalidOperationException("Email was confirmed, but account security state could not be updated.");
+
+        _audit.Stage(new AuditRecordRequest(
+            Action: "EMAIL_CONFIRMED",
+            Category: "Authentication",
+            EntityName: nameof(ApplicationUser),
+            EntityId: user.Id.ToString(),
+            NewValues: new { EmailConfirmed = true },
+            UserId: user.Id));
+
+        await _db.SaveChangesAsync(ct);
+        await transaction.CommitAsync(ct);
+    }
+
+    private async Task QueueEmailConfirmationAsync(
+        ApplicationUser user,
+        CancellationToken ct)
+    {
+        var token = await _userManager.GenerateEmailConfirmationTokenAsync(user);
+        var message = AccountSecurityEmailFactory.CreateEmailConfirmation(
+            _accountOptions.FrontendBaseUrl,
+            user.Id,
+            IdentityTokenCodec.Encode(token),
+            user.FirstName);
+
+        await _notifications.QueueUserAsync(
+            user.Id,
+            message.Subject,
+            message.Body,
+            NotificationSecurityPolicy.AccountSecurityEntityType,
+            user.Id,
+            ct);
+    }
+
+    private static InvalidOperationException InvalidPasswordReset() =>
+        new("The password-reset request is invalid or has expired.");
+
+    private static InvalidOperationException InvalidEmailConfirmation() =>
+        new("The email-confirmation request is invalid or has expired.");
+
+    private static async Task ApplyEnumerationSafeDelayAsync(
+        long startedAt,
+        CancellationToken ct)
+    {
+        var remaining = TimeSpan.FromMilliseconds(250) - Stopwatch.GetElapsedTime(startedAt);
+        if (remaining > TimeSpan.Zero)
+            await Task.Delay(remaining, ct);
     }
 
     private async Task RecordLoginAsync(

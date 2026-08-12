@@ -8,6 +8,8 @@ public sealed class StartupConfigurationValidationService : IHostedService
     private readonly IHostEnvironment _environment;
     private readonly IOptions<JwtOptions> _jwtOptions;
     private readonly IOptions<HostingOptions> _hostingOptions;
+    private readonly IOptions<SecurityOptions> _securityOptions;
+    private readonly IOptions<NotificationDeliveryOptions> _notificationOptions;
     private readonly IOptions<ComplianceScreeningOptions> _screeningOptions;
     private readonly IOptions<OpenSanctionsOptions> _openSanctionsOptions;
     private readonly ILogger<StartupConfigurationValidationService> _logger;
@@ -17,6 +19,8 @@ public sealed class StartupConfigurationValidationService : IHostedService
         IHostEnvironment environment,
         IOptions<JwtOptions> jwtOptions,
         IOptions<HostingOptions> hostingOptions,
+        IOptions<SecurityOptions> securityOptions,
+        IOptions<NotificationDeliveryOptions> notificationOptions,
         IOptions<ComplianceScreeningOptions> screeningOptions,
         IOptions<OpenSanctionsOptions> openSanctionsOptions,
         ILogger<StartupConfigurationValidationService> logger)
@@ -25,6 +29,8 @@ public sealed class StartupConfigurationValidationService : IHostedService
         _environment = environment;
         _jwtOptions = jwtOptions;
         _hostingOptions = hostingOptions;
+        _securityOptions = securityOptions;
+        _notificationOptions = notificationOptions;
         _screeningOptions = screeningOptions;
         _openSanctionsOptions = openSanctionsOptions;
         _logger = logger;
@@ -36,6 +42,8 @@ public sealed class StartupConfigurationValidationService : IHostedService
         var connectionString = _configuration.GetConnectionString("DefaultConnection");
         var jwt = _jwtOptions.Value;
         var hosting = _hostingOptions.Value;
+        var security = _securityOptions.Value;
+        var notifications = _notificationOptions.Value;
         var screening = _screeningOptions.Value;
         var openSanctions = _openSanctionsOptions.Value;
 
@@ -49,17 +57,51 @@ public sealed class StartupConfigurationValidationService : IHostedService
         if (string.IsNullOrWhiteSpace(jwt.Key) || jwt.Key.Length < 32)
             errors.Add("Jwt:Key must contain at least 32 characters.");
 
-        if (_environment.IsProduction())
+        var isDeployedEnvironment =
+            !_environment.IsDevelopment() &&
+            !_environment.IsEnvironment("Testing");
+
+        if (isDeployedEnvironment)
         {
             var allowedHosts = _configuration["AllowedHosts"];
             if (string.IsNullOrWhiteSpace(allowedHosts) || allowedHosts.Trim() == "*")
-                errors.Add("AllowedHosts must be explicitly configured in Production.");
+                errors.Add("AllowedHosts must be explicitly configured outside Development.");
 
             if (LooksLikePlaceholder(jwt.Key))
-                errors.Add("Jwt:Key appears to be a placeholder and cannot be used in Production.");
+                errors.Add("Jwt:Key appears to be a placeholder and cannot be used outside Development.");
 
             if (hosting.AllowedOrigins.Any(LooksLikePlaceholder))
                 errors.Add("Hosting:AllowedOrigins contains a placeholder value.");
+
+            if (!security.Accounts.RequireConfirmedEmail)
+                errors.Add("Security:Accounts:RequireConfirmedEmail must be true outside Development.");
+
+            if (!Uri.TryCreate(security.Accounts.FrontendBaseUrl, UriKind.Absolute, out var frontendUri) ||
+                frontendUri.Scheme != Uri.UriSchemeHttps ||
+                frontendUri.IsLoopback ||
+                LooksLikePlaceholder(security.Accounts.FrontendBaseUrl))
+            {
+                errors.Add("Security:Accounts:FrontendBaseUrl must be a non-placeholder HTTPS URL outside Development.");
+            }
+            else
+            {
+                var frontendOrigin = frontendUri.GetLeftPart(UriPartial.Authority).TrimEnd('/');
+                if (!hosting.AllowedOrigins.Any(origin =>
+                    string.Equals(
+                        origin.TrimEnd('/'),
+                        frontendOrigin,
+                        StringComparison.OrdinalIgnoreCase)))
+                {
+                    errors.Add(
+                        "Security:Accounts:FrontendBaseUrl origin must be included in Hosting:AllowedOrigins.");
+                }
+            }
+
+            if (!notifications.WorkerEnabled || !notifications.Smtp.IsEnabled)
+            {
+                errors.Add(
+                    "Notification delivery worker and SMTP must be enabled outside Development for account-security email.");
+            }
 
             if (screening.IsEnabled &&
                 string.Equals(screening.ProviderCode, "ConfiguredWatchlist", StringComparison.OrdinalIgnoreCase) &&
@@ -85,7 +127,7 @@ public sealed class StartupConfigurationValidationService : IHostedService
             if (!openSanctions.IsEnabled)
                 errors.Add("OpenSanctions must be enabled when ComplianceScreening:ProviderCode is OpenSanctions.");
             if (string.IsNullOrWhiteSpace(openSanctions.ApiKey) ||
-                (_environment.IsProduction() && LooksLikePlaceholder(openSanctions.ApiKey)))
+                (isDeployedEnvironment && LooksLikePlaceholder(openSanctions.ApiKey)))
             {
                 errors.Add("OpenSanctions:ApiKey must contain a valid API key.");
             }

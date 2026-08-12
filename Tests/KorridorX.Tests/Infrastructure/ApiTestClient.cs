@@ -1,7 +1,12 @@
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
+using KorridorX.Dtos.Auth;
 using KorridorX.Infrastructure;
+using KorridorX.Models.Identity;
+using KorridorX.Services.Auth;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace KorridorX.Tests.Infrastructure;
 
@@ -39,4 +44,49 @@ public static class ApiTestClient
         T payload,
         CancellationToken ct = default) =>
         await client.PutAsJsonAsync(requestUri, payload, JsonOptions, ct);
+
+    public static async Task<(RegistrationResultDto Registration, AuthResponseDto Authentication)>
+        RegisterConfirmAndLoginAsync(
+            this HttpClient client,
+            IServiceProvider services,
+            RegisterRequestDto request,
+            CancellationToken ct = default)
+    {
+        using var registerResponse = await client.PostJsonAsync("/api/auth/register", request, ct);
+        registerResponse.EnsureSuccessStatusCode();
+        var registerEnvelope = await registerResponse.ReadApiResponseAsync<RegistrationResultDto>(ct);
+        var registration = registerEnvelope.Data
+            ?? throw new InvalidOperationException("Registration returned no data.");
+
+        if (registration.EmailConfirmationRequired)
+        {
+            await using var scope = services.CreateAsyncScope();
+            var userManager = scope.ServiceProvider
+                .GetRequiredService<UserManager<ApplicationUser>>();
+            var user = await userManager.FindByEmailAsync(request.Email)
+                ?? throw new InvalidOperationException("Registered user was not found.");
+            var rawToken = await userManager.GenerateEmailConfirmationTokenAsync(user);
+
+            using var confirmationResponse = await client.PostJsonAsync(
+                "/api/auth/email-confirmation/confirm",
+                new EmailConfirmationDto(user.Id, IdentityTokenCodec.Encode(rawToken)),
+                ct);
+            confirmationResponse.EnsureSuccessStatusCode();
+        }
+
+        using var loginResponse = await client.PostJsonAsync(
+            "/api/auth/login",
+            new LoginRequestDto(
+                request.Email,
+                request.Password,
+                "rc-device",
+                "RC Test Device"),
+            ct);
+        loginResponse.EnsureSuccessStatusCode();
+        var loginEnvelope = await loginResponse.ReadApiResponseAsync<AuthResponseDto>(ct);
+        var authentication = loginEnvelope.Data
+            ?? throw new InvalidOperationException("Login returned no authentication data.");
+
+        return (registration, authentication);
+    }
 }

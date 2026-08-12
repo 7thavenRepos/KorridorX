@@ -45,7 +45,9 @@ public sealed class NotificationOperationsService : INotificationOperationsServi
                 x.Channel,
                 x.Recipient,
                 x.Subject,
-                x.Body,
+                x.RelatedEntityType == NotificationSecurityPolicy.AccountSecurityEntityType
+                    ? NotificationSecurityPolicy.RedactedBody
+                    : x.Body,
                 x.Status,
                 x.AttemptCount,
                 x.MaxAttempts,
@@ -112,7 +114,7 @@ public sealed class NotificationOperationsService : INotificationOperationsServi
             x.Channel,
             x.Recipient,
             x.Subject,
-            x.Body,
+            NotificationSecurityPolicy.BodyForApi(x),
             x.Status,
             x.AttemptCount,
             x.MaxAttempts,

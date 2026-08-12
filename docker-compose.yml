@@ -37,6 +37,9 @@ services:
       Hosting__AllowedOrigins__0: ${ALLOWED_ORIGIN:-http://localhost:4200}
       Hosting__RequireHttpsRedirection: ${REQUIRE_HTTPS_REDIRECTION:-false}
       Hosting__DataProtectionKeysPath: /var/lib/korridorx/keys
+      Security__Accounts__RequireConfirmedEmail: ${REQUIRE_CONFIRMED_EMAIL:-false}
+      Security__Accounts__FrontendBaseUrl: ${ACCOUNT_FRONTEND_BASE_URL:-http://localhost:4200}
+      Security__Accounts__TokenLifespanMinutes: ${ACCOUNT_TOKEN_LIFESPAN_MINUTES:-120}
       IdentitySeed__SeedTestUsers: ${IdentitySeed__SeedTestUsers:-false}
       IdentitySeed__SuperAdmin__FirstName: ${IdentitySeed__SuperAdmin__FirstName:-}
       IdentitySeed__SuperAdmin__LastName: ${IdentitySeed__SuperAdmin__LastName:-}

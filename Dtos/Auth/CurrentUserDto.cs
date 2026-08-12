@@ -12,5 +12,6 @@ public record CurrentUserDto
     string? CountryCode,
     UserType UserType,
     UserStatus Status,
-    IReadOnlyList<string> Roles
+    IReadOnlyList<string> Roles,
+    bool EmailConfirmed
 );

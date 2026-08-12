@@ -13,11 +13,15 @@ ASP.NET Core maps double underscores to configuration sections.
 | `Hosting__AllowedOrigins__0` | Production | First permitted browser frontend origin. |
 | `Hosting__DataProtectionKeysPath` | Production | Persistent key directory. |
 | `Hosting__TrustedProxies__0` | When proxied | Explicit reverse-proxy IP. |
+| `Security__Accounts__RequireConfirmedEmail` | Production | Must be `true`; prevents token issuance until email confirmation. |
+| `Security__Accounts__FrontendBaseUrl` | Yes | Canonical frontend URL used in confirmation and password-reset links; HTTPS is required in Production. |
+| `Security__Accounts__TokenLifespanMinutes` | No | Identity confirmation/reset token lifetime; defaults to 120 minutes. |
 | `Blaaiz__IsEnabled` | No | Enables live provider calls. |
 | `Blaaiz__ClientId` | When enabled | OAuth client ID. |
 | `Blaaiz__ClientSecret` | When enabled | OAuth client secret. |
 | `Blaaiz__WebhookSigningSecret` | When enabled | Webhook HMAC secret. |
 | `NotificationDelivery__WorkerEnabled` | No | Enables email outbox processing. |
+| `NotificationDelivery__Smtp__IsEnabled` | Production | Must be `true` with the worker so account-security email can be delivered. |
 | `NotificationDelivery__Smtp__Password` | When SMTP enabled | SMTP password. |
 | `IdentitySeed__SuperAdmin__Email` | First Production startup | Bootstrap Super Administrator email when no Super Administrator exists yet. |
 | `IdentitySeed__SuperAdmin__Password` | First Production startup | Bootstrap password supplied only through the deployment secret store. |

@@ -365,7 +365,6 @@ FodyWeavers.xsd
 .env
 .env.*
 !.env.example
-!.env.staging.example
 backups/
 *.dump
 *.backup

@@ -8,7 +8,7 @@ public sealed class HostingOptions
     public const string SectionName = "Hosting";
 
     public string ApplicationName { get; set; } = "KorridorX";
-    public string[] AllowedOrigins { get; set; } = [];
+    public string[] AllowedOrigins { get; set; } = ["http://localhost:4200"];
     public bool RequireHttpsRedirection { get; set; } = true;
     public bool SwaggerEnabled { get; set; }
     public bool JsonConsoleLogging { get; set; } = true;
@@ -70,16 +70,16 @@ public sealed class HostingOptionsValidator : IValidateOptions<HostingOptions>
                 errors.Add($"Hosting:TrustedProxies contains an invalid IP address '{trustedProxy}'.");
         }
 
-        if (_environment.IsProduction())
+        if (!_environment.IsDevelopment() && !_environment.IsEnvironment("Testing"))
         {
             if (!options.RequireHttpsRedirection)
-                errors.Add("Hosting:RequireHttpsRedirection must be true in Production.");
+                errors.Add("Hosting:RequireHttpsRedirection must be true outside Development.");
 
             if (options.SwaggerEnabled)
-                errors.Add("Hosting:SwaggerEnabled must be false in Production.");
+                errors.Add("Hosting:SwaggerEnabled must be false outside Development.");
 
             if (string.IsNullOrWhiteSpace(options.DataProtectionKeysPath))
-                errors.Add("Hosting:DataProtectionKeysPath is required in Production.");
+                errors.Add("Hosting:DataProtectionKeysPath is required outside Development.");
         }
 
         return errors.Count == 0

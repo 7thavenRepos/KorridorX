@@ -11,6 +11,7 @@ namespace KorridorX.Controllers;
 
 [ApiController]
 [Route("api/auth")]
+[ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
 public class AuthController : ControllerBase
 {
     private readonly IAuthService _authService;
@@ -29,7 +30,11 @@ public class AuthController : ControllerBase
             HttpContext.Connection.RemoteIpAddress?.ToString(),
             ct);
 
-        return Ok(ApiResponses.Ok(response, "Registration successful."));
+        var message = response.EmailConfirmationRequired
+            ? "Registration successful. Check your email to confirm your account."
+            : "Registration successful.";
+
+        return Ok(ApiResponses.Ok(response, message));
     }
 
     [EnableRateLimiting(SecurityRateLimitPolicies.Authentication)]
@@ -56,6 +61,61 @@ public class AuthController : ControllerBase
             ct);
 
         return Ok(ApiResponses.Ok(response, "Token refreshed successfully."));
+    }
+
+    [EnableRateLimiting(SecurityRateLimitPolicies.Authentication)]
+    [HttpPost("password-reset/request")]
+    public async Task<IActionResult> RequestPasswordReset(
+        PasswordResetRequestDto request,
+        CancellationToken ct)
+    {
+        await _authService.RequestPasswordResetAsync(request, ct);
+
+        return Ok(ApiResponses.Ok(
+            new AccountSecurityRequestResultDto(),
+            "If the account can receive password-reset email, a secure link has been sent."));
+    }
+
+    [EnableRateLimiting(SecurityRateLimitPolicies.Authentication)]
+    [HttpPost("password-reset/confirm")]
+    public async Task<IActionResult> ConfirmPasswordReset(
+        PasswordResetConfirmationDto request,
+        CancellationToken ct)
+    {
+        await _authService.ConfirmPasswordResetAsync(
+            request,
+            HttpContext.Connection.RemoteIpAddress?.ToString(),
+            ct);
+
+        return Ok(ApiResponses.Ok(
+            new AccountSecurityActionResultDto(),
+            "Password reset successfully. Sign in with your new password."));
+    }
+
+    [EnableRateLimiting(SecurityRateLimitPolicies.Authentication)]
+    [HttpPost("email-confirmation/request")]
+    public async Task<IActionResult> RequestEmailConfirmation(
+        EmailConfirmationRequestDto request,
+        CancellationToken ct)
+    {
+        await _authService.RequestEmailConfirmationAsync(request, ct);
+
+        return Ok(ApiResponses.Ok(
+            new AccountSecurityRequestResultDto(),
+            "If the account requires confirmation, a secure link has been sent."));
+    }
+
+    [EnableRateLimiting(SecurityRateLimitPolicies.Authentication)]
+    [HttpPost("email-confirmation/confirm")]
+    public async Task<IActionResult> ConfirmEmail(
+        EmailConfirmationDto request,
+        CancellationToken ct)
+    {
+        await _authService.ConfirmEmailAsync(request, ct);
+
+        return Ok(ApiResponses.Ok(
+            new AccountSecurityActionResultDto(),
+            "Email address confirmed successfully. You can now sign in."));
     }
 
     [Authorize]

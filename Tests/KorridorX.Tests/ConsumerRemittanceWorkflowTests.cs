@@ -25,8 +25,8 @@ public sealed class ConsumerRemittanceWorkflowTests
         using var client = _fixture.CreateClient();
         var email = $"consumer-{Guid.NewGuid():N}@example.test";
 
-        var registerResponse = await client.PostJsonAsync(
-            "/api/auth/register",
+        var (registration, authentication) = await client.RegisterConfirmAndLoginAsync(
+            _fixture.Factory.Services,
             new RegisterRequestDto(
                 "Kay",
                 "Tester",
@@ -35,19 +35,15 @@ public sealed class ConsumerRemittanceWorkflowTests
                 "+12145550101",
                 "US",
                 UserType.Consumer));
-
-        Assert.Equal(HttpStatusCode.OK, registerResponse.StatusCode);
-        var registered = await registerResponse.ReadApiResponseAsync<AuthResponseDto>();
-        Assert.True(registered.Success);
-        Assert.NotNull(registered.Data);
-        client.UseBearerToken(registered.Data!.AccessToken);
+        client.UseBearerToken(authentication.AccessToken);
 
         var meResponse = await client.GetAsync("/api/auth/me");
         Assert.Equal(HttpStatusCode.OK, meResponse.StatusCode);
         var meEnvelope = await meResponse.ReadApiResponseAsync<CurrentUserDto>();
         var currentUser = Assert.IsType<CurrentUserDto>(meEnvelope.Data);
-        Assert.Equal(registered.Data!.UserId, currentUser.UserId);
+        Assert.Equal(registration.UserId, currentUser.UserId);
         Assert.Equal(new[] { "Consumer" }, currentUser.Roles);
+        Assert.True(currentUser.EmailConfirmed);
 
         var recipientResponse = await client.PostJsonAsync(
             "/api/recipients",

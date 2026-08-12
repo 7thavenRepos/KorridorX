@@ -113,7 +113,9 @@ public class NotificationQueueService : INotificationQueueService
                 x.Channel,
                 x.Recipient,
                 x.Subject,
-                x.Body,
+                x.RelatedEntityType == NotificationSecurityPolicy.AccountSecurityEntityType
+                    ? NotificationSecurityPolicy.RedactedBody
+                    : x.Body,
                 x.Status,
                 x.AttemptCount,
                 x.MaxAttempts,
@@ -180,7 +182,7 @@ public class NotificationQueueService : INotificationQueueService
             x.Channel,
             x.Recipient,
             x.Subject,
-            x.Body,
+            NotificationSecurityPolicy.BodyForApi(x),
             x.Status,
             x.AttemptCount,
             x.MaxAttempts,

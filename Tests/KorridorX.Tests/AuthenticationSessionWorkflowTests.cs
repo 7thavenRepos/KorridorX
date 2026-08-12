@@ -21,8 +21,8 @@ public sealed class AuthenticationSessionWorkflowTests
         using var client = _fixture.CreateClient();
         var email = $"session-{Guid.NewGuid():N}@example.test";
 
-        var registerResponse = await client.PostJsonAsync(
-            "/api/auth/register",
+        var (_, registered) = await client.RegisterConfirmAndLoginAsync(
+            _fixture.Factory.Services,
             new RegisterRequestDto(
                 "Session",
                 "Tester",
@@ -31,10 +31,6 @@ public sealed class AuthenticationSessionWorkflowTests
                 null,
                 "US",
                 UserType.Consumer));
-
-        Assert.Equal(HttpStatusCode.OK, registerResponse.StatusCode);
-        var registerEnvelope = await registerResponse.ReadApiResponseAsync<AuthResponseDto>();
-        var registered = Assert.IsType<AuthResponseDto>(registerEnvelope.Data);
 
         var refreshResponse = await client.PostJsonAsync(
             "/api/auth/refresh-token",

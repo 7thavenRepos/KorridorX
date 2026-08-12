@@ -4,7 +4,7 @@ namespace KorridorX.Services.Auth;
 
 public interface IAuthService
 {
-    Task<AuthResponseDto> RegisterAsync(
+    Task<RegistrationResultDto> RegisterAsync(
         RegisterRequestDto request,
         string? ipAddress,
         CancellationToken ct = default);
@@ -40,5 +40,22 @@ public interface IAuthService
         Guid userId,
         string? ipAddress,
         string? reason,
+        CancellationToken ct = default);
+
+    Task RequestPasswordResetAsync(
+        PasswordResetRequestDto request,
+        CancellationToken ct = default);
+
+    Task ConfirmPasswordResetAsync(
+        PasswordResetConfirmationDto request,
+        string? ipAddress,
+        CancellationToken ct = default);
+
+    Task RequestEmailConfirmationAsync(
+        EmailConfirmationRequestDto request,
+        CancellationToken ct = default);
+
+    Task ConfirmEmailAsync(
+        EmailConfirmationDto request,
         CancellationToken ct = default);
 }

@@ -5,6 +5,7 @@ using KorridorX.Data.Seed;
 using KorridorX.Infrastructure;
 using KorridorX.HealthChecks;
 using KorridorX.Middleware;
+using KorridorX.Models.Enums;
 using KorridorX.Models.Identity;
 using KorridorX.Providers.Remittance;
 using KorridorX.Providers.Remittance.Blaaiz;
@@ -178,6 +179,12 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
 var securityOptions = builder.Configuration
     .GetSection(SecurityOptions.SectionName)
     .Get<SecurityOptions>() ?? new SecurityOptions();
+
+builder.Services.Configure<DataProtectionTokenProviderOptions>(options =>
+{
+    options.TokenLifespan = TimeSpan.FromMinutes(
+        securityOptions.Accounts.TokenLifespanMinutes);
+});
 
 builder.Services.AddRateLimiter(options =>
 {
@@ -384,8 +391,13 @@ builder.Services
 
         options.Events = new JwtBearerEvents
         {
+            OnTokenValidated = ValidateAccessTokenAsync,
+
             OnChallenge = async context =>
             {
+                if (context.Response.HasStarted)
+                    return;
+
                 context.HandleResponse();
 
                 context.Response.StatusCode = StatusCodes.Status401Unauthorized;
@@ -394,7 +406,7 @@ builder.Services
                 var response = ApiResponses.Fail(
                     "Authentication required.",
                     "UNAUTHORIZED",
-                    "A valid Bearer access token was not supplied.");
+                    "A valid Bearer access token is required.");
 
                 await context.Response.WriteAsJsonAsync(response);
             },
@@ -408,25 +420,6 @@ builder.Services
                     "You do not have permission to perform this action.",
                     "FORBIDDEN",
                     "Your account is authenticated but does not have the required permission.");
-
-                await context.Response.WriteAsJsonAsync(response);
-            },
-
-            OnAuthenticationFailed = async context =>
-            {
-                context.NoResult();
-
-                context.Response.StatusCode = StatusCodes.Status401Unauthorized;
-                context.Response.ContentType = "application/json";
-
-                var isExpired = context.Exception is SecurityTokenExpiredException;
-
-                var response = ApiResponses.Fail(
-                    isExpired ? "Your session has expired." : "Invalid access token.",
-                    isExpired ? "TOKEN_EXPIRED" : "INVALID_TOKEN",
-                    isExpired
-                        ? "Please refresh your access token or log in again."
-                        : "The supplied JWT could not be validated.");
 
                 await context.Response.WriteAsJsonAsync(response);
             }
@@ -550,5 +543,39 @@ static string ResolveRateLimitKey(HttpContext context) =>
     context.User.FindFirstValue(ClaimTypes.NameIdentifier)
     ?? context.Connection.RemoteIpAddress?.ToString()
     ?? "unknown";
+
+static async Task ValidateAccessTokenAsync(TokenValidatedContext context)
+{
+    var userIdValue = context.Principal?.FindFirstValue(ClaimTypes.NameIdentifier);
+    if (!Guid.TryParse(userIdValue, out var userId))
+    {
+        context.Fail("The access token does not identify a valid user.");
+        return;
+    }
+
+    var userManager = context.HttpContext.RequestServices
+        .GetRequiredService<UserManager<ApplicationUser>>();
+    var user = await userManager.FindByIdAsync(userId.ToString());
+
+    if (user is null || user.Status != UserStatus.Active)
+    {
+        context.Fail("The account is unavailable.");
+        return;
+    }
+
+    var claimedStamp = context.Principal?.FindFirstValue(SecurityStampSecurity.ClaimType);
+    var currentStamp = await userManager.GetSecurityStampAsync(user);
+    if (!SecurityStampSecurity.Matches(claimedStamp, currentStamp))
+    {
+        context.Fail("The access token was invalidated by an account security change.");
+        return;
+    }
+
+    var accountOptions = context.HttpContext.RequestServices
+        .GetRequiredService<IOptions<SecurityOptions>>()
+        .Value.Accounts;
+    if (accountOptions.RequireConfirmedEmail && !user.EmailConfirmed)
+        context.Fail("Email confirmation is required before this account can be used.");
+}
 
 public partial class Program { }
