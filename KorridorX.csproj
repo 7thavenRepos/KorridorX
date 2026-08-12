@@ -4,6 +4,7 @@
 		<TargetFramework>net9.0</TargetFramework>
 		<Nullable>enable</Nullable>
 		<ImplicitUsings>enable</ImplicitUsings>
+		<UserSecretsId>KorridorX-Development-Identity-Secrets</UserSecretsId>
 
 		<!--
 			The test project lives below the web project directory. Exclude the

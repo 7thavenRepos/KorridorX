@@ -81,6 +81,11 @@ else
 
 builder.Services.Configure<JwtOptions>(builder.Configuration.GetSection("Jwt"));
 builder.Services
+    .AddOptions<IdentitySeedOptions>()
+    .Bind(builder.Configuration.GetSection(IdentitySeedOptions.SectionName))
+    .ValidateOnStart();
+builder.Services.AddSingleton<IValidateOptions<IdentitySeedOptions>, IdentitySeedOptionsValidator>();
+builder.Services
     .AddOptions<HostingOptions>()
     .Bind(builder.Configuration.GetSection(HostingOptions.SectionName))
     .ValidateOnStart();
@@ -253,6 +258,11 @@ builder.Services.AddHttpClient(OpenSanctionsScreeningProvider.HttpClientName, (s
 
 builder.Services.AddScoped<IJwtTokenService, JwtTokenService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
+builder.Services.AddScoped<IRoleSeeder, RoleSeeder>();
+builder.Services.AddScoped<ISeedUserProvisioner, SeedUserProvisioner>();
+builder.Services.AddScoped<ISuperAdminSeeder, SuperAdminSeeder>();
+builder.Services.AddScoped<INonProductionTestUserSeeder, NonProductionTestUserSeeder>();
+builder.Services.AddScoped<IdentitySeedRunner>();
 
 builder.Services.AddScoped<ICustomerProfileService, CustomerProfileService>();
 builder.Services.AddScoped<IRecipientService, RecipientService>();
@@ -518,7 +528,11 @@ app.MapHealthChecks("/health/ready", new HealthCheckOptions
 app.MapControllers();
 
 if (!app.Environment.IsEnvironment("Testing"))
-    await RoleSeeder.SeedRolesAsync(app.Services);
+{
+    await using var seedScope = app.Services.CreateAsyncScope();
+    var identitySeedRunner = seedScope.ServiceProvider.GetRequiredService<IdentitySeedRunner>();
+    await identitySeedRunner.SeedAsync();
+}
 
 app.Run();
 

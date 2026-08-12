@@ -37,6 +37,49 @@ services:
       Hosting__AllowedOrigins__0: ${ALLOWED_ORIGIN:-http://localhost:4200}
       Hosting__RequireHttpsRedirection: ${REQUIRE_HTTPS_REDIRECTION:-false}
       Hosting__DataProtectionKeysPath: /var/lib/korridorx/keys
+      IdentitySeed__SeedTestUsers: ${IdentitySeed__SeedTestUsers:-false}
+      IdentitySeed__SuperAdmin__FirstName: ${IdentitySeed__SuperAdmin__FirstName:-}
+      IdentitySeed__SuperAdmin__LastName: ${IdentitySeed__SuperAdmin__LastName:-}
+      IdentitySeed__SuperAdmin__Email: ${IdentitySeed__SuperAdmin__Email:-}
+      IdentitySeed__SuperAdmin__Password: ${IdentitySeed__SuperAdmin__Password:-}
+      IdentitySeed__SuperAdmin__PhoneNumber: ${IdentitySeed__SuperAdmin__PhoneNumber:-}
+      IdentitySeed__SuperAdmin__CountryCode: ${IdentitySeed__SuperAdmin__CountryCode:-}
+      IdentitySeed__TestUsers__Consumer__FirstName: ${IdentitySeed__TestUsers__Consumer__FirstName:-}
+      IdentitySeed__TestUsers__Consumer__LastName: ${IdentitySeed__TestUsers__Consumer__LastName:-}
+      IdentitySeed__TestUsers__Consumer__Email: ${IdentitySeed__TestUsers__Consumer__Email:-}
+      IdentitySeed__TestUsers__Consumer__Password: ${IdentitySeed__TestUsers__Consumer__Password:-}
+      IdentitySeed__TestUsers__Consumer__PhoneNumber: ${IdentitySeed__TestUsers__Consumer__PhoneNumber:-}
+      IdentitySeed__TestUsers__Consumer__CountryCode: ${IdentitySeed__TestUsers__Consumer__CountryCode:-}
+      IdentitySeed__TestUsers__BusinessOwner__FirstName: ${IdentitySeed__TestUsers__BusinessOwner__FirstName:-}
+      IdentitySeed__TestUsers__BusinessOwner__LastName: ${IdentitySeed__TestUsers__BusinessOwner__LastName:-}
+      IdentitySeed__TestUsers__BusinessOwner__Email: ${IdentitySeed__TestUsers__BusinessOwner__Email:-}
+      IdentitySeed__TestUsers__BusinessOwner__Password: ${IdentitySeed__TestUsers__BusinessOwner__Password:-}
+      IdentitySeed__TestUsers__BusinessOwner__PhoneNumber: ${IdentitySeed__TestUsers__BusinessOwner__PhoneNumber:-}
+      IdentitySeed__TestUsers__BusinessOwner__CountryCode: ${IdentitySeed__TestUsers__BusinessOwner__CountryCode:-}
+      IdentitySeed__TestUsers__BusinessAdministrator__FirstName: ${IdentitySeed__TestUsers__BusinessAdministrator__FirstName:-}
+      IdentitySeed__TestUsers__BusinessAdministrator__LastName: ${IdentitySeed__TestUsers__BusinessAdministrator__LastName:-}
+      IdentitySeed__TestUsers__BusinessAdministrator__Email: ${IdentitySeed__TestUsers__BusinessAdministrator__Email:-}
+      IdentitySeed__TestUsers__BusinessAdministrator__Password: ${IdentitySeed__TestUsers__BusinessAdministrator__Password:-}
+      IdentitySeed__TestUsers__BusinessAdministrator__PhoneNumber: ${IdentitySeed__TestUsers__BusinessAdministrator__PhoneNumber:-}
+      IdentitySeed__TestUsers__BusinessAdministrator__CountryCode: ${IdentitySeed__TestUsers__BusinessAdministrator__CountryCode:-}
+      IdentitySeed__TestUsers__ComplianceOfficer__FirstName: ${IdentitySeed__TestUsers__ComplianceOfficer__FirstName:-}
+      IdentitySeed__TestUsers__ComplianceOfficer__LastName: ${IdentitySeed__TestUsers__ComplianceOfficer__LastName:-}
+      IdentitySeed__TestUsers__ComplianceOfficer__Email: ${IdentitySeed__TestUsers__ComplianceOfficer__Email:-}
+      IdentitySeed__TestUsers__ComplianceOfficer__Password: ${IdentitySeed__TestUsers__ComplianceOfficer__Password:-}
+      IdentitySeed__TestUsers__SupportOfficer__FirstName: ${IdentitySeed__TestUsers__SupportOfficer__FirstName:-}
+      IdentitySeed__TestUsers__SupportOfficer__LastName: ${IdentitySeed__TestUsers__SupportOfficer__LastName:-}
+      IdentitySeed__TestUsers__SupportOfficer__Email: ${IdentitySeed__TestUsers__SupportOfficer__Email:-}
+      IdentitySeed__TestUsers__SupportOfficer__Password: ${IdentitySeed__TestUsers__SupportOfficer__Password:-}
+      IdentitySeed__TestUsers__OperationsOfficer__FirstName: ${IdentitySeed__TestUsers__OperationsOfficer__FirstName:-}
+      IdentitySeed__TestUsers__OperationsOfficer__LastName: ${IdentitySeed__TestUsers__OperationsOfficer__LastName:-}
+      IdentitySeed__TestUsers__OperationsOfficer__Email: ${IdentitySeed__TestUsers__OperationsOfficer__Email:-}
+      IdentitySeed__TestUsers__OperationsOfficer__Password: ${IdentitySeed__TestUsers__OperationsOfficer__Password:-}
+      IdentitySeed__TestUsers__Administrator__FirstName: ${IdentitySeed__TestUsers__Administrator__FirstName:-}
+      IdentitySeed__TestUsers__Administrator__LastName: ${IdentitySeed__TestUsers__Administrator__LastName:-}
+      IdentitySeed__TestUsers__Administrator__Email: ${IdentitySeed__TestUsers__Administrator__Email:-}
+      IdentitySeed__TestUsers__Administrator__Password: ${IdentitySeed__TestUsers__Administrator__Password:-}
+      IdentitySeed__Business__Name: ${IdentitySeed__Business__Name:-}
+      IdentitySeed__Business__CountryCode: ${IdentitySeed__Business__CountryCode:-}
       Blaaiz__IsEnabled: ${BLAAIZ_ENABLED:-false}
       Blaaiz__ClientId: ${BLAAIZ_CLIENT_ID:-}
       Blaaiz__ClientSecret: ${BLAAIZ_CLIENT_SECRET:-}

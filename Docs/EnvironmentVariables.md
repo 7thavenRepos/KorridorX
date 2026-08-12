@@ -19,6 +19,12 @@ ASP.NET Core maps double underscores to configuration sections.
 | `Blaaiz__WebhookSigningSecret` | When enabled | Webhook HMAC secret. |
 | `NotificationDelivery__WorkerEnabled` | No | Enables email outbox processing. |
 | `NotificationDelivery__Smtp__Password` | When SMTP enabled | SMTP password. |
+| `IdentitySeed__SuperAdmin__Email` | First Production startup | Bootstrap Super Administrator email when no Super Administrator exists yet. |
+| `IdentitySeed__SuperAdmin__Password` | First Production startup | Bootstrap password supplied only through the deployment secret store. |
+| `IdentitySeed__SeedTestUsers` | No | Explicitly enables the complete test identity matrix outside Production; defaults to `false`. |
+
+See `Docs/IdentitySeeding.md` for the complete non-production identity matrix,
+local user-secrets helper, first-production-startup behavior, and cleanup steps.
 
 Never commit populated `.env` files, connection strings, JWT keys, OAuth credentials, SMTP passwords, certificates, or database dumps.
 

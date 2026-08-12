@@ -2,38 +2,51 @@ using Microsoft.AspNetCore.Identity;
 
 namespace KorridorX.Data.Seed;
 
-public static class RoleSeeder
+public interface IRoleSeeder
 {
-    public static async Task SeedRolesAsync(IServiceProvider services)
+    Task SeedAsync(CancellationToken ct = default);
+}
+
+public sealed class RoleSeeder : IRoleSeeder
+{
+    private readonly RoleManager<IdentityRole<Guid>> _roleManager;
+
+    public RoleSeeder(RoleManager<IdentityRole<Guid>> roleManager)
     {
-        using var scope = services.CreateScope();
+        _roleManager = roleManager;
+    }
 
-        var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole<Guid>>>();
-
-        string[] roles =
+    public async Task SeedAsync(CancellationToken ct = default)
+    {
+        foreach (var roleName in IdentityRoleNames.All)
         {
-            "Consumer",
-            "Business",
-            "BusinessAdmin",
-            "Compliance",
-            "Support",
-            "Operations",
-            "Admin",
-            "SuperAdmin"
-        };
+            ct.ThrowIfCancellationRequested();
 
-        foreach (var role in roles)
-        {
-            var exists = await roleManager.RoleExistsAsync(role);
+            if (await _roleManager.RoleExistsAsync(roleName))
+                continue;
 
-            if (!exists)
+            var result = await _roleManager.CreateAsync(new IdentityRole<Guid>
             {
-                await roleManager.CreateAsync(new IdentityRole<Guid>
-                {
-                    Name = role,
-                    NormalizedName = role.ToUpperInvariant()
-                });
+                Name = roleName
+            });
+
+            if (!result.Succeeded)
+            {
+                throw IdentitySeedException.FromIdentityResult(
+                    $"Creating the {roleName} role",
+                    result);
             }
         }
+    }
+
+    // Kept for release-candidate fixtures and one-off tools that already call
+    // the original static entry point.
+    public static async Task SeedRolesAsync(
+        IServiceProvider services,
+        CancellationToken ct = default)
+    {
+        await using var scope = services.CreateAsyncScope();
+        var seeder = scope.ServiceProvider.GetRequiredService<IRoleSeeder>();
+        await seeder.SeedAsync(ct);
     }
 }
