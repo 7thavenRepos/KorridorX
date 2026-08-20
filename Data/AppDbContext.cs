@@ -117,8 +117,9 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<Guid
     public DbSet<TransferInvestigation> TransferInvestigations => Set<TransferInvestigation>();
     public DbSet<SupportEvidence> SupportEvidence => Set<SupportEvidence>();
     public DbSet<Country> Countries => Set<Country>();
-    public DbSet<Currency> Currencies => Set<Currency>();
-    public DbSet<CountryCurrency> CountryCurrencies => Set<CountryCurrency>();
+    public DbSet<Asset> Assets => Set<Asset>();
+    public DbSet<AssetNetwork> AssetNetworks => Set<AssetNetwork>();
+    public DbSet<CountryAsset> CountryAssets => Set<CountryAsset>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {

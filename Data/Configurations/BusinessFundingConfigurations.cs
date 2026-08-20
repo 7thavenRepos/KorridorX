@@ -12,9 +12,9 @@ public class BusinessWalletConfiguration : IEntityTypeConfiguration<BusinessWall
         builder.HasIndex(x => x.Status);
         builder.Property(x => x.CurrencyCode).HasMaxLength(10);
         builder.Property(x => x.Status).IsConcurrencyToken();
-        builder.Property(x => x.SettledBalance).HasPrecision(18, 2).IsConcurrencyToken();
-        builder.Property(x => x.AvailableBalance).HasPrecision(18, 2).IsConcurrencyToken();
-        builder.Property(x => x.HeldBalance).HasPrecision(18, 2).IsConcurrencyToken();
+        builder.Property(x => x.SettledBalance).HasPrecision(36, 18).IsConcurrencyToken();
+        builder.Property(x => x.AvailableBalance).HasPrecision(36, 18).IsConcurrencyToken();
+        builder.Property(x => x.HeldBalance).HasPrecision(36, 18).IsConcurrencyToken();
 
         builder.HasOne(x => x.BusinessProfile)
             .WithMany()
@@ -44,7 +44,7 @@ public class BusinessLedgerTransactionConfiguration : IEntityTypeConfiguration<B
         builder.Property(x => x.IdempotencyKey).HasMaxLength(200);
         builder.Property(x => x.IdempotencyRequestHash).HasMaxLength(128);
         builder.Property(x => x.ReversalReason).HasMaxLength(1000);
-        builder.Property(x => x.Amount).HasPrecision(18, 2);
+        builder.Property(x => x.Amount).HasPrecision(36, 18);
         builder.Property(x => x.Status).IsConcurrencyToken();
 
         builder.HasOne(x => x.BusinessProfile)
@@ -75,8 +75,8 @@ public class BusinessLedgerEntryConfiguration : IEntityTypeConfiguration<Busines
     {
         builder.HasIndex(x => x.BusinessLedgerTransactionId);
         builder.HasIndex(x => x.BusinessWalletId);
-        builder.Property(x => x.Amount).HasPrecision(18, 2);
-        builder.Property(x => x.AccountBalanceAfter).HasPrecision(18, 2);
+        builder.Property(x => x.Amount).HasPrecision(36, 18);
+        builder.Property(x => x.AccountBalanceAfter).HasPrecision(36, 18);
 
         builder.HasOne(x => x.BusinessLedgerTransaction)
             .WithMany(x => x.Entries)
@@ -99,7 +99,7 @@ public class BusinessWalletReservationConfiguration : IEntityTypeConfiguration<B
         builder.HasIndex(x => x.BusinessWalletId);
         builder.HasIndex(x => x.Status);
         builder.Property(x => x.Reference).HasMaxLength(60);
-        builder.Property(x => x.Amount).HasPrecision(18, 2);
+        builder.Property(x => x.Amount).HasPrecision(36, 18);
         builder.Property(x => x.ReleaseReason).HasMaxLength(1000);
         builder.Property(x => x.Status).IsConcurrencyToken();
 

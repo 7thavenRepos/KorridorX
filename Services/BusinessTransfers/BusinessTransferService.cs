@@ -673,11 +673,11 @@ public class BusinessTransferService : IBusinessTransferService
 
     private async Task EnsureCorridorAsync(string countryCode, string currencyCode, bool sending, CancellationToken ct)
     {
-        var exists = await _db.CountryCurrencies.AsNoTracking().AnyAsync(x =>
+        var exists = await _db.CountryAssets.AsNoTracking().AnyAsync(x =>
             x.CountryCode == countryCode &&
-            x.CurrencyCode == currencyCode &&
+            x.AssetCode == currencyCode &&
             x.Country.IsSupported &&
-            x.Currency.IsSupported &&
+            x.Asset.IsSupported &&
             (sending
                 ? x.CanSend && x.Country.IsSendCountry
                 : x.CanReceive && x.Country.IsReceiveCountry),

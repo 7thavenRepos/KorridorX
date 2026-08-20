@@ -14,7 +14,7 @@ public sealed class ProviderWalletBalanceConfiguration : IEntityTypeConfiguratio
         builder.Property(x => x.ProviderWalletId).HasMaxLength(150);
         builder.Property(x => x.ProviderBusinessId).HasMaxLength(150);
         builder.Property(x => x.CurrencyCode).HasMaxLength(10);
-        builder.Property(x => x.Balance).HasPrecision(18, 2);
+        builder.Property(x => x.Balance).HasPrecision(36, 18);
     }
 }
 
@@ -25,9 +25,9 @@ public sealed class LiquidityThresholdConfiguration : IEntityTypeConfiguration<L
         builder.HasIndex(x => new { x.ProviderCode, x.CurrencyCode, x.IsActive });
         builder.Property(x => x.ProviderCode).HasMaxLength(50);
         builder.Property(x => x.CurrencyCode).HasMaxLength(10);
-        builder.Property(x => x.MinimumBalance).HasPrecision(18, 2);
-        builder.Property(x => x.TargetBalance).HasPrecision(18, 2);
-        builder.Property(x => x.MaximumBalance).HasPrecision(18, 2);
+        builder.Property(x => x.MinimumBalance).HasPrecision(36, 18);
+        builder.Property(x => x.TargetBalance).HasPrecision(36, 18);
+        builder.Property(x => x.MaximumBalance).HasPrecision(36, 18);
     }
 }
 
@@ -53,11 +53,11 @@ public sealed class SettlementBatchConfiguration : IEntityTypeConfiguration<Sett
         builder.Property(x => x.Reference).HasMaxLength(100);
         builder.Property(x => x.ProviderCode).HasMaxLength(50);
         builder.Property(x => x.CurrencyCode).HasMaxLength(10);
-        builder.Property(x => x.GrossInflows).HasPrecision(18, 2);
-        builder.Property(x => x.GrossOutflows).HasPrecision(18, 2);
-        builder.Property(x => x.ExpectedNetAmount).HasPrecision(18, 2);
-        builder.Property(x => x.ActualNetAmount).HasPrecision(18, 2);
-        builder.Property(x => x.VarianceAmount).HasPrecision(18, 2);
+        builder.Property(x => x.GrossInflows).HasPrecision(36, 18);
+        builder.Property(x => x.GrossOutflows).HasPrecision(36, 18);
+        builder.Property(x => x.ExpectedNetAmount).HasPrecision(36, 18);
+        builder.Property(x => x.ActualNetAmount).HasPrecision(36, 18);
+        builder.Property(x => x.VarianceAmount).HasPrecision(36, 18);
         builder.Property(x => x.ReconciliationNote).HasMaxLength(2000);
     }
 }
@@ -68,7 +68,7 @@ public sealed class SettlementBatchItemConfiguration : IEntityTypeConfiguration<
     {
         builder.HasIndex(x => x.ProviderTransactionRowId).IsUnique();
         builder.HasIndex(x => x.SettlementBatchId);
-        builder.Property(x => x.Amount).HasPrecision(18, 2);
+        builder.Property(x => x.Amount).HasPrecision(36, 18);
         builder.Property(x => x.CurrencyCode).HasMaxLength(10);
         builder.HasOne(x => x.SettlementBatch).WithMany(x => x.Items).HasForeignKey(x => x.SettlementBatchId).OnDelete(DeleteBehavior.Cascade);
         builder.HasOne(x => x.ProviderTransaction).WithMany().HasForeignKey(x => x.ProviderTransactionRowId).OnDelete(DeleteBehavior.Restrict);
@@ -85,10 +85,10 @@ public sealed class TreasuryRebalanceRequestConfiguration : IEntityTypeConfigura
         builder.Property(x => x.ProviderCode).HasMaxLength(50);
         builder.Property(x => x.FromCurrencyCode).HasMaxLength(10);
         builder.Property(x => x.ToCurrencyCode).HasMaxLength(10);
-        builder.Property(x => x.RequestedAmount).HasPrecision(18, 2);
-        builder.Property(x => x.FromAmount).HasPrecision(18, 2);
-        builder.Property(x => x.FromAmountMinusFees).HasPrecision(18, 2);
-        builder.Property(x => x.ToAmount).HasPrecision(18, 2);
+        builder.Property(x => x.RequestedAmount).HasPrecision(36, 18);
+        builder.Property(x => x.FromAmount).HasPrecision(36, 18);
+        builder.Property(x => x.FromAmountMinusFees).HasPrecision(36, 18);
+        builder.Property(x => x.ToAmount).HasPrecision(36, 18);
         builder.Property(x => x.ExchangeRate).HasPrecision(18, 8);
         builder.Property(x => x.CustomExchangeRate).HasPrecision(18, 8);
         builder.Property(x => x.Reason).HasMaxLength(1000);
@@ -112,10 +112,10 @@ public sealed class SettlementStatementImportConfiguration : IEntityTypeConfigur
         builder.Property(x => x.CurrencyCode).HasMaxLength(10);
         builder.Property(x => x.FileName).HasMaxLength(255);
         builder.Property(x => x.FileHash).HasMaxLength(64);
-        builder.Property(x => x.GrossCredits).HasPrecision(18, 2);
-        builder.Property(x => x.GrossDebits).HasPrecision(18, 2);
-        builder.Property(x => x.NetAmount).HasPrecision(18, 2);
-        builder.Property(x => x.VarianceAmount).HasPrecision(18, 2);
+        builder.Property(x => x.GrossCredits).HasPrecision(36, 18);
+        builder.Property(x => x.GrossDebits).HasPrecision(36, 18);
+        builder.Property(x => x.NetAmount).HasPrecision(36, 18);
+        builder.Property(x => x.VarianceAmount).HasPrecision(36, 18);
         builder.Property(x => x.Note).HasMaxLength(2000);
         builder.HasOne(x => x.SettlementBatch).WithMany().HasForeignKey(x => x.SettlementBatchId).OnDelete(DeleteBehavior.Restrict);
     }
@@ -132,7 +132,7 @@ public sealed class SettlementStatementItemConfiguration : IEntityTypeConfigurat
         builder.Property(x => x.TransactionType).HasMaxLength(100);
         builder.Property(x => x.CurrencyCode).HasMaxLength(10);
         builder.Property(x => x.ProviderStatus).HasMaxLength(100);
-        builder.Property(x => x.Amount).HasPrecision(18, 2);
+        builder.Property(x => x.Amount).HasPrecision(36, 18);
         builder.HasOne(x => x.SettlementStatementImport).WithMany(x => x.Items).HasForeignKey(x => x.SettlementStatementImportId).OnDelete(DeleteBehavior.Cascade);
     }
 }

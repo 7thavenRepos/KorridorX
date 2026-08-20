@@ -85,9 +85,9 @@ public class ComplianceLimitConfiguration : IEntityTypeConfiguration<ComplianceL
         builder.Property(x => x.CountryCode).HasMaxLength(10);
         builder.Property(x => x.CurrencyCode).HasMaxLength(10);
 
-        builder.Property(x => x.DailyLimit).HasPrecision(18, 2);
-        builder.Property(x => x.MonthlyLimit).HasPrecision(18, 2);
-        builder.Property(x => x.PerTransferLimit).HasPrecision(18, 2);
+        builder.Property(x => x.DailyLimit).HasPrecision(36, 18);
+        builder.Property(x => x.MonthlyLimit).HasPrecision(36, 18);
+        builder.Property(x => x.PerTransferLimit).HasPrecision(36, 18);
     }
 }
 

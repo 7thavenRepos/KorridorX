@@ -53,7 +53,7 @@ public sealed class TransferDisputeConfiguration : IEntityTypeConfiguration<Tran
         builder.Property(x => x.Reason).HasMaxLength(4000);
         builder.Property(x => x.ResolutionNote).HasMaxLength(4000);
         builder.Property(x => x.CurrencyCode).HasMaxLength(10);
-        builder.Property(x => x.RequestedRefundAmount).HasPrecision(18, 2);
+        builder.Property(x => x.RequestedRefundAmount).HasPrecision(36, 18);
         builder.Property(x => x.Status).IsConcurrencyToken();
         builder.HasOne(x => x.User).WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne(x => x.AssignedToUser).WithMany().HasForeignKey(x => x.AssignedToUserId).OnDelete(DeleteBehavior.Restrict);

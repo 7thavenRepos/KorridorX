@@ -72,9 +72,9 @@ public class ProviderTransactionConfiguration : IEntityTypeConfiguration<Provide
         builder.Property(x => x.ProviderStatus).HasMaxLength(100);
         builder.Property(x => x.CurrencyCode).HasMaxLength(10);
 
-        builder.Property(x => x.Amount).HasPrecision(18, 2);
-        builder.Property(x => x.AmountWithoutFee).HasPrecision(18, 2);
-        builder.Property(x => x.ProviderFeeAmount).HasPrecision(18, 2);
+        builder.Property(x => x.Amount).HasPrecision(36, 18);
+        builder.Property(x => x.AmountWithoutFee).HasPrecision(36, 18);
+        builder.Property(x => x.ProviderFeeAmount).HasPrecision(36, 18);
         builder.Property(x => x.ProviderFeeCurrencyCode).HasMaxLength(10);
 
         builder.HasOne(x => x.Transfer)

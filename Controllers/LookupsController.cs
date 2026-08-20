@@ -36,10 +36,10 @@ public class LookupsController : ControllerBase
         return Ok(ApiResponses.Ok(countries, "Countries retrieved successfully."));
     }
 
-    [HttpGet("currencies")]
-    public async Task<IActionResult> GetCurrencies(CancellationToken ct)
+    [HttpGet("assets")]
+    public async Task<IActionResult> GetAssets(CancellationToken ct)
     {
-        var currencies = await _db.Currencies
+        var assets = await _db.Assets
             .AsNoTracking()
             .Where(x => x.IsSupported)
             .OrderBy(x => x.Code)
@@ -49,28 +49,32 @@ public class LookupsController : ControllerBase
                 x.Name,
                 x.Symbol,
                 x.DecimalPlaces,
-                x.IsFiat,
-                x.IsStablecoin
+                x.Type,
+                x.IsStablecoin,
+                x.DepositEnabled,
+                x.WithdrawalEnabled,
+                x.TradingEnabled,
+                x.InstantEnabled
             })
             .ToListAsync(ct);
 
-        return Ok(ApiResponses.Ok(currencies, "Currencies retrieved successfully."));
+        return Ok(ApiResponses.Ok(assets, "Assets retrieved successfully."));
     }
 
     [HttpGet("corridors")]
     public async Task<IActionResult> GetCorridors(CancellationToken ct)
     {
-        var corridors = await _db.CountryCurrencies
+        var corridors = await _db.CountryAssets
             .AsNoTracking()
             .Include(x => x.Country)
-            .Include(x => x.Currency)
+            .Include(x => x.Asset)
             .OrderBy(x => x.Country.Name)
             .Select(x => new
             {
                 CountryCode = x.Country.Code,
                 CountryName = x.Country.Name,
-                CurrencyCode = x.Currency.Code,
-                CurrencyName = x.Currency.Name,
+                AssetCode = x.Asset.Code,
+                AssetName = x.Asset.Name,
                 x.CanSend,
                 x.CanReceive,
                 x.IsDefault

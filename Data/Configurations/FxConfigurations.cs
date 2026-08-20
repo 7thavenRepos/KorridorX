@@ -38,12 +38,12 @@ public class TransferQuoteConfiguration : IEntityTypeConfiguration<TransferQuote
         builder.Property(x => x.ProviderCode).HasMaxLength(50);
         builder.Property(x => x.ProviderQuoteId).HasMaxLength(150);
 
-        builder.Property(x => x.SourceAmount).HasPrecision(18, 2);
-        builder.Property(x => x.DestinationAmount).HasPrecision(18, 2);
+        builder.Property(x => x.SourceAmount).HasPrecision(36, 18);
+        builder.Property(x => x.DestinationAmount).HasPrecision(36, 18);
         builder.Property(x => x.ProviderRate).HasPrecision(18, 8);
         builder.Property(x => x.CustomerRate).HasPrecision(18, 8);
-        builder.Property(x => x.FeeAmount).HasPrecision(18, 2);
-        builder.Property(x => x.TotalPayableAmount).HasPrecision(18, 2);
+        builder.Property(x => x.FeeAmount).HasPrecision(36, 18);
+        builder.Property(x => x.TotalPayableAmount).HasPrecision(36, 18);
         builder.Property(x => x.IsUsed).IsConcurrencyToken();
 
         builder.HasOne(x => x.CustomerProfile)
@@ -78,9 +78,9 @@ public class TransferFeeConfiguration : IEntityTypeConfiguration<TransferFee>
         builder.Property(x => x.DestinationCurrencyCode).HasMaxLength(10);
         builder.Property(x => x.FeeCurrencyCode).HasMaxLength(10);
 
-        builder.Property(x => x.MinAmount).HasPrecision(18, 2);
-        builder.Property(x => x.MaxAmount).HasPrecision(18, 2);
-        builder.Property(x => x.FixedFee).HasPrecision(18, 2);
+        builder.Property(x => x.MinAmount).HasPrecision(36, 18);
+        builder.Property(x => x.MaxAmount).HasPrecision(36, 18);
+        builder.Property(x => x.FixedFee).HasPrecision(36, 18);
         builder.Property(x => x.PercentageFee).HasPrecision(9, 6);
     }
 }

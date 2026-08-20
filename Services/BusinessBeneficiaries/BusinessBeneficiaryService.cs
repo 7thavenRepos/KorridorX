@@ -236,7 +236,7 @@ public class BusinessBeneficiaryService : IBusinessBeneficiaryService
 
         var countryCode = NormalizeCode(request.CountryCode);
         var currencyCode = NormalizeCode(request.CurrencyCode);
-        await EnsureCountryCurrencyAsync(countryCode, currencyCode, ct);
+        await EnsureCountryAssetAsync(countryCode, currencyCode, ct);
         await EnsureBankAccountUniqueAsync(beneficiaryId, request.AccountNumber, request.BankCode, null, ct);
         var providerBank = await ResolveProviderBankAsync(request.ProviderBankId, countryCode, ct);
 
@@ -292,7 +292,7 @@ public class BusinessBeneficiaryService : IBusinessBeneficiaryService
 
         var countryCode = NormalizeCode(request.CountryCode);
         var currencyCode = NormalizeCode(request.CurrencyCode);
-        await EnsureCountryCurrencyAsync(countryCode, currencyCode, ct);
+        await EnsureCountryAssetAsync(countryCode, currencyCode, ct);
         await EnsureBankAccountUniqueAsync(beneficiaryId, request.AccountNumber, request.BankCode, bankAccountId, ct);
         var providerBank = await ResolveProviderBankAsync(request.ProviderBankId, countryCode, ct);
 
@@ -456,7 +456,7 @@ public class BusinessBeneficiaryService : IBusinessBeneficiaryService
 
         var countryCode = NormalizeCode(request.CountryCode);
         var currencyCode = NormalizeCode(request.CurrencyCode);
-        await EnsureCountryCurrencyAsync(countryCode, currencyCode, ct);
+        await EnsureCountryAssetAsync(countryCode, currencyCode, ct);
         await EnsureWalletUniqueAsync(beneficiaryId, request.ProviderName, request.WalletNumber, null, ct);
 
         if (request.IsDefault)
@@ -504,7 +504,7 @@ public class BusinessBeneficiaryService : IBusinessBeneficiaryService
 
         var countryCode = NormalizeCode(request.CountryCode);
         var currencyCode = NormalizeCode(request.CurrencyCode);
-        await EnsureCountryCurrencyAsync(countryCode, currencyCode, ct);
+        await EnsureCountryAssetAsync(countryCode, currencyCode, ct);
         await EnsureWalletUniqueAsync(beneficiaryId, request.ProviderName, request.WalletNumber, mobileWalletId, ct);
 
         if (request.IsDefault)
@@ -635,11 +635,11 @@ public class BusinessBeneficiaryService : IBusinessBeneficiaryService
         if (!exists) throw new InvalidOperationException($"Country '{countryCode}' is not supported for receiving.");
     }
 
-    private async Task EnsureCountryCurrencyAsync(string countryCode, string currencyCode, CancellationToken ct)
+    private async Task EnsureCountryAssetAsync(string countryCode, string currencyCode, CancellationToken ct)
     {
-        var exists = await _db.CountryCurrencies.AsNoTracking().AnyAsync(x =>
-            x.CountryCode == countryCode && x.CurrencyCode == currencyCode && x.CanReceive &&
-            x.Country.IsSupported && x.Country.IsReceiveCountry && x.Currency.IsSupported, ct);
+        var exists = await _db.CountryAssets.AsNoTracking().AnyAsync(x =>
+            x.CountryCode == countryCode && x.AssetCode == currencyCode && x.CanReceive &&
+            x.Country.IsSupported && x.Country.IsReceiveCountry && x.Asset.IsSupported, ct);
         if (!exists) throw new InvalidOperationException(
             $"Currency '{currencyCode}' is not supported for receiving in country '{countryCode}'.");
     }

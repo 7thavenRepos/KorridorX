@@ -191,7 +191,7 @@ public class BusinessFundingService : IBusinessFundingService
         if (!businessExists)
             throw new InvalidOperationException("Business profile not found.");
 
-        var currencySupported = await _db.Currencies.AsNoTracking().AnyAsync(x =>
+        var currencySupported = await _db.Assets.AsNoTracking().AnyAsync(x =>
             x.Code == currencyCode && x.IsSupported,
             ct);
         if (!currencySupported)

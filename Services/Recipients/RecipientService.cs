@@ -490,15 +490,15 @@ public class RecipientService : IRecipientService
 
     private async Task EnsureCountryAndCurrencyAreLinkedAsync(string countryCode, string currencyCode, CancellationToken ct)
     {
-        var exists = await _db.CountryCurrencies
+        var exists = await _db.CountryAssets
             .AsNoTracking()
             .AnyAsync(x =>
                 x.CountryCode == countryCode &&
-                x.CurrencyCode == currencyCode &&
+                x.AssetCode == currencyCode &&
                 x.CanReceive &&
                 x.Country.IsSupported &&
                 x.Country.IsReceiveCountry &&
-                x.Currency.IsSupported,
+                x.Asset.IsSupported,
                 ct);
 
         if (!exists)

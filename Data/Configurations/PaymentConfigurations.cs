@@ -31,7 +31,7 @@ public class CollectionConfiguration : IEntityTypeConfiguration<Collection>
         builder.Property(x => x.RefundFailureReason).HasMaxLength(1000);
         builder.Property(x => x.Status).IsConcurrencyToken();
 
-        builder.Property(x => x.Amount).HasPrecision(18, 2);
+        builder.Property(x => x.Amount).HasPrecision(36, 18);
 
         builder.HasOne(x => x.Transfer)
             .WithMany()
@@ -78,7 +78,7 @@ public class PayoutConfiguration : IEntityTypeConfiguration<Payout>
         builder.Property(x => x.FailureReason).HasMaxLength(1000);
         builder.Property(x => x.Status).IsConcurrencyToken();
 
-        builder.Property(x => x.Amount).HasPrecision(18, 2);
+        builder.Property(x => x.Amount).HasPrecision(36, 18);
 
         builder.HasOne(x => x.Transfer)
             .WithMany()
