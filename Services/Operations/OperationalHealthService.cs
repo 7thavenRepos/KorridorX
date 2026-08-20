@@ -75,18 +75,18 @@ public sealed class OperationalHealthService : IOperationalHealthService
                 ct));
 
         var wallets = new WalletHealthDto(
-            await _db.BusinessWallets.CountAsync(x =>
-                !x.IsDeleted && x.Status == BusinessWalletStatus.Frozen,
+            await _db.FinancialAccounts.CountAsync(x =>
+                !x.IsDeleted && x.Status == FinancialAccountStatus.Frozen,
                 ct),
-            await _db.BusinessWallets.CountAsync(x =>
+            await _db.FinancialAccounts.CountAsync(x =>
                 !x.IsDeleted &&
                 (x.SettledBalance < 0 ||
                  x.AvailableBalance < 0 ||
                  x.HeldBalance < 0 ||
                  x.SettledBalance != x.AvailableBalance + x.HeldBalance),
                 ct),
-            await _db.BusinessWalletReservations.CountAsync(x =>
-                !x.IsDeleted && x.Status == BusinessWalletReservationStatus.Active,
+            await _db.FinancialReservations.CountAsync(x =>
+                !x.IsDeleted && x.Status == FinancialReservationStatus.Active,
                 ct));
 
         var payments = new PaymentHealthDto(

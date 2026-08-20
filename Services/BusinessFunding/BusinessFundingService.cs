@@ -9,7 +9,7 @@ using KorridorX.Dtos.Payments;
 using KorridorX.Exceptions;
 using KorridorX.Extensions;
 using KorridorX.Infrastructure;
-using KorridorX.Models.BusinessFunding;
+using KorridorX.Models.FinancialCore;
 using KorridorX.Models.Enums;
 using KorridorX.Models.Payments;
 using KorridorX.Models.Providers;
@@ -71,14 +71,14 @@ public class BusinessFundingService : IBusinessFundingService
     {
         var access = await _accessService.EnsurePermissionAsync(userId, BusinessPermission.ViewWallets, ct);
 
-        return await _db.BusinessWallets
+        return await _db.FinancialAccounts
             .AsNoTracking()
-            .Where(x => x.BusinessProfileId == access.BusinessProfileId && !x.IsDeleted)
-            .OrderBy(x => x.CurrencyCode)
+            .Where(x => x.OwnerType == FinancialAccountOwnerType.Business && x.OwnerId == access.BusinessProfileId && !x.IsDeleted)
+            .OrderBy(x => x.AssetCode)
             .Select(x => new BusinessWalletDto(
                 x.Id,
-                x.BusinessProfileId,
-                x.CurrencyCode,
+                x.OwnerId,
+                x.AssetCode,
                 x.Status,
                 x.SettledBalance,
                 x.AvailableBalance,
@@ -96,9 +96,10 @@ public class BusinessFundingService : IBusinessFundingService
         CancellationToken ct = default)
     {
         var access = await _accessService.EnsurePermissionAsync(userId, BusinessPermission.ViewWallets, ct);
-        var walletExists = await _db.BusinessWallets.AsNoTracking().AnyAsync(x =>
+        var walletExists = await _db.FinancialAccounts.AsNoTracking().AnyAsync(x =>
             x.Id == walletId &&
-            x.BusinessProfileId == access.BusinessProfileId &&
+            x.OwnerType == FinancialAccountOwnerType.Business &&
+            x.OwnerId == access.BusinessProfileId &&
             !x.IsDeleted,
             ct);
 
@@ -107,12 +108,11 @@ public class BusinessFundingService : IBusinessFundingService
             throw new InvalidOperationException("Business wallet not found.");
         }
 
-        var paged = await _db.BusinessLedgerTransactions
+        var paged = await _db.LedgerTransactions
             .AsNoTracking()
-            .Include(x => x.Entries)
+            .Include(x => x.Postings)
             .Where(x =>
-                x.BusinessProfileId == access.BusinessProfileId &&
-                x.Entries.Any(y => y.BusinessWalletId == walletId) &&
+                x.Postings.Any(y => y.FinancialAccountId == walletId) &&
                 !x.IsDeleted)
             .OrderByDescending(x => x.PostedAt)
             .PaginateAsync(page, pageSize, ct);
@@ -122,19 +122,19 @@ public class BusinessFundingService : IBusinessFundingService
             Items = paged.Items.Select(x => new BusinessLedgerTransactionDto(
                 x.Id,
                 x.Reference,
-                x.CurrencyCode,
+                x.AssetCode,
                 x.Type,
                 x.Status,
                 x.Amount,
                 x.Description,
-                x.TransferId,
-                x.BusinessPaymentBatchId,
-                x.CollectionId,
+                x.RelatedEntityType == nameof(Transfer) ? x.RelatedEntityId : null,
+                x.ContextEntityType == "BusinessPaymentBatch" ? x.ContextEntityId : null,
+                x.RelatedEntityType == nameof(Collection) ? x.RelatedEntityId : null,
                 x.PostedAt,
-                x.Entries.OrderBy(y => y.CreatedAt)
+                x.Postings.OrderBy(y => y.CreatedAt)
                     .Select(y => new BusinessLedgerEntryDto(
                         y.Id,
-                        y.AccountType,
+                        y.BalanceBucket,
                         y.Side,
                         y.Amount,
                         y.AccountBalanceAfter))
@@ -166,7 +166,7 @@ public class BusinessFundingService : IBusinessFundingService
             CurrencyCode = currencyCode,
             request.Amount,
             Reason = reason,
-            Operation = "BusinessWalletCredit"
+            Operation = "FinancialAccountCredit"
         });
 
         var existing = await FindIdempotentLedgerTransactionAsync(
@@ -176,10 +176,11 @@ public class BusinessFundingService : IBusinessFundingService
             ct);
         if (existing is not null)
         {
-            var existingWallet = await _db.BusinessWallets.AsNoTracking()
+            var existingWallet = await _db.FinancialAccounts.AsNoTracking()
                 .FirstAsync(x =>
-                    x.BusinessProfileId == request.BusinessProfileId &&
-                    x.CurrencyCode == currencyCode &&
+                    x.OwnerType == FinancialAccountOwnerType.Business &&
+                    x.OwnerId == request.BusinessProfileId &&
+                    x.AssetCode == currencyCode &&
                     !x.IsDeleted,
                     ct);
             return ToWalletDto(existingWallet);
@@ -209,7 +210,7 @@ public class BusinessFundingService : IBusinessFundingService
 
         PostIdempotentLedgerTransaction(
             wallet,
-            BusinessLedgerTransactionType.FundingCredit,
+            LedgerTransactionType.FundingCredit,
             request.Amount,
             reason,
             adminUserId,
@@ -218,13 +219,13 @@ public class BusinessFundingService : IBusinessFundingService
             null,
             null,
             null,
-            (BusinessLedgerAccountType.External, BusinessLedgerEntrySide.Debit, null),
-            (BusinessLedgerAccountType.Available, BusinessLedgerEntrySide.Credit, wallet.AvailableBalance));
+            (LedgerBalanceBucket.External, LedgerPostingSide.Debit, null),
+            (LedgerBalanceBucket.Available, LedgerPostingSide.Credit, wallet.AvailableBalance));
 
         _auditService.Stage(new AuditRecordRequest(
             Action: "BUSINESS_WALLET_CREDITED",
             Category: "BusinessFunding",
-            EntityName: nameof(BusinessWallet),
+            EntityName: nameof(FinancialAccount),
             EntityId: wallet.Id.ToString(),
             OldValues: oldBalances,
             NewValues: Snapshot(wallet),
@@ -235,7 +236,7 @@ public class BusinessFundingService : IBusinessFundingService
             request.BusinessProfileId,
             "Business wallet credited",
             $"Your {currencyCode} business wallet was credited with {request.Amount:N2} {currencyCode}. {reason}",
-            "BusinessWallet",
+            "FinancialAccount",
             wallet.Id,
             ct);
 
@@ -247,20 +248,20 @@ public class BusinessFundingService : IBusinessFundingService
     public async Task<BusinessWalletDto> SetWalletStatusAsync(
         Guid adminUserId,
         Guid walletId,
-        BusinessWalletStatus status,
+        FinancialAccountStatus status,
         string reason,
         CancellationToken ct = default)
     {
-        if (status is not (BusinessWalletStatus.Active or BusinessWalletStatus.Frozen))
+        if (status is not (FinancialAccountStatus.Active or FinancialAccountStatus.Frozen))
             throw new InvalidOperationException("Administrative wallet status changes support only Active or Frozen.");
 
         var cleanReason = Clean(reason, 1000)
             ?? throw new InvalidOperationException("A wallet status reason is required.");
-        var wallet = await _db.BusinessWallets
+        var wallet = await _db.FinancialAccounts
             .FirstOrDefaultAsync(x => x.Id == walletId && !x.IsDeleted, ct)
             ?? throw new InvalidOperationException("Business wallet not found.");
 
-        if (wallet.Status == BusinessWalletStatus.Closed)
+        if (wallet.Status == FinancialAccountStatus.Closed)
             throw new InvalidOperationException("A closed business wallet cannot be reopened or frozen.");
         if (wallet.Status == status)
             return ToWalletDto(wallet);
@@ -271,11 +272,11 @@ public class BusinessFundingService : IBusinessFundingService
         wallet.LastUpdatedByUserId = adminUserId;
 
         _auditService.Stage(new AuditRecordRequest(
-            Action: status == BusinessWalletStatus.Frozen
+            Action: status == FinancialAccountStatus.Frozen
                 ? "BUSINESS_WALLET_FROZEN"
                 : "BUSINESS_WALLET_UNFROZEN",
             Category: "BusinessFunding",
-            EntityName: nameof(BusinessWallet),
+            EntityName: nameof(FinancialAccount),
             EntityId: wallet.Id.ToString(),
             OldValues: new { Status = oldStatus },
             NewValues: new { wallet.Status },
@@ -283,10 +284,10 @@ public class BusinessFundingService : IBusinessFundingService
             UserId: adminUserId));
 
         await _notifications.QueueBusinessAsync(
-            wallet.BusinessProfileId,
-            status == BusinessWalletStatus.Frozen ? "Business wallet frozen" : "Business wallet reactivated",
-            $"Your {wallet.CurrencyCode} business wallet status changed from {oldStatus} to {status}. {cleanReason}",
-            "BusinessWallet",
+            wallet.OwnerId,
+            status == FinancialAccountStatus.Frozen ? "Business wallet frozen" : "Business wallet reactivated",
+            $"Your {wallet.AssetCode} business wallet status changed from {oldStatus} to {status}. {cleanReason}",
+            "FinancialAccount",
             wallet.Id,
             ct);
 
@@ -307,7 +308,7 @@ public class BusinessFundingService : IBusinessFundingService
         var normalizedKey = NormalizeIdempotencyKey(idempotencyKey);
         var reason = Clean(request.Reason, 1000)
             ?? throw new InvalidOperationException("An adjustment reason is required.");
-        var wallet = await _db.BusinessWallets
+        var wallet = await _db.FinancialAccounts
             .FirstOrDefaultAsync(x => x.Id == walletId && !x.IsDeleted, ct)
             ?? throw new InvalidOperationException("Business wallet not found.");
         EnsureWalletNotClosed(wallet);
@@ -318,10 +319,10 @@ public class BusinessFundingService : IBusinessFundingService
             request.Amount,
             request.Direction,
             Reason = reason,
-            Operation = "BusinessWalletAdjustment"
+            Operation = "FinancialAccountAdjustment"
         });
         var existing = await FindIdempotentLedgerTransactionAsync(
-            wallet.BusinessProfileId,
+            wallet.OwnerId,
             normalizedKey,
             requestHash,
             ct);
@@ -330,15 +331,15 @@ public class BusinessFundingService : IBusinessFundingService
 
         await using var tx = await _db.Database.BeginTransactionAsync(ct);
         var oldBalances = Snapshot(wallet);
-        (BusinessLedgerAccountType Account, BusinessLedgerEntrySide Side, decimal? BalanceAfter) first;
-        (BusinessLedgerAccountType Account, BusinessLedgerEntrySide Side, decimal? BalanceAfter) second;
+        (LedgerBalanceBucket Account, LedgerPostingSide Side, decimal? BalanceAfter) first;
+        (LedgerBalanceBucket Account, LedgerPostingSide Side, decimal? BalanceAfter) second;
 
         if (request.Direction == BusinessWalletAdjustmentDirection.Credit)
         {
             wallet.SettledBalance += request.Amount;
             wallet.AvailableBalance += request.Amount;
-            first = (BusinessLedgerAccountType.External, BusinessLedgerEntrySide.Debit, null);
-            second = (BusinessLedgerAccountType.Available, BusinessLedgerEntrySide.Credit, wallet.AvailableBalance);
+            first = (LedgerBalanceBucket.External, LedgerPostingSide.Debit, null);
+            second = (LedgerBalanceBucket.Available, LedgerPostingSide.Credit, wallet.AvailableBalance);
         }
         else if (request.Direction == BusinessWalletAdjustmentDirection.Debit)
         {
@@ -347,8 +348,8 @@ public class BusinessFundingService : IBusinessFundingService
 
             wallet.SettledBalance -= request.Amount;
             wallet.AvailableBalance -= request.Amount;
-            first = (BusinessLedgerAccountType.Available, BusinessLedgerEntrySide.Debit, wallet.AvailableBalance);
-            second = (BusinessLedgerAccountType.External, BusinessLedgerEntrySide.Credit, null);
+            first = (LedgerBalanceBucket.Available, LedgerPostingSide.Debit, wallet.AvailableBalance);
+            second = (LedgerBalanceBucket.External, LedgerPostingSide.Credit, null);
         }
         else
         {
@@ -360,7 +361,7 @@ public class BusinessFundingService : IBusinessFundingService
 
         PostIdempotentLedgerTransaction(
             wallet,
-            BusinessLedgerTransactionType.ManualAdjustment,
+            LedgerTransactionType.ManualAdjustment,
             request.Amount,
             reason,
             adminUserId,
@@ -375,7 +376,7 @@ public class BusinessFundingService : IBusinessFundingService
         _auditService.Stage(new AuditRecordRequest(
             Action: "BUSINESS_WALLET_ADJUSTED",
             Category: "BusinessFunding",
-            EntityName: nameof(BusinessWallet),
+            EntityName: nameof(FinancialAccount),
             EntityId: wallet.Id.ToString(),
             OldValues: oldBalances,
             NewValues: Snapshot(wallet),
@@ -383,10 +384,10 @@ public class BusinessFundingService : IBusinessFundingService
             UserId: adminUserId));
 
         await _notifications.QueueBusinessAsync(
-            wallet.BusinessProfileId,
+            wallet.OwnerId,
             "Business wallet adjusted",
-            $"A {request.Direction.ToString().ToLowerInvariant()} adjustment of {request.Amount:N2} {wallet.CurrencyCode} was applied. {reason}",
-            "BusinessWallet",
+            $"A {request.Direction.ToString().ToLowerInvariant()} adjustment of {request.Amount:N2} {wallet.AssetCode} was applied. {reason}",
+            "FinancialAccount",
             wallet.Id,
             ct);
 
@@ -403,47 +404,47 @@ public class BusinessFundingService : IBusinessFundingService
     {
         var cleanReason = Clean(reason, 1000)
             ?? throw new InvalidOperationException("A reversal reason is required.");
-        var original = await _db.BusinessLedgerTransactions
-            .Include(x => x.Entries)
-                .ThenInclude(x => x.BusinessWallet)
+        var original = await _db.LedgerTransactions
+            .Include(x => x.Postings)
+                .ThenInclude(x => x.FinancialAccount)
             .FirstOrDefaultAsync(x => x.Id == transactionId && !x.IsDeleted, ct)
             ?? throw new InvalidOperationException("Business ledger transaction not found.");
 
-        if (original.Status == BusinessLedgerTransactionStatus.Reversed || original.ReversedByTransactionId is not null)
+        if (original.Status == LedgerTransactionStatus.Reversed || original.ReversedByTransactionId is not null)
             throw new InvalidOperationException("The ledger transaction has already been reversed.");
-        if (original.Type is not (BusinessLedgerTransactionType.FundingCredit or BusinessLedgerTransactionType.ManualAdjustment))
+        if (original.Type is not (LedgerTransactionType.FundingCredit or LedgerTransactionType.ManualAdjustment))
             throw new InvalidOperationException("Only funding credits and manual adjustments can be reversed through this endpoint.");
-        if (original.TransferId is not null || original.BusinessPaymentBatchId is not null || original.CollectionId is not null)
+        if (original.RelatedEntityId is not null || original.ContextEntityId is not null)
             throw new InvalidOperationException("Transactions linked to transfers, batches, or collections require their dedicated recovery workflow.");
 
-        var walletEntry = original.Entries.SingleOrDefault(x => x.BusinessWalletId is not null);
-        var externalEntry = original.Entries.SingleOrDefault(x => x.AccountType == BusinessLedgerAccountType.External);
-        if (walletEntry?.BusinessWallet is null || externalEntry is null || walletEntry.AccountType != BusinessLedgerAccountType.Available)
+        var walletEntry = original.Postings.SingleOrDefault(x => x.BalanceBucket == LedgerBalanceBucket.Available);
+        var externalEntry = original.Postings.SingleOrDefault(x => x.BalanceBucket == LedgerBalanceBucket.External);
+        if (walletEntry?.FinancialAccount is null || externalEntry is null || walletEntry.BalanceBucket != LedgerBalanceBucket.Available)
             throw new InvalidOperationException("The ledger transaction is not eligible for automatic reversal.");
 
-        var wallet = walletEntry.BusinessWallet;
+        var wallet = walletEntry.FinancialAccount;
         EnsureWalletNotClosed(wallet);
         await using var tx = await _db.Database.BeginTransactionAsync(ct);
         var oldBalances = Snapshot(wallet);
 
-        BusinessLedgerEntrySide walletReversalSide;
-        BusinessLedgerEntrySide externalReversalSide;
-        if (walletEntry.Side == BusinessLedgerEntrySide.Credit)
+        LedgerPostingSide walletReversalSide;
+        LedgerPostingSide externalReversalSide;
+        if (walletEntry.Side == LedgerPostingSide.Credit)
         {
             if (wallet.AvailableBalance < original.Amount || wallet.SettledBalance < original.Amount)
                 throw new InvalidOperationException("The wallet does not have enough available settled funds to reverse this credit.");
 
             wallet.AvailableBalance -= original.Amount;
             wallet.SettledBalance -= original.Amount;
-            walletReversalSide = BusinessLedgerEntrySide.Debit;
-            externalReversalSide = BusinessLedgerEntrySide.Credit;
+            walletReversalSide = LedgerPostingSide.Debit;
+            externalReversalSide = LedgerPostingSide.Credit;
         }
         else
         {
             wallet.AvailableBalance += original.Amount;
             wallet.SettledBalance += original.Amount;
-            walletReversalSide = BusinessLedgerEntrySide.Credit;
-            externalReversalSide = BusinessLedgerEntrySide.Debit;
+            walletReversalSide = LedgerPostingSide.Credit;
+            externalReversalSide = LedgerPostingSide.Debit;
         }
 
         wallet.LastUpdatedAt = DateTime.UtcNow;
@@ -451,19 +452,19 @@ public class BusinessFundingService : IBusinessFundingService
 
         var reversal = PostLedgerTransaction(
             wallet,
-            BusinessLedgerTransactionType.Reversal,
+            LedgerTransactionType.Reversal,
             original.Amount,
             $"Reversal of {original.Reference}. {cleanReason}",
             adminUserId,
             null,
             null,
             null,
-            (BusinessLedgerAccountType.Available, walletReversalSide, wallet.AvailableBalance),
-            (BusinessLedgerAccountType.External, externalReversalSide, null));
+            (LedgerBalanceBucket.Available, walletReversalSide, wallet.AvailableBalance),
+            (LedgerBalanceBucket.External, externalReversalSide, null));
         reversal.ReversalOfTransactionId = original.Id;
 
         var originalStatus = original.Status;
-        original.Status = BusinessLedgerTransactionStatus.Reversed;
+        original.Status = LedgerTransactionStatus.Reversed;
         original.ReversedByTransactionId = reversal.Id;
         original.ReversedAt = DateTime.UtcNow;
         original.ReversalReason = cleanReason;
@@ -473,18 +474,18 @@ public class BusinessFundingService : IBusinessFundingService
         _auditService.Stage(new AuditRecordRequest(
             Action: "BUSINESS_LEDGER_TRANSACTION_REVERSED",
             Category: "BusinessFunding",
-            EntityName: nameof(BusinessLedgerTransaction),
+            EntityName: nameof(LedgerTransaction),
             EntityId: original.Id.ToString(),
             OldValues: new { Status = originalStatus, OriginalBalances = oldBalances },
-            NewValues: new { Status = BusinessLedgerTransactionStatus.Reversed, ReversalTransactionId = reversal.Id, Balances = Snapshot(wallet) },
+            NewValues: new { Status = LedgerTransactionStatus.Reversed, ReversalTransactionId = reversal.Id, Balances = Snapshot(wallet) },
             Metadata: new { reason = cleanReason, original.Reference },
             UserId: adminUserId));
 
         await _notifications.QueueBusinessAsync(
-            wallet.BusinessProfileId,
+            wallet.OwnerId,
             "Business wallet ledger reversal",
-            $"Ledger transaction {original.Reference} was reversed for {original.Amount:N2} {original.CurrencyCode}. {cleanReason}",
-            "BusinessLedgerTransaction",
+            $"Ledger transaction {original.Reference} was reversed for {original.Amount:N2} {original.AssetCode}. {cleanReason}",
+            "LedgerTransaction",
             original.Id,
             ct);
 
@@ -507,8 +508,8 @@ public class BusinessFundingService : IBusinessFundingService
                 ct)
             ?? throw new InvalidOperationException("Business transfer not found.");
 
-        var reservation = await _db.BusinessWalletReservations.AsNoTracking()
-            .FirstOrDefaultAsync(x => x.TransferId == transfer.Id && !x.IsDeleted, ct);
+        var reservation = await _db.FinancialReservations.AsNoTracking()
+            .FirstOrDefaultAsync(x => x.RelatedEntityType == nameof(Transfer) && x.RelatedEntityId == transfer.Id && !x.IsDeleted, ct);
         var collection = await _db.Collections.AsNoTracking()
             .Include(x => x.Transfer)
             .Include(x => x.Attempts)
@@ -521,7 +522,7 @@ public class BusinessFundingService : IBusinessFundingService
             transfer.BusinessFundingSource ?? BusinessFundingSource.BusinessWallet,
             transfer.SourceCurrencyCode,
             transfer.TotalPayableAmount,
-            reservation?.BusinessWalletId,
+            reservation?.FinancialAccountId,
             reservation?.Status,
             collection is null ? null : ToCollectionDetailsDto(collection));
     }
@@ -544,10 +545,10 @@ public class BusinessFundingService : IBusinessFundingService
         await ReserveTransferAsync(transfer, userId, "BusinessFunding", null, ct);
         await _db.SaveChangesAsync(ct);
 
-        var reservation = await _db.BusinessWalletReservations
+        var reservation = await _db.FinancialReservations
             .AsNoTracking()
-            .Include(x => x.BusinessWallet)
-            .FirstAsync(x => x.TransferId == transfer.Id && !x.IsDeleted, ct);
+            .Include(x => x.FinancialAccount)
+            .FirstAsync(x => x.RelatedEntityType == nameof(Transfer) && x.RelatedEntityId == transfer.Id && !x.IsDeleted, ct);
 
         return new BusinessTransferFundingDto(
             transfer.Id,
@@ -556,7 +557,7 @@ public class BusinessFundingService : IBusinessFundingService
             transfer.BusinessFundingSource ?? BusinessFundingSource.BusinessWallet,
             transfer.SourceCurrencyCode,
             transfer.TotalPayableAmount,
-            reservation.BusinessWalletId,
+            reservation.FinancialAccountId,
             reservation.Status,
             null);
     }
@@ -821,11 +822,12 @@ public class BusinessFundingService : IBusinessFundingService
         }
 
         var normalizedCurrency = NormalizeCode(currencyCode);
-        var wallet = await _db.BusinessWallets
+        var wallet = await _db.FinancialAccounts
             .AsNoTracking()
             .FirstOrDefaultAsync(x =>
-                x.BusinessProfileId == businessProfileId &&
-                x.CurrencyCode == normalizedCurrency &&
+                x.OwnerType == FinancialAccountOwnerType.Business &&
+                x.OwnerId == businessProfileId &&
+                x.AssetCode == normalizedCurrency &&
                 !x.IsDeleted,
                 ct)
             ?? throw new InvalidOperationException(
@@ -869,12 +871,12 @@ public class BusinessFundingService : IBusinessFundingService
             throw new InvalidOperationException("The transfer must complete its approval workflow before funding can be reserved.");
         }
 
-        var existing = await _db.BusinessWalletReservations
-            .Include(x => x.BusinessWallet)
-            .FirstOrDefaultAsync(x => x.TransferId == transfer.Id && !x.IsDeleted, ct);
+        var existing = await _db.FinancialReservations
+            .Include(x => x.FinancialAccount)
+            .FirstOrDefaultAsync(x => x.RelatedEntityType == nameof(Transfer) && x.RelatedEntityId == transfer.Id && !x.IsDeleted, ct);
         if (existing is not null)
         {
-            if (existing.Status is BusinessWalletReservationStatus.Active or BusinessWalletReservationStatus.Captured)
+            if (existing.Status is FinancialReservationStatus.Active or FinancialReservationStatus.Captured)
             {
                 if (transfer.Status == TransferStatus.PendingPayment)
                 {
@@ -886,9 +888,10 @@ public class BusinessFundingService : IBusinessFundingService
             throw new InvalidOperationException("The previous wallet reservation for this transfer was released.");
         }
 
-        var wallet = await _db.BusinessWallets.FirstOrDefaultAsync(x =>
-            x.BusinessProfileId == transfer.BusinessProfileId.Value &&
-            x.CurrencyCode == transfer.SourceCurrencyCode &&
+        var wallet = await _db.FinancialAccounts.FirstOrDefaultAsync(x =>
+            x.OwnerType == FinancialAccountOwnerType.Business &&
+            x.OwnerId == transfer.BusinessProfileId.Value &&
+            x.AssetCode == transfer.SourceCurrencyCode &&
             !x.IsDeleted,
             ct) ?? throw new InvalidOperationException(
                 $"The business does not have a {transfer.SourceCurrencyCode} wallet.");
@@ -897,7 +900,7 @@ public class BusinessFundingService : IBusinessFundingService
         if (wallet.AvailableBalance < transfer.TotalPayableAmount)
         {
             throw new InvalidOperationException(
-                $"Insufficient {wallet.CurrencyCode} business-wallet balance. Available: {wallet.AvailableBalance:N2}; required: {transfer.TotalPayableAmount:N2}.");
+                $"Insufficient {wallet.AssetCode} business-wallet balance. Available: {wallet.AvailableBalance:N2}; required: {transfer.TotalPayableAmount:N2}.");
         }
 
         wallet.AvailableBalance -= transfer.TotalPayableAmount;
@@ -905,32 +908,34 @@ public class BusinessFundingService : IBusinessFundingService
         wallet.LastUpdatedAt = DateTime.UtcNow;
         wallet.LastUpdatedByUserId = actionedByUserId;
 
-        var reservation = new BusinessWalletReservation
+        var reservation = new FinancialReservation
         {
-            BusinessWalletId = wallet.Id,
-            BusinessWallet = wallet,
-            TransferId = transfer.Id,
-            Transfer = transfer,
-            BusinessPaymentBatchId = businessPaymentBatchId,
+            FinancialAccountId = wallet.Id,
+            FinancialAccount = wallet,
+            Type = FinancialReservationType.Transfer,
+            RelatedEntityType = nameof(Transfer),
+            RelatedEntityId = transfer.Id,
+            ContextEntityType = businessPaymentBatchId.HasValue ? "BusinessPaymentBatch" : null,
+            ContextEntityId = businessPaymentBatchId,
             Reference = GenerateReference("KXRES"),
             Amount = transfer.TotalPayableAmount,
-            Status = BusinessWalletReservationStatus.Active,
+            Status = FinancialReservationStatus.Active,
             ReservedAt = DateTime.UtcNow,
             CreatedByUserId = actionedByUserId
         };
-        _db.BusinessWalletReservations.Add(reservation);
+        _db.FinancialReservations.Add(reservation);
 
         PostLedgerTransaction(
             wallet,
-            BusinessLedgerTransactionType.TransferReservation,
+            LedgerTransactionType.TransferReservation,
             reservation.Amount,
             $"Reserved funds for transfer {transfer.Reference}.",
             actionedByUserId,
             transfer.Id,
             businessPaymentBatchId,
             null,
-            (BusinessLedgerAccountType.Available, BusinessLedgerEntrySide.Debit, wallet.AvailableBalance),
-            (BusinessLedgerAccountType.Held, BusinessLedgerEntrySide.Credit, wallet.HeldBalance));
+            (LedgerBalanceBucket.Available, LedgerPostingSide.Debit, wallet.AvailableBalance),
+            (LedgerBalanceBucket.Held, LedgerPostingSide.Credit, wallet.HeldBalance));
 
         ApplyWalletFundingTransition(transfer, source, actionedByUserId, reservation.Reference);
         await _notifications.QueueBusinessAsync(
@@ -954,33 +959,33 @@ public class BusinessFundingService : IBusinessFundingService
             return;
         }
 
-        var reservation = await _db.BusinessWalletReservations
-            .Include(x => x.BusinessWallet)
-            .FirstOrDefaultAsync(x => x.TransferId == transfer.Id && !x.IsDeleted, ct)
+        var reservation = await _db.FinancialReservations
+            .Include(x => x.FinancialAccount)
+            .FirstOrDefaultAsync(x => x.RelatedEntityType == nameof(Transfer) && x.RelatedEntityId == transfer.Id && !x.IsDeleted, ct)
             ?? throw new InvalidOperationException("The business-wallet reservation for this transfer was not found.");
 
-        if (reservation.Status == BusinessWalletReservationStatus.Active)
+        if (reservation.Status == FinancialReservationStatus.Active)
         {
             return;
         }
-        if (reservation.Status == BusinessWalletReservationStatus.Captured)
+        if (reservation.Status == FinancialReservationStatus.Captured)
         {
             throw new InvalidOperationException("A captured business-wallet reservation cannot be reused.");
         }
 
-        var wallet = reservation.BusinessWallet;
+        var wallet = reservation.FinancialAccount;
         EnsureWalletActive(wallet);
         if (wallet.AvailableBalance < reservation.Amount)
         {
             throw new InvalidOperationException(
-                $"Insufficient {wallet.CurrencyCode} balance to retry the payout. Available: {wallet.AvailableBalance:N2}; required: {reservation.Amount:N2}.");
+                $"Insufficient {wallet.AssetCode} balance to retry the payout. Available: {wallet.AvailableBalance:N2}; required: {reservation.Amount:N2}.");
         }
 
         wallet.AvailableBalance -= reservation.Amount;
         wallet.HeldBalance += reservation.Amount;
         wallet.LastUpdatedAt = DateTime.UtcNow;
         wallet.LastUpdatedByUserId = actionedByUserId;
-        reservation.Status = BusinessWalletReservationStatus.Active;
+        reservation.Status = FinancialReservationStatus.Active;
         reservation.ReservedAt = DateTime.UtcNow;
         reservation.ReleasedAt = null;
         reservation.ReleaseReason = null;
@@ -989,15 +994,15 @@ public class BusinessFundingService : IBusinessFundingService
 
         PostLedgerTransaction(
             wallet,
-            BusinessLedgerTransactionType.TransferReservation,
+            LedgerTransactionType.TransferReservation,
             reservation.Amount,
             $"Re-reserved funds for payout retry on transfer {transfer.Reference}. Source: {source}.",
             actionedByUserId,
             transfer.Id,
-            reservation.BusinessPaymentBatchId,
+            reservation.ContextEntityId,
             null,
-            (BusinessLedgerAccountType.Available, BusinessLedgerEntrySide.Debit, wallet.AvailableBalance),
-            (BusinessLedgerAccountType.Held, BusinessLedgerEntrySide.Credit, wallet.HeldBalance));
+            (LedgerBalanceBucket.Available, LedgerPostingSide.Debit, wallet.AvailableBalance),
+            (LedgerBalanceBucket.Held, LedgerPostingSide.Credit, wallet.HeldBalance));
     }
 
     public bool CaptureTransferReservation(
@@ -1010,19 +1015,19 @@ public class BusinessFundingService : IBusinessFundingService
             return false;
         }
 
-        var reservation = _db.BusinessWalletReservations
-            .Include(x => x.BusinessWallet)
-            .FirstOrDefault(x => x.TransferId == transfer.Id && !x.IsDeleted);
-        if (reservation is null || reservation.Status == BusinessWalletReservationStatus.Captured)
+        var reservation = _db.FinancialReservations
+            .Include(x => x.FinancialAccount)
+            .FirstOrDefault(x => x.RelatedEntityType == nameof(Transfer) && x.RelatedEntityId == transfer.Id && !x.IsDeleted);
+        if (reservation is null || reservation.Status == FinancialReservationStatus.Captured)
         {
             return false;
         }
-        if (reservation.Status != BusinessWalletReservationStatus.Active)
+        if (reservation.Status != FinancialReservationStatus.Active)
         {
             return false;
         }
 
-        var wallet = reservation.BusinessWallet;
+        var wallet = reservation.FinancialAccount;
         if (wallet.HeldBalance < reservation.Amount || wallet.SettledBalance < reservation.Amount)
         {
             throw new InvalidOperationException("Business-wallet reservation balances are inconsistent.");
@@ -1032,22 +1037,22 @@ public class BusinessFundingService : IBusinessFundingService
         wallet.SettledBalance -= reservation.Amount;
         wallet.LastUpdatedAt = DateTime.UtcNow;
         wallet.LastUpdatedByUserId = actionedByUserId;
-        reservation.Status = BusinessWalletReservationStatus.Captured;
+        reservation.Status = FinancialReservationStatus.Captured;
         reservation.CapturedAt = DateTime.UtcNow;
         reservation.LastUpdatedAt = DateTime.UtcNow;
         reservation.LastUpdatedByUserId = actionedByUserId;
 
         PostLedgerTransaction(
             wallet,
-            BusinessLedgerTransactionType.ReservationCapture,
+            LedgerTransactionType.ReservationCapture,
             reservation.Amount,
             $"Captured wallet reservation after payout for transfer {transfer.Reference}. Source: {source}.",
             actionedByUserId,
             transfer.Id,
-            reservation.BusinessPaymentBatchId,
+            reservation.ContextEntityId,
             null,
-            (BusinessLedgerAccountType.Held, BusinessLedgerEntrySide.Debit, wallet.HeldBalance),
-            (BusinessLedgerAccountType.Settlement, BusinessLedgerEntrySide.Credit, null));
+            (LedgerBalanceBucket.Held, LedgerPostingSide.Debit, wallet.HeldBalance),
+            (LedgerBalanceBucket.Settlement, LedgerPostingSide.Credit, null));
         return true;
     }
 
@@ -1062,19 +1067,19 @@ public class BusinessFundingService : IBusinessFundingService
             return false;
         }
 
-        var reservation = _db.BusinessWalletReservations
-            .Include(x => x.BusinessWallet)
-            .FirstOrDefault(x => x.TransferId == transfer.Id && !x.IsDeleted);
-        if (reservation is null || reservation.Status == BusinessWalletReservationStatus.Released)
+        var reservation = _db.FinancialReservations
+            .Include(x => x.FinancialAccount)
+            .FirstOrDefault(x => x.RelatedEntityType == nameof(Transfer) && x.RelatedEntityId == transfer.Id && !x.IsDeleted);
+        if (reservation is null || reservation.Status == FinancialReservationStatus.Released)
         {
             return false;
         }
 
-        var wallet = reservation.BusinessWallet;
-        BusinessLedgerAccountType debitAccount;
+        var wallet = reservation.FinancialAccount;
+        LedgerBalanceBucket debitAccount;
         decimal? debitBalanceAfter;
 
-        if (reservation.Status == BusinessWalletReservationStatus.Active)
+        if (reservation.Status == FinancialReservationStatus.Active)
         {
             if (wallet.HeldBalance < reservation.Amount)
             {
@@ -1083,20 +1088,20 @@ public class BusinessFundingService : IBusinessFundingService
 
             wallet.HeldBalance -= reservation.Amount;
             wallet.AvailableBalance += reservation.Amount;
-            debitAccount = BusinessLedgerAccountType.Held;
+            debitAccount = LedgerBalanceBucket.Held;
             debitBalanceAfter = wallet.HeldBalance;
         }
         else
         {
             wallet.SettledBalance += reservation.Amount;
             wallet.AvailableBalance += reservation.Amount;
-            debitAccount = BusinessLedgerAccountType.Settlement;
+            debitAccount = LedgerBalanceBucket.Settlement;
             debitBalanceAfter = null;
         }
 
         wallet.LastUpdatedAt = DateTime.UtcNow;
         wallet.LastUpdatedByUserId = actionedByUserId;
-        reservation.Status = BusinessWalletReservationStatus.Released;
+        reservation.Status = FinancialReservationStatus.Released;
         reservation.ReleasedAt = DateTime.UtcNow;
         reservation.ReleaseReason = Clean(reason, 1000);
         reservation.LastUpdatedAt = DateTime.UtcNow;
@@ -1104,27 +1109,28 @@ public class BusinessFundingService : IBusinessFundingService
 
         PostLedgerTransaction(
             wallet,
-            BusinessLedgerTransactionType.ReservationRelease,
+            LedgerTransactionType.ReservationRelease,
             reservation.Amount,
             $"Released or restored wallet funds for transfer {transfer.Reference}. Source: {source}. {reason}",
             actionedByUserId,
             transfer.Id,
-            reservation.BusinessPaymentBatchId,
+            reservation.ContextEntityId,
             null,
-            (debitAccount, BusinessLedgerEntrySide.Debit, debitBalanceAfter),
-            (BusinessLedgerAccountType.Available, BusinessLedgerEntrySide.Credit, wallet.AvailableBalance));
+            (debitAccount, LedgerPostingSide.Debit, debitBalanceAfter),
+            (LedgerBalanceBucket.Available, LedgerPostingSide.Credit, wallet.AvailableBalance));
         return true;
     }
 
-    private async Task<BusinessWallet> GetOrCreateWalletAsync(
+    private async Task<FinancialAccount> GetOrCreateWalletAsync(
         Guid businessProfileId,
         string currencyCode,
         Guid? userId,
         CancellationToken ct)
     {
-        var wallet = await _db.BusinessWallets.FirstOrDefaultAsync(x =>
-            x.BusinessProfileId == businessProfileId &&
-            x.CurrencyCode == currencyCode &&
+        var wallet = await _db.FinancialAccounts.FirstOrDefaultAsync(x =>
+            x.OwnerType == FinancialAccountOwnerType.Business &&
+            x.OwnerId == businessProfileId &&
+            x.AssetCode == currencyCode &&
             !x.IsDeleted,
             ct);
         if (wallet is not null)
@@ -1132,71 +1138,74 @@ public class BusinessFundingService : IBusinessFundingService
             return wallet;
         }
 
-        wallet = new BusinessWallet
+        wallet = new FinancialAccount
         {
-            BusinessProfileId = businessProfileId,
-            CurrencyCode = currencyCode,
-            Status = BusinessWalletStatus.Active,
+            OwnerType = FinancialAccountOwnerType.Business,
+            OwnerId = businessProfileId,
+            AccountCode = $"BUS-{businessProfileId:N}-{currencyCode.ToUpperInvariant()}",
+            AssetCode = currencyCode,
+            AccountType = FinancialAccountType.Customer,
+            Status = FinancialAccountStatus.Active,
             CreatedByUserId = userId
         };
-        _db.BusinessWallets.Add(wallet);
+        _db.FinancialAccounts.Add(wallet);
         return wallet;
     }
 
-    private BusinessLedgerTransaction PostLedgerTransaction(
-        BusinessWallet wallet,
-        BusinessLedgerTransactionType type,
+    private LedgerTransaction PostLedgerTransaction(
+        FinancialAccount wallet,
+        LedgerTransactionType type,
         decimal amount,
         string description,
         Guid? userId,
         Guid? transferId,
         Guid? batchId,
         Guid? collectionId,
-        params (BusinessLedgerAccountType Account, BusinessLedgerEntrySide Side, decimal? BalanceAfter)[] entries)
+        params (LedgerBalanceBucket Account, LedgerPostingSide Side, decimal? BalanceAfter)[] entries)
     {
         if (entries.Length != 2 || entries[0].Side == entries[1].Side)
         {
             throw new InvalidOperationException("A business ledger transaction must contain one debit and one credit entry.");
         }
 
-        var transaction = new BusinessLedgerTransaction
+        var transaction = new LedgerTransaction
         {
-            BusinessProfileId = wallet.BusinessProfileId,
             Reference = GenerateReference("KXLED"),
-            CurrencyCode = wallet.CurrencyCode,
+            AssetCode = wallet.AssetCode,
             Type = type,
-            Status = BusinessLedgerTransactionStatus.Posted,
+            Status = LedgerTransactionStatus.Posted,
             Amount = amount,
             Description = Clean(description, 1000) ?? type.ToString(),
-            TransferId = transferId,
-            BusinessPaymentBatchId = batchId,
-            CollectionId = collectionId,
+            RelatedEntityType = transferId.HasValue ? nameof(Transfer) : collectionId.HasValue ? nameof(Collection) : null,
+            RelatedEntityId = transferId ?? collectionId,
+            ContextEntityType = batchId.HasValue ? "BusinessPaymentBatch" : null,
+            ContextEntityId = batchId,
             PostedAt = DateTime.UtcNow,
             CreatedByUserId = userId
         };
 
         foreach (var entry in entries)
         {
-            transaction.Entries.Add(new BusinessLedgerEntry
+            transaction.Postings.Add(new LedgerPosting
             {
-                BusinessLedgerTransactionId = transaction.Id,
-                BusinessLedgerTransaction = transaction,
-                BusinessWalletId = entry.Account == BusinessLedgerAccountType.External ? null : wallet.Id,
-                BusinessWallet = entry.Account == BusinessLedgerAccountType.External ? null : wallet,
-                AccountType = entry.Account,
+                LedgerTransactionId = transaction.Id,
+                LedgerTransaction = transaction,
+                FinancialAccountId = wallet.Id,
+                FinancialAccount = wallet,
+                BalanceBucket = entry.Account,
                 Side = entry.Side,
                 Amount = amount,
                 AccountBalanceAfter = entry.BalanceAfter
             });
         }
 
-        _db.BusinessLedgerTransactions.Add(transaction);
+        _db.LedgerTransactions.Add(transaction);
         return transaction;
     }
 
-    private BusinessLedgerTransaction PostIdempotentLedgerTransaction(
-        BusinessWallet wallet,
-        BusinessLedgerTransactionType type,
+    private LedgerTransaction PostIdempotentLedgerTransaction(
+        FinancialAccount wallet,
+        LedgerTransactionType type,
         decimal amount,
         string description,
         Guid? userId,
@@ -1205,7 +1214,7 @@ public class BusinessFundingService : IBusinessFundingService
         Guid? transferId,
         Guid? batchId,
         Guid? collectionId,
-        params (BusinessLedgerAccountType Account, BusinessLedgerEntrySide Side, decimal? BalanceAfter)[] entries)
+        params (LedgerBalanceBucket Account, LedgerPostingSide Side, decimal? BalanceAfter)[] entries)
     {
         var transaction = PostLedgerTransaction(
             wallet,
@@ -1217,21 +1226,22 @@ public class BusinessFundingService : IBusinessFundingService
             batchId,
             collectionId,
             entries);
+        transaction.IdempotencyScope = $"business:{wallet.OwnerId:N}";
         transaction.IdempotencyKey = idempotencyKey;
         transaction.IdempotencyRequestHash = requestHash;
         return transaction;
     }
 
-    private async Task<BusinessLedgerTransaction?> FindIdempotentLedgerTransactionAsync(
+    private async Task<LedgerTransaction?> FindIdempotentLedgerTransactionAsync(
         Guid businessProfileId,
         string idempotencyKey,
         string requestHash,
         CancellationToken ct)
     {
-        var existing = await _db.BusinessLedgerTransactions
+        var existing = await _db.LedgerTransactions
             .AsNoTracking()
             .FirstOrDefaultAsync(x =>
-                x.BusinessProfileId == businessProfileId &&
+                x.IdempotencyScope == $"business:{businessProfileId:N}" &&
                 x.IdempotencyKey == idempotencyKey &&
                 !x.IsDeleted,
                 ct);
@@ -1262,7 +1272,7 @@ public class BusinessFundingService : IBusinessFundingService
         return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(json)));
     }
 
-    private static object Snapshot(BusinessWallet wallet) => new
+    private static object Snapshot(FinancialAccount wallet) => new
     {
         wallet.Status,
         wallet.SettledBalance,
@@ -1270,23 +1280,23 @@ public class BusinessFundingService : IBusinessFundingService
         wallet.HeldBalance
     };
 
-    private static BusinessLedgerTransactionDto ToLedgerDto(BusinessLedgerTransaction x) =>
+    private static BusinessLedgerTransactionDto ToLedgerDto(LedgerTransaction x) =>
         new(
             x.Id,
             x.Reference,
-            x.CurrencyCode,
+            x.AssetCode,
             x.Type,
             x.Status,
             x.Amount,
             x.Description,
-            x.TransferId,
-            x.BusinessPaymentBatchId,
-            x.CollectionId,
+            x.RelatedEntityType == nameof(Transfer) ? x.RelatedEntityId : null,
+            x.ContextEntityType == "BusinessPaymentBatch" ? x.ContextEntityId : null,
+            x.RelatedEntityType == nameof(Collection) ? x.RelatedEntityId : null,
             x.PostedAt,
-            x.Entries.OrderBy(y => y.CreatedAt)
+            x.Postings.OrderBy(y => y.CreatedAt)
                 .Select(y => new BusinessLedgerEntryDto(
                     y.Id,
-                    y.AccountType,
+                    y.BalanceBucket,
                     y.Side,
                     y.Amount,
                     y.AccountBalanceAfter))
@@ -1328,15 +1338,15 @@ public class BusinessFundingService : IBusinessFundingService
             throw new InvalidOperationException("The transfer must complete approval before funding can be initiated.");
     }
 
-    private static void EnsureWalletNotClosed(BusinessWallet wallet)
+    private static void EnsureWalletNotClosed(FinancialAccount wallet)
     {
-        if (wallet.Status == BusinessWalletStatus.Closed)
+        if (wallet.Status == FinancialAccountStatus.Closed)
             throw new InvalidOperationException("Business wallet is closed.");
     }
 
-    private static void EnsureWalletActive(BusinessWallet wallet)
+    private static void EnsureWalletActive(FinancialAccount wallet)
     {
-        if (wallet.Status != BusinessWalletStatus.Active)
+        if (wallet.Status != FinancialAccountStatus.Active)
         {
             throw new InvalidOperationException($"Business wallet is '{wallet.Status}'.");
         }
@@ -1448,11 +1458,11 @@ public class BusinessFundingService : IBusinessFundingService
                 .ToList());
     }
 
-    private static BusinessWalletDto ToWalletDto(BusinessWallet wallet) =>
+    private static BusinessWalletDto ToWalletDto(FinancialAccount wallet) =>
         new(
             wallet.Id,
-            wallet.BusinessProfileId,
-            wallet.CurrencyCode,
+            wallet.OwnerId,
+            wallet.AssetCode,
             wallet.Status,
             wallet.SettledBalance,
             wallet.AvailableBalance,

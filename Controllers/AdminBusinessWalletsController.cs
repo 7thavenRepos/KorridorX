@@ -42,7 +42,7 @@ public class AdminBusinessWalletsController : ControllerBase
         var result = await _service.SetWalletStatusAsync(
             GetUserId(),
             walletId,
-            BusinessWalletStatus.Frozen,
+            FinancialAccountStatus.Frozen,
             request.Reason,
             ct);
         return Ok(ApiResponses.Ok(result, "Business wallet frozen successfully."));
@@ -57,7 +57,7 @@ public class AdminBusinessWalletsController : ControllerBase
         var result = await _service.SetWalletStatusAsync(
             GetUserId(),
             walletId,
-            BusinessWalletStatus.Active,
+            FinancialAccountStatus.Active,
             request.Reason,
             ct);
         return Ok(ApiResponses.Ok(result, "Business wallet reactivated successfully."));
