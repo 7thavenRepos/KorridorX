@@ -37,6 +37,11 @@ public interface ICollectionService
         InitiateCollectionRequestDto request,
         CancellationToken ct = default);
 
+    Task<CollectionDetailsDto?> GetBusinessTransferCollectionAsync(
+        Guid businessProfileId,
+        Guid transferId,
+        CancellationToken ct = default);
+
     Task<CollectionDetailsDto> GetCollectionByIdAsync(
         Guid userId,
         Guid collectionId,

@@ -109,7 +109,7 @@ public class PayoutService : IPayoutService
         var destination = await ResolveDestinationAsync(transfer, changedByUserId, ct);
         if (destination.IsMobileWallet)
         {
-            throw new InvalidOperationException("Blaaiz mobile-wallet payouts are not yet enabled.");
+            throw new InvalidOperationException($"Mobile-wallet payouts are not yet enabled for {_remittanceProvider.ProviderName}.");
         }
 
         var paymentMethod = ResolvePayoutMethod(transfer.DestinationCurrencyCode);
@@ -234,7 +234,9 @@ public class PayoutService : IPayoutService
                 payoutStatus,
                 new PayoutStatusTransitionContext(
                     Source: source,
-                    Reason: payoutStatus == PayoutStatus.Failed ? "Blaaiz rejected the payout." : "Payout submitted to Blaaiz.",
+                    Reason: payoutStatus == PayoutStatus.Failed
+                        ? $"{_remittanceProvider.ProviderName} rejected the payout."
+                        : $"Payout submitted to {_remittanceProvider.ProviderName}.",
                     ChangedByUserId: changedByUserId,
                     ProviderPayoutId: result.ProviderTransactionId,
                     ProviderReference: result.ProviderReference,
@@ -524,7 +526,7 @@ public class PayoutService : IPayoutService
     {
         if (!_payoutWalletIds.TryGetValue(currencyCode, out var walletId) || string.IsNullOrWhiteSpace(walletId))
         {
-            throw new InvalidOperationException($"No Blaaiz payout wallet is configured for {currencyCode}.");
+            throw new InvalidOperationException($"No payout wallet is configured for {currencyCode} on {_remittanceProvider.ProviderName}.");
         }
 
         return walletId.Trim();
@@ -593,7 +595,9 @@ public class PayoutService : IPayoutService
                 account?.SwiftBic,
                 account?.IsActive ?? false,
                 account?.IsDeleted ?? false,
-                providerView?.IsVerified ?? account?.IsVerified ?? false,
+                providerView is not null
+                ? providerView.IsActive && providerView.IsVerified
+                : account?.IsVerified ?? false,
                 wallet is not null,
                 providerView?.ProviderPartyId ?? account?.ProviderBeneficiaryId,
                 providerView?.ProviderDestinationId ?? account?.ProviderBankAccountId);
@@ -637,7 +641,9 @@ public class PayoutService : IPayoutService
             recipientAccount?.SwiftBic,
             recipientAccount?.IsActive ?? false,
             recipientAccount?.IsDeleted ?? false,
-            recipientProviderView?.IsVerified ?? recipientAccount?.IsVerified ?? false,
+            recipientProviderView is not null
+                ? recipientProviderView.IsActive && recipientProviderView.IsVerified
+                : recipientAccount?.IsVerified ?? false,
             transfer.RecipientMobileWallet is not null,
             recipientProviderView?.ProviderPartyId ?? recipientAccount?.ProviderRecipientId,
             recipientProviderView?.ProviderDestinationId ?? recipientAccount?.ProviderBankAccountId);

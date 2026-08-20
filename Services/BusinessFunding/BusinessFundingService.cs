@@ -492,10 +492,10 @@ public class BusinessFundingService : IBusinessFundingService
 
         var reservation = await _db.FinancialReservations.AsNoTracking()
             .FirstOrDefaultAsync(x => x.RelatedEntityType == nameof(Transfer) && x.RelatedEntityId == transfer.Id && !x.IsDeleted, ct);
-        var collection = await _db.Collections.AsNoTracking()
-            .Include(x => x.Transfer)
-            .Include(x => x.Attempts)
-            .FirstOrDefaultAsync(x => x.TransferId == transfer.Id && !x.IsDeleted, ct);
+        var collection = await _collectionService.GetBusinessTransferCollectionAsync(
+            access.BusinessProfileId,
+            transfer.Id,
+            ct);
 
         return new BusinessTransferFundingDto(
             transfer.Id,
@@ -506,7 +506,7 @@ public class BusinessFundingService : IBusinessFundingService
             transfer.TotalPayableAmount,
             reservation?.FinancialAccountId,
             reservation?.Status,
-            collection is null ? null : ToCollectionDetailsDto(collection));
+            collection);
     }
 
     public async Task<BusinessTransferFundingDto> FundTransferFromWalletAsync(
@@ -1176,66 +1176,6 @@ public class BusinessFundingService : IBusinessFundingService
         {
             throw new InvalidOperationException($"Business wallet is '{wallet.Status}'.");
         }
-    }
-
-    private static CollectionDetailsDto ToCollectionDetailsDto(Collection collection)
-    {
-        var transfer = collection.Transfer ?? throw new InvalidOperationException("Remittance collection is missing its transfer.");
-        return new CollectionDetailsDto(
-            new CollectionDto
-            {
-                Id = collection.Id,
-                TransferId = collection.TransferId,
-                Purpose = collection.Purpose,
-                FinancialAccountId = collection.FinancialAccountId,
-                RelatedEntityType = collection.RelatedEntityType,
-                RelatedEntityId = collection.RelatedEntityId,
-                ContextEntityType = collection.ContextEntityType,
-                ContextEntityId = collection.ContextEntityId,
-                TransferReference = transfer.Reference,
-                TransferStatus = transfer.Status,
-                Reference = collection.Reference,
-                SourceCountryCode = transfer.SourceCountryCode,
-                CurrencyCode = collection.CurrencyCode,
-                Amount = collection.Amount,
-                PaymentMethod = collection.PaymentMethod,
-                Status = collection.Status,
-                ProviderCode = collection.ProviderCode,
-                ProviderCollectionId = collection.ProviderCollectionId,
-                ProviderReference = collection.ProviderReference,
-                CheckoutUrl = collection.CheckoutUrl,
-                ProviderExpiresAt = collection.ProviderExpiresAt,
-                VirtualAccountNumber = collection.VirtualAccountNumber,
-                VirtualAccountBankName = collection.VirtualAccountBankName,
-                VirtualAccountName = collection.VirtualAccountName,
-                InitiatedAt = collection.InitiatedAt,
-                ConfirmedAt = collection.ConfirmedAt,
-                FailedAt = collection.FailedAt,
-                ExpiredAt = collection.ExpiredAt,
-                RefundInitiatedAt = collection.RefundInitiatedAt,
-                RefundedAt = collection.RefundedAt,
-                ProviderRefundId = collection.ProviderRefundId,
-                ProviderRefundReference = collection.ProviderRefundReference,
-                RefundReason = collection.RefundReason,
-                RefundFailureReason = collection.RefundFailureReason,
-                LastRefundSyncedAt = collection.LastRefundSyncedAt,
-                FailureReason = collection.FailureReason,
-                CreatedAt = collection.CreatedAt,
-                LastUpdatedAt = collection.LastUpdatedAt
-            },
-            collection.Attempts
-                .OrderByDescending(x => x.AttemptedAt)
-                .Select(x => new CollectionAttemptDto(
-                    x.Id,
-                    x.CollectionId,
-                    x.Status,
-                    x.ProviderRequestId,
-                    x.ProviderResponseId,
-                    x.RequestPayloadJson,
-                    x.ResponsePayloadJson,
-                    x.AttemptedAt,
-                    x.ErrorMessage))
-                .ToList());
     }
 
     private static BusinessWalletDto ToWalletDto(FinancialAccount wallet) =>

@@ -323,7 +323,7 @@ public class CollectionService : ICollectionService
                 CollectionStatus.Initiated,
                 new CollectionStatusTransitionContext(
                     Source: "Provider",
-                    Reason: "Collection was initiated with Blaaiz.",
+                    Reason: $"Collection was initiated with {_remittanceProvider.ProviderName}.",
                     ChangedByUserId: userId,
                     ProviderCollectionId: providerResult.ProviderTransactionId,
                     ProviderReference: providerResult.ProviderReference,
@@ -679,6 +679,27 @@ public class CollectionService : ICollectionService
             await _db.SaveChangesAsync(ct);
             throw;
         }
+    }
+
+    public async Task<CollectionDetailsDto?> GetBusinessTransferCollectionAsync(
+        Guid businessProfileId,
+        Guid transferId,
+        CancellationToken ct = default)
+    {
+        var collection = await _db.Collections
+            .AsNoTracking()
+            .Include(x => x.Transfer)
+            .Include(x => x.Attempts)
+            .FirstOrDefaultAsync(x =>
+                x.Purpose == PaymentOperationPurpose.Remittance &&
+                x.TransferId == transferId &&
+                x.Transfer != null &&
+                x.Transfer.BusinessProfileId == businessProfileId &&
+                !x.IsDeleted &&
+                !x.Transfer.IsDeleted,
+                ct);
+
+        return collection is null ? null : ToDetailsDto(collection);
     }
 
     public async Task<CollectionDetailsDto> GetCollectionByIdAsync(
