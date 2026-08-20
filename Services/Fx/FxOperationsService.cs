@@ -173,7 +173,7 @@ public sealed class FxOperationsService : IFxOperationsService
     {
         if (string.IsNullOrWhiteSpace(value)) throw new InvalidOperationException("Currency code is required.");
         var code = value.Trim().ToUpperInvariant();
-        if (code.Length > 10) throw new InvalidOperationException("Currency code cannot exceed 10 characters.");
+        if (code.Length > 20) throw new InvalidOperationException("Asset code cannot exceed 20 characters.");
         return code;
     }
 }

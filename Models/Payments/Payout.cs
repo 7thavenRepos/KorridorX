@@ -1,3 +1,4 @@
+using KorridorX.Models.FinancialCore;
 using KorridorX.Models.Common;
 using KorridorX.Models.Enums;
 using KorridorX.Models.Transfers;
@@ -6,9 +7,19 @@ namespace KorridorX.Models.Payments;
 
 public class Payout : AuditableEntity
 {
-    public Guid TransferId { get; set; }
-    public Transfer Transfer { get; set; } = null!;
+    public Guid? TransferId { get; set; }
+    public Transfer? Transfer { get; set; }
 
+    public PaymentOperationPurpose Purpose { get; set; } = PaymentOperationPurpose.Remittance;
+
+    public Guid? FinancialAccountId { get; set; }
+    public FinancialAccount? FinancialAccount { get; set; }
+
+    public string? RelatedEntityType { get; set; }
+    public Guid? RelatedEntityId { get; set; }
+
+    public string? ContextEntityType { get; set; }
+    public Guid? ContextEntityId { get; set; }
     public string Reference { get; set; } = "";
 
     public string CurrencyCode { get; set; } = "";

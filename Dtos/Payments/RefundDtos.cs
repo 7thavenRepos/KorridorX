@@ -6,7 +6,7 @@ public record InitiateRefundRequestDto(string? Reason);
 
 public record RefundDto(
     Guid CollectionId,
-    Guid TransferId,
+    Guid? TransferId,
     string CollectionReference,
     string CurrencyCode,
     decimal Amount,

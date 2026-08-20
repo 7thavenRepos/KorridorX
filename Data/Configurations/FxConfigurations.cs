@@ -10,8 +10,8 @@ public class ExchangeRateConfiguration : IEntityTypeConfiguration<ExchangeRate>
     {
         builder.HasIndex(x => new { x.SourceCurrencyCode, x.DestinationCurrencyCode, x.IsActive });
 
-        builder.Property(x => x.SourceCurrencyCode).HasMaxLength(10);
-        builder.Property(x => x.DestinationCurrencyCode).HasMaxLength(10);
+        builder.Property(x => x.SourceCurrencyCode).HasMaxLength(20);
+        builder.Property(x => x.DestinationCurrencyCode).HasMaxLength(20);
         builder.Property(x => x.ProviderCode).HasMaxLength(50);
         builder.Property(x => x.ProviderRateId).HasMaxLength(150);
 
@@ -29,12 +29,14 @@ public class TransferQuoteConfiguration : IEntityTypeConfiguration<TransferQuote
         builder.HasIndex(x => x.BusinessProfileId);
         builder.HasIndex(x => x.ExpiresAt);
         builder.HasIndex(x => x.ProviderQuoteId);
+        builder.HasIndex(x => new { x.CustomerProfileId, x.IsUsed, x.ExpiresAt });
+        builder.HasIndex(x => new { x.BusinessProfileId, x.IsUsed, x.ExpiresAt });
 
         builder.Property(x => x.SourceCountryCode).HasMaxLength(10);
         builder.Property(x => x.DestinationCountryCode).HasMaxLength(10);
-        builder.Property(x => x.SourceCurrencyCode).HasMaxLength(10);
-        builder.Property(x => x.DestinationCurrencyCode).HasMaxLength(10);
-        builder.Property(x => x.FeeCurrencyCode).HasMaxLength(10);
+        builder.Property(x => x.SourceCurrencyCode).HasMaxLength(20);
+        builder.Property(x => x.DestinationCurrencyCode).HasMaxLength(20);
+        builder.Property(x => x.FeeCurrencyCode).HasMaxLength(20);
         builder.Property(x => x.ProviderCode).HasMaxLength(50);
         builder.Property(x => x.ProviderQuoteId).HasMaxLength(150);
 
@@ -74,9 +76,9 @@ public class TransferFeeConfiguration : IEntityTypeConfiguration<TransferFee>
 
         builder.Property(x => x.SourceCountryCode).HasMaxLength(10);
         builder.Property(x => x.DestinationCountryCode).HasMaxLength(10);
-        builder.Property(x => x.SourceCurrencyCode).HasMaxLength(10);
-        builder.Property(x => x.DestinationCurrencyCode).HasMaxLength(10);
-        builder.Property(x => x.FeeCurrencyCode).HasMaxLength(10);
+        builder.Property(x => x.SourceCurrencyCode).HasMaxLength(20);
+        builder.Property(x => x.DestinationCurrencyCode).HasMaxLength(20);
+        builder.Property(x => x.FeeCurrencyCode).HasMaxLength(20);
 
         builder.Property(x => x.MinAmount).HasPrecision(36, 18);
         builder.Property(x => x.MaxAmount).HasPrecision(36, 18);

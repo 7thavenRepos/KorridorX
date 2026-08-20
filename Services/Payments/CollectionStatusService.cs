@@ -121,11 +121,19 @@ public class CollectionStatusService : ICollectionStatusService
         Collection collection,
         CollectionStatus newStatus)
     {
+        if (collection.Purpose != PaymentOperationPurpose.Remittance)
+        {
+            return;
+        }
+
+        var transfer = collection.Transfer
+            ?? throw new InvalidOperationException("Remittance collection is missing its transfer.");
+
         if ((newStatus is CollectionStatus.Initiated or CollectionStatus.Processing) &&
-            collection.Transfer.Status != TransferStatus.PendingPayment)
+            transfer.Status != TransferStatus.PendingPayment)
         {
             throw new InvalidOperationException(
-                $"Collection cannot move to '{newStatus}' while the transfer status is '{collection.Transfer.Status}'.");
+                $"Collection cannot move to '{newStatus}' while the transfer status is '{transfer.Status}'.");
         }
     }
 
@@ -137,7 +145,13 @@ public class CollectionStatusService : ICollectionStatusService
         CollectionStatusTransitionContext context,
         DateTime occurredAt)
     {
-        var transfer = collection.Transfer;
+        if (collection.Purpose != PaymentOperationPurpose.Remittance)
+        {
+            return;
+        }
+
+        var transfer = collection.Transfer
+            ?? throw new InvalidOperationException("Remittance collection is missing its transfer.");
 
         switch (newStatus)
         {

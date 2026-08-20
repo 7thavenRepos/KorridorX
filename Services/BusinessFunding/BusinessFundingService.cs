@@ -602,6 +602,9 @@ public class BusinessFundingService : IBusinessFundingService
         {
             TransferId = transfer.Id,
             Transfer = transfer,
+            Purpose = PaymentOperationPurpose.Remittance,
+            RelatedEntityType = nameof(Transfer),
+            RelatedEntityId = transfer.Id,
             Reference = await GenerateUniqueCollectionReferenceAsync(ct),
             CurrencyCode = transfer.SourceCurrencyCode,
             Amount = transfer.TotalPayableAmount,
@@ -650,18 +653,24 @@ public class BusinessFundingService : IBusinessFundingService
         var access = await _accessService.EnsurePermissionAsync(userId, BusinessPermission.ManageFunding, ct);
         var collection = await _db.Collections
             .Include(x => x.Transfer)
-            .ThenInclude(x => x.BusinessProfile)
+            .ThenInclude(x => x!.BusinessProfile)
             .ThenInclude(x => x!.OwnerUser)
             .Include(x => x.Attempts)
             .FirstOrDefaultAsync(x =>
                 x.Id == collectionId &&
+                x.Purpose == PaymentOperationPurpose.Remittance &&
+                x.TransferId != null &&
+                x.Transfer != null &&
                 x.Transfer.BusinessProfileId == access.BusinessProfileId &&
                 !x.IsDeleted &&
                 !x.Transfer.IsDeleted,
                 ct)
             ?? throw new InvalidOperationException("Business collection not found.");
 
-        ValidateExternalCollectionTransfer(collection.Transfer);
+        var transfer = collection.Transfer
+            ?? throw new InvalidOperationException("Business remittance collection is missing its transfer.");
+
+        ValidateExternalCollectionTransfer(transfer);
         if (collection.Status is CollectionStatus.Initiated or CollectionStatus.Processing or CollectionStatus.Successful)
         {
             return ToCollectionDetailsDto(collection);
@@ -673,7 +682,7 @@ public class BusinessFundingService : IBusinessFundingService
                 $"Live provider initiation is not yet supported for '{collection.PaymentMethod}'.");
         }
 
-        var business = collection.Transfer.BusinessProfile
+        var business = transfer.BusinessProfile
             ?? throw new InvalidOperationException("Business profile is missing from the transfer.");
         var compliance = await _complianceGateService.EnsureBusinessCanInitiateMoneyMovementAsync(
             business.Id,
@@ -735,7 +744,7 @@ public class BusinessFundingService : IBusinessFundingService
         {
             var result = await _provider.InitiateCollectionAsync(
                 new RemittanceCollectionRequest(
-                    collection.TransferId,
+                    collection.TransferId ?? throw new InvalidOperationException("Business remittance collection is missing its transfer."),
                     collection.Id,
                     collection.PaymentMethod,
                     collection.Amount,
@@ -776,7 +785,7 @@ public class BusinessFundingService : IBusinessFundingService
             await _notifications.QueueBusinessAsync(
                 business.Id,
                 "Business funding initiated",
-                $"Funding for transfer {collection.Transfer.Reference} has been initiated.",
+                $"Funding for transfer {transfer.Reference} has been initiated.",
                 "Collection",
                 collection.Id,
                 ct);
@@ -1406,12 +1415,18 @@ public class BusinessFundingService : IBusinessFundingService
 
     private static CollectionDetailsDto ToCollectionDetailsDto(Collection collection)
     {
-        var transfer = collection.Transfer;
+        var transfer = collection.Transfer ?? throw new InvalidOperationException("Remittance collection is missing its transfer.");
         return new CollectionDetailsDto(
             new CollectionDto
             {
                 Id = collection.Id,
                 TransferId = collection.TransferId,
+                Purpose = collection.Purpose,
+                FinancialAccountId = collection.FinancialAccountId,
+                RelatedEntityType = collection.RelatedEntityType,
+                RelatedEntityId = collection.RelatedEntityId,
+                ContextEntityType = collection.ContextEntityType,
+                ContextEntityId = collection.ContextEntityId,
                 TransferReference = transfer.Reference,
                 TransferStatus = transfer.Status,
                 Reference = collection.Reference,

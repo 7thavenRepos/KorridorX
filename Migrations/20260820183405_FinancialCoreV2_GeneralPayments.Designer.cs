@@ -3,6 +3,7 @@ using System;
 using KorridorX.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace KorridorX.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260820183405_FinancialCoreV2_GeneralPayments")]
+    partial class FinancialCoreV2_GeneralPayments
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -229,8 +232,8 @@ namespace KorridorX.Migrations
 
                     b.Property<string>("CurrencyCode")
                         .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)");
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
 
                     b.Property<DateTime?>("DeletedAt")
                         .HasColumnType("timestamp with time zone");
@@ -340,8 +343,8 @@ namespace KorridorX.Migrations
 
                     b.Property<string>("CurrencyCode")
                         .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)");
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
 
                     b.Property<DateTime?>("DeletedAt")
                         .HasColumnType("timestamp with time zone");
@@ -548,8 +551,8 @@ namespace KorridorX.Migrations
 
                     b.Property<string>("SourceCurrencyCode")
                         .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)");
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
 
                     b.Property<int>("Status")
                         .IsConcurrencyToken()
@@ -638,8 +641,8 @@ namespace KorridorX.Migrations
 
                     b.Property<string>("DestinationCurrencyCode")
                         .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)");
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
 
                     b.Property<string>("ExternalReference")
                         .HasMaxLength(100)
@@ -3760,8 +3763,8 @@ namespace KorridorX.Migrations
 
                     b.Property<string>("DestinationCurrencyCode")
                         .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)");
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
 
                     b.Property<DateTime>("EffectiveFrom")
                         .HasColumnType("timestamp with time zone");
@@ -3800,8 +3803,8 @@ namespace KorridorX.Migrations
 
                     b.Property<string>("SourceCurrencyCode")
                         .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)");
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
 
                     b.HasKey("Id");
 
@@ -3835,13 +3838,13 @@ namespace KorridorX.Migrations
 
                     b.Property<string>("DestinationCurrencyCode")
                         .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)");
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
 
                     b.Property<string>("FeeCurrencyCode")
                         .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)");
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
 
                     b.Property<decimal>("FixedFee")
                         .HasPrecision(36, 18)
@@ -3878,8 +3881,8 @@ namespace KorridorX.Migrations
 
                     b.Property<string>("SourceCurrencyCode")
                         .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)");
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
 
                     b.Property<int>("TransferType")
                         .HasColumnType("integer");
@@ -3930,8 +3933,8 @@ namespace KorridorX.Migrations
 
                     b.Property<string>("DestinationCurrencyCode")
                         .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)");
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
 
                     b.Property<DateTime>("ExpiresAt")
                         .HasColumnType("timestamp with time zone");
@@ -3942,8 +3945,8 @@ namespace KorridorX.Migrations
 
                     b.Property<string>("FeeCurrencyCode")
                         .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)");
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
 
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("boolean");
@@ -3982,8 +3985,8 @@ namespace KorridorX.Migrations
 
                     b.Property<string>("SourceCurrencyCode")
                         .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)");
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
 
                     b.Property<decimal>("TotalPayableAmount")
                         .HasPrecision(36, 18)
@@ -4004,10 +4007,6 @@ namespace KorridorX.Migrations
                     b.HasIndex("ExpiresAt");
 
                     b.HasIndex("ProviderQuoteId");
-
-                    b.HasIndex("BusinessProfileId", "IsUsed", "ExpiresAt");
-
-                    b.HasIndex("CustomerProfileId", "IsUsed", "ExpiresAt");
 
                     b.ToTable("TransferQuotes");
                 });
@@ -5041,98 +5040,6 @@ namespace KorridorX.Migrations
                     b.ToTable("PaymentProviders");
                 });
 
-            modelBuilder.Entity("KorridorX.Models.Providers.PayoutDestinationProviderMapping", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid?>("CreatedByUserId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime?>("DeletedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid?>("DeletedByUserId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("DestinationId")
-                        .HasColumnType("uuid");
-
-                    b.Property<int>("DestinationType")
-                        .HasColumnType("integer");
-
-                    b.Property<bool>("IsActive")
-                        .IsConcurrencyToken()
-                        .HasColumnType("boolean");
-
-                    b.Property<bool>("IsDeleted")
-                        .HasColumnType("boolean");
-
-                    b.Property<bool>("IsVerified")
-                        .IsConcurrencyToken()
-                        .HasColumnType("boolean");
-
-                    b.Property<DateTime?>("LastUpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid?>("LastUpdatedByUserId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("LastVerificationError")
-                        .HasMaxLength(1000)
-                        .HasColumnType("character varying(1000)");
-
-                    b.Property<string>("MetadataJson")
-                        .HasColumnType("text");
-
-                    b.Property<string>("ProviderBankId")
-                        .HasMaxLength(150)
-                        .HasColumnType("character varying(150)");
-
-                    b.Property<int>("ProviderCode")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("ProviderDestinationId")
-                        .HasMaxLength(150)
-                        .HasColumnType("character varying(150)");
-
-                    b.Property<string>("ProviderPartyId")
-                        .HasMaxLength(150)
-                        .HasColumnType("character varying(150)");
-
-                    b.Property<string>("ProviderVerificationReference")
-                        .HasMaxLength(150)
-                        .HasColumnType("character varying(150)");
-
-                    b.Property<string>("ProviderVerifiedAccountName")
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
-                    b.Property<DateTime?>("VerificationAttemptedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime?>("VerifiedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("IsVerified");
-
-                    b.HasIndex("ProviderCode", "ProviderDestinationId");
-
-                    b.HasIndex("ProviderCode", "ProviderPartyId");
-
-                    b.HasIndex("DestinationType", "DestinationId", "ProviderCode")
-                        .IsUnique()
-                        .HasFilter("\"IsDeleted\" = false");
-
-                    b.ToTable("PayoutDestinationProviderMappings");
-                });
-
             modelBuilder.Entity("KorridorX.Models.Providers.ProviderBank", b =>
                 {
                     b.Property<Guid>("Id")
@@ -5558,8 +5465,8 @@ namespace KorridorX.Migrations
 
                     b.Property<string>("CurrencyCode")
                         .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)");
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
 
                     b.Property<DateTime?>("DeletedAt")
                         .HasColumnType("timestamp with time zone");
@@ -5667,8 +5574,8 @@ namespace KorridorX.Migrations
 
                     b.Property<string>("CurrencyCode")
                         .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)");
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
 
                     b.Property<DateTime?>("DeletedAt")
                         .HasColumnType("timestamp with time zone");
@@ -6230,8 +6137,8 @@ namespace KorridorX.Migrations
 
                     b.Property<string>("DestinationCurrencyCode")
                         .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)");
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
 
                     b.Property<DateTime?>("FailedAt")
                         .HasColumnType("timestamp with time zone");
@@ -6246,8 +6153,8 @@ namespace KorridorX.Migrations
 
                     b.Property<string>("FeeCurrencyCode")
                         .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)");
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
 
                     b.Property<Guid?>("FinalApprovedByUserId")
                         .HasColumnType("uuid");
@@ -6352,8 +6259,8 @@ namespace KorridorX.Migrations
 
                     b.Property<string>("SourceCurrencyCode")
                         .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)");
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
 
                     b.Property<int>("Status")
                         .IsConcurrencyToken()
@@ -6407,8 +6314,7 @@ namespace KorridorX.Migrations
 
                     b.HasIndex("Status");
 
-                    b.HasIndex("TransferQuoteId")
-                        .IsUnique();
+                    b.HasIndex("TransferQuoteId");
 
                     b.HasIndex("BusinessProfileId", "CreatedAt");
 

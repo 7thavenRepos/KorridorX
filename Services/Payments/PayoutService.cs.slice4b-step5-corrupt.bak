@@ -536,10 +536,7 @@ public class PayoutService : IPayoutService
             "NGN" => PaymentMethod.BankTransfer,
             "CAD" => PaymentMethod.Interac,
             _ => throw new InvalidOperationException(
-                $"Automatic payout is not yet configured for {destinationCurrencyCode}.")
-        };
-
-    private async Task<PayoutDestination> ResolveDestinationAsync(
+                $"Automatic payout is not yet configured for {destinat    private async Task<PayoutDestination> ResolveDestinationAsync(
         Transfer transfer,
         Guid? changedByUserId,
         CancellationToken ct)
@@ -737,6 +734,9 @@ public class PayoutService : IPayoutService
         }
 
         return mapping;
+    }
+
+bileWallet is not null);
     }
 
     private static void ValidateDestination(

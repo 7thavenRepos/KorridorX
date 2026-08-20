@@ -13,7 +13,7 @@ public class TransferConfiguration : IEntityTypeConfiguration<Transfer>
         builder.HasIndex(x => x.BusinessProfileId);
         builder.HasIndex(x => x.RecipientId);
         builder.HasIndex(x => x.BusinessBeneficiaryId);
-        builder.HasIndex(x => x.TransferQuoteId);
+        builder.HasIndex(x => x.TransferQuoteId).IsUnique();
         builder.HasIndex(x => x.Status);
         builder.HasIndex(x => x.ApprovalStatus);
         builder.HasIndex(x => x.ProviderTransferId);
@@ -32,9 +32,9 @@ public class TransferConfiguration : IEntityTypeConfiguration<Transfer>
         builder.Property(x => x.PurposeNote).HasMaxLength(500);
         builder.Property(x => x.SourceCountryCode).HasMaxLength(10);
         builder.Property(x => x.DestinationCountryCode).HasMaxLength(10);
-        builder.Property(x => x.SourceCurrencyCode).HasMaxLength(10);
-        builder.Property(x => x.DestinationCurrencyCode).HasMaxLength(10);
-        builder.Property(x => x.FeeCurrencyCode).HasMaxLength(10);
+        builder.Property(x => x.SourceCurrencyCode).HasMaxLength(20);
+        builder.Property(x => x.DestinationCurrencyCode).HasMaxLength(20);
+        builder.Property(x => x.FeeCurrencyCode).HasMaxLength(20);
         builder.Property(x => x.ProviderCode).HasMaxLength(50);
         builder.Property(x => x.ProviderTransferId).HasMaxLength(150);
         builder.Property(x => x.ProviderReference).HasMaxLength(150);

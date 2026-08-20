@@ -83,7 +83,13 @@ public class PayoutStatusService : IPayoutStatusService
         string? reason,
         DateTime occurredAt)
     {
-        var transfer = payout.Transfer;
+        if (payout.Purpose != PaymentOperationPurpose.Remittance)
+        {
+            return;
+        }
+
+        var transfer = payout.Transfer
+            ?? throw new InvalidOperationException("Remittance payout is missing its transfer.");
         var source = string.IsNullOrWhiteSpace(context.Source) ? "System" : context.Source.Trim();
 
         if (newStatus is PayoutStatus.Initiated or PayoutStatus.Processing)

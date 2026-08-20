@@ -86,6 +86,8 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<Guid
     public DbSet<ProviderRequestLog> ProviderRequestLogs => Set<ProviderRequestLog>();
     public DbSet<ProviderTransaction> ProviderTransactions => Set<ProviderTransaction>();
     public DbSet<ProviderBank> ProviderBanks => Set<ProviderBank>();
+    public DbSet<PayoutDestinationProviderMapping> PayoutDestinationProviderMappings =>
+        Set<PayoutDestinationProviderMapping>();
     public DbSet<AccountingAccount> AccountingAccounts => Set<AccountingAccount>();
     public DbSet<AccountingPeriod> AccountingPeriods => Set<AccountingPeriod>();
     public DbSet<JournalEntry> JournalEntries => Set<JournalEntry>();

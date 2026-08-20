@@ -16,8 +16,13 @@ public class BusinessPaymentBatchConfiguration : IEntityTypeConfiguration<Busine
         builder.Property(x => x.Reference).HasMaxLength(50);
         builder.Property(x => x.Name).HasMaxLength(200);
         builder.Property(x => x.OriginalFileName).HasMaxLength(255);
+
+        // Country code remains jurisdiction/country based.
         builder.Property(x => x.SourceCountryCode).HasMaxLength(10);
-        builder.Property(x => x.SourceCurrencyCode).HasMaxLength(10);
+
+        // Asset code uses the canonical Asset.Code width.
+        builder.Property(x => x.SourceCurrencyCode).HasMaxLength(20);
+
         builder.Property(x => x.RejectionReason).HasMaxLength(1000);
         builder.Property(x => x.FailureReason).HasMaxLength(1000);
         builder.Property(x => x.Status).IsConcurrencyToken();
@@ -44,8 +49,13 @@ public class BusinessPaymentBatchItemConfiguration : IEntityTypeConfiguration<Bu
         builder.HasIndex(x => new { x.BusinessPaymentBatchId, x.RowNumber }).IsUnique();
 
         builder.Property(x => x.ExternalReference).HasMaxLength(100);
+
+        // Country code remains jurisdiction/country based.
         builder.Property(x => x.DestinationCountryCode).HasMaxLength(10);
-        builder.Property(x => x.DestinationCurrencyCode).HasMaxLength(10);
+
+        // Asset code uses the canonical Asset.Code width.
+        builder.Property(x => x.DestinationCurrencyCode).HasMaxLength(20);
+
         builder.Property(x => x.PurposeNote).HasMaxLength(500);
         builder.Property(x => x.ValidationErrors).HasMaxLength(4000);
 

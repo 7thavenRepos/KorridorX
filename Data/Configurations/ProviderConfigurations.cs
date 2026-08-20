@@ -93,3 +93,44 @@ public class ProviderTransactionConfiguration : IEntityTypeConfiguration<Provide
             .OnDelete(DeleteBehavior.Restrict);
     }
 }
+
+public class PayoutDestinationProviderMappingConfiguration :
+    IEntityTypeConfiguration<PayoutDestinationProviderMapping>
+{
+    public void Configure(EntityTypeBuilder<PayoutDestinationProviderMapping> builder)
+    {
+        builder.HasIndex(x => new
+        {
+            x.DestinationType,
+            x.DestinationId,
+            x.ProviderCode
+        })
+        .IsUnique()
+        .HasFilter("\"IsDeleted\" = false");
+
+        builder.HasIndex(x => new
+        {
+            x.ProviderCode,
+            x.ProviderPartyId
+        });
+
+        builder.HasIndex(x => new
+        {
+            x.ProviderCode,
+            x.ProviderDestinationId
+        });
+
+        builder.HasIndex(x => x.IsVerified);
+
+        builder.Property(x => x.ProviderBankId).HasMaxLength(150);
+        builder.Property(x => x.ProviderPartyId).HasMaxLength(150);
+        builder.Property(x => x.ProviderDestinationId).HasMaxLength(150);
+        builder.Property(x => x.ProviderVerifiedAccountName).HasMaxLength(200);
+        builder.Property(x => x.ProviderVerificationReference).HasMaxLength(150);
+        builder.Property(x => x.LastVerificationError).HasMaxLength(1000);
+
+        builder.Property(x => x.IsVerified).IsConcurrencyToken();
+        builder.Property(x => x.IsActive).IsConcurrencyToken();
+    }
+}
+

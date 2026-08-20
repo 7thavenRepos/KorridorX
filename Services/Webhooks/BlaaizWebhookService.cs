@@ -434,8 +434,11 @@ public class BlaaizWebhookService : IBlaaizWebhookService
                 latestAttempt);
         }
 
-        payout.Transfer.ProviderTransferId = transactionId ?? payout.Transfer.ProviderTransferId;
-        payout.Transfer.ProviderReference = reference ?? payout.Transfer.ProviderReference;
+        if (payout.Transfer is not null)
+        {
+            payout.Transfer.ProviderTransferId = transactionId ?? payout.Transfer.ProviderTransferId;
+            payout.Transfer.ProviderReference = reference ?? payout.Transfer.ProviderReference;
+        }
 
         if (!string.IsNullOrWhiteSpace(transactionId))
         {
@@ -451,7 +454,7 @@ public class BlaaizWebhookService : IBlaaizWebhookService
                 amount ?? payout.Amount,
                 amountWithoutFee,
                 providerFee,
-                ReadOptionalString(data, root, "transaction_currency", "currency") ?? payout.Transfer.SourceCurrencyCode,
+                ReadOptionalString(data, root, "transaction_currency", "currency") ?? payout.Transfer?.SourceCurrencyCode ?? payout.CurrencyCode,
                 rawPayload,
                 occurredAt,
                 ct);
@@ -776,7 +779,7 @@ public class BlaaizWebhookService : IBlaaizWebhookService
     }
 
     private async Task UpsertProviderTransactionAsync(
-        Guid transferId,
+        Guid? transferId,
         Guid? collectionId,
         Guid? payoutId,
         string providerTransactionId,

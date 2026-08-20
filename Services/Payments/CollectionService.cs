@@ -85,7 +85,7 @@ public class CollectionService : ICollectionService
 
         var existingCollection = await _db.Collections
             .Include(x => x.Transfer)
-            .ThenInclude(x => x.CustomerProfile)
+            .ThenInclude(x => x!.CustomerProfile)
             .Include(x => x.Attempts)
             .FirstOrDefaultAsync(x =>
                 x.TransferId == transfer.Id &&
@@ -126,6 +126,9 @@ public class CollectionService : ICollectionService
         {
             TransferId = transfer.Id,
             Transfer = transfer,
+            Purpose = PaymentOperationPurpose.Remittance,
+            RelatedEntityType = nameof(Transfer),
+            RelatedEntityId = transfer.Id,
             Reference = reference,
             CurrencyCode = transfer.SourceCurrencyCode,
             Amount = transfer.TotalPayableAmount,
@@ -184,16 +187,19 @@ public class CollectionService : ICollectionService
     {
         var collection = await _db.Collections
             .Include(x => x.Transfer)
-            .ThenInclude(x => x.CustomerProfile)
+            .ThenInclude(x => x!.CustomerProfile)
             .ThenInclude(x => x!.User)
             .Include(x => x.Attempts)
             .FirstOrDefaultAsync(x =>
                 x.Id == collectionId &&
+                x.Purpose == PaymentOperationPurpose.Remittance &&
+                x.TransferId != null &&
+                x.Transfer != null &&
                 x.Transfer.CustomerProfile != null &&
                 x.Transfer.CustomerProfile.UserId == userId &&
                 !x.IsDeleted &&
                 !x.Transfer.IsDeleted &&
-                !x.Transfer.CustomerProfile!.IsDeleted,
+                !x.Transfer.CustomerProfile.IsDeleted,
                 ct);
 
         if (collection is null)
@@ -208,6 +214,9 @@ public class CollectionService : ICollectionService
             return ToDetailsDto(collection);
         }
 
+        var transfer = collection.Transfer
+            ?? throw new InvalidOperationException("Remittance collection is missing its transfer.");
+
         if (collection.Status is not CollectionStatus.Pending and
             not CollectionStatus.Failed and
             not CollectionStatus.Expired)
@@ -216,10 +225,10 @@ public class CollectionService : ICollectionService
                 $"Collection cannot be initiated while its status is '{collection.Status}'.");
         }
 
-        if (collection.Transfer.Status != TransferStatus.PendingPayment)
+        if (transfer.Status != TransferStatus.PendingPayment)
         {
             throw new InvalidOperationException(
-                $"Collection cannot be initiated while the transfer status is '{collection.Transfer.Status}'.");
+                $"Collection cannot be initiated while the transfer status is '{transfer.Status}'.");
         }
 
         if (collection.PaymentMethod is not PaymentMethod.Card and not PaymentMethod.Interac)
@@ -228,7 +237,7 @@ public class CollectionService : ICollectionService
                 $"Live provider initiation is not yet supported for '{collection.PaymentMethod}'.");
         }
 
-        var profile = collection.Transfer.CustomerProfile
+        var profile = transfer.CustomerProfile
             ?? throw new InvalidOperationException("Individual customer profile not found for this collection.");
 
         var complianceGate = await _complianceGateService.EnsureCanInitiateMoneyMovementAsync(
@@ -261,7 +270,7 @@ public class CollectionService : ICollectionService
             collectionId = collection.Id,
             collectionReference = collection.Reference,
             transferId = collection.TransferId,
-            transferReference = collection.Transfer.Reference,
+            transferReference = transfer.Reference,
             amount = collection.Amount,
             currencyCode = collection.CurrencyCode,
             paymentMethod = collection.PaymentMethod.ToString(),
@@ -294,7 +303,7 @@ public class CollectionService : ICollectionService
         {
             var providerResult = await _remittanceProvider.InitiateCollectionAsync(
                 new RemittanceCollectionRequest(
-                    collection.TransferId,
+                    collection.TransferId ?? throw new InvalidOperationException("Remittance collection is missing its transfer."),
                     collection.Id,
                     collection.PaymentMethod,
                     collection.Amount,
@@ -410,6 +419,9 @@ public class CollectionService : ICollectionService
         return await _db.Collections
             .AsNoTracking()
             .Where(x =>
+                x.Purpose == PaymentOperationPurpose.Remittance &&
+                x.TransferId != null &&
+                x.Transfer != null &&
                 x.Transfer.CustomerProfileId != null &&
                 x.Transfer.CustomerProfile!.UserId == userId &&
                 !x.IsDeleted &&
@@ -420,10 +432,16 @@ public class CollectionService : ICollectionService
             {
                 Id = x.Id,
                 TransferId = x.TransferId,
-                TransferReference = x.Transfer.Reference,
-                TransferStatus = x.Transfer.Status,
+                Purpose = x.Purpose,
+                FinancialAccountId = x.FinancialAccountId,
+                RelatedEntityType = x.RelatedEntityType,
+                RelatedEntityId = x.RelatedEntityId,
+                ContextEntityType = x.ContextEntityType,
+                ContextEntityId = x.ContextEntityId,
+                TransferReference = x.Transfer != null ? x.Transfer.Reference : null,
+                TransferStatus = x.Transfer != null ? x.Transfer.Status : null,
                 Reference = x.Reference,
-                SourceCountryCode = x.Transfer.SourceCountryCode,
+                SourceCountryCode = x.Transfer != null ? x.Transfer.SourceCountryCode : null,
                 CurrencyCode = x.CurrencyCode,
                 Amount = x.Amount,
                 PaymentMethod = x.PaymentMethod,
@@ -489,9 +507,12 @@ public class CollectionService : ICollectionService
         return _db.Collections
             .AsNoTracking()
             .Include(x => x.Transfer)
-            .ThenInclude(x => x.CustomerProfile)
+            .ThenInclude(x => x!.CustomerProfile)
             .Include(x => x.Attempts)
             .Where(x =>
+                x.Purpose == PaymentOperationPurpose.Remittance &&
+                x.TransferId != null &&
+                x.Transfer != null &&
                 x.Transfer.CustomerProfileId != null &&
                 x.Transfer.CustomerProfile!.UserId == userId &&
                 !x.IsDeleted &&
@@ -590,10 +611,16 @@ public class CollectionService : ICollectionService
         {
             Id = collection.Id,
             TransferId = collection.TransferId,
-            TransferReference = collection.Transfer.Reference,
-            TransferStatus = collection.Transfer.Status,
+            Purpose = collection.Purpose,
+            FinancialAccountId = collection.FinancialAccountId,
+            RelatedEntityType = collection.RelatedEntityType,
+            RelatedEntityId = collection.RelatedEntityId,
+            ContextEntityType = collection.ContextEntityType,
+            ContextEntityId = collection.ContextEntityId,
+            TransferReference = collection.Transfer?.Reference,
+            TransferStatus = collection.Transfer?.Status,
             Reference = collection.Reference,
-            SourceCountryCode = collection.Transfer.SourceCountryCode,
+            SourceCountryCode = collection.Transfer?.SourceCountryCode,
             CurrencyCode = collection.CurrencyCode,
             Amount = collection.Amount,
             PaymentMethod = collection.PaymentMethod,

@@ -17,11 +17,17 @@ public record CollectionPaymentMethodDto
 public record CollectionDto
 {
     public Guid Id { get; init; }
-    public Guid TransferId { get; init; }
-    public string TransferReference { get; init; } = "";
-    public TransferStatus TransferStatus { get; init; }
+    public Guid? TransferId { get; init; }
+    public PaymentOperationPurpose Purpose { get; init; }
+    public Guid? FinancialAccountId { get; init; }
+    public string? RelatedEntityType { get; init; }
+    public Guid? RelatedEntityId { get; init; }
+    public string? ContextEntityType { get; init; }
+    public Guid? ContextEntityId { get; init; }
+    public string? TransferReference { get; init; }
+    public TransferStatus? TransferStatus { get; init; }
     public string Reference { get; init; } = "";
-    public string SourceCountryCode { get; init; } = "";
+    public string? SourceCountryCode { get; init; }
     public string CurrencyCode { get; init; } = "";
     public decimal Amount { get; init; }
     public PaymentMethod PaymentMethod { get; init; }

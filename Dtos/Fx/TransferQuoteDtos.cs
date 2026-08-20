@@ -1,4 +1,4 @@
-﻿using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations;
 using KorridorX.Models.Enums;
 
 namespace KorridorX.Dtos.Fx;
@@ -14,11 +14,11 @@ public class CreateTransferQuoteRequestDto
     public string DestinationCountryCode { get; set; } = "";
 
     [Required]
-    [MaxLength(10)]
+    [MaxLength(20)]
     public string SourceCurrencyCode { get; set; } = "";
 
     [Required]
-    [MaxLength(10)]
+    [MaxLength(20)]
     public string DestinationCurrencyCode { get; set; } = "";
 
     [Required]

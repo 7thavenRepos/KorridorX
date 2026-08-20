@@ -8,6 +8,7 @@ using KorridorX.Models.BusinessBeneficiaries;
 using KorridorX.Models.BusinessTransfers;
 using KorridorX.Models.Enums;
 using KorridorX.Models.Fx;
+using KorridorX.Models.Providers;
 using KorridorX.Models.Transfers;
 using KorridorX.Services.References;
 using KorridorX.Services.BusinessFunding;
@@ -80,8 +81,8 @@ public class BusinessPaymentBatchService : IBusinessPaymentBatchService
         if (!Enum.IsDefined(typeof(BusinessFundingSource), request.FundingSource))
             throw new InvalidOperationException("A valid business funding source is required.");
 
-        var sourceCountry = NormalizeCode(request.SourceCountryCode);
-        var sourceCurrency = NormalizeCode(request.SourceCurrencyCode);
+        var sourceCountry = NormalizeCountryCode(request.SourceCountryCode);
+        var sourceCurrency = NormalizeAssetCode(request.SourceCurrencyCode);
         var business = await _db.BusinessProfiles.AsNoTracking()
             .FirstAsync(x => x.Id == access.BusinessProfileId && !x.IsDeleted, ct);
         if (!string.Equals(business.CountryCode, sourceCountry, StringComparison.OrdinalIgnoreCase) &&
@@ -351,6 +352,8 @@ public class BusinessPaymentBatchService : IBusinessPaymentBatchService
                 var quote = item.TransferQuote
                     ?? await _db.TransferQuotes.FirstAsync(x => x.Id == item.TransferQuoteId, ct);
 
+                await EnsureBankDestinationVerifiedForQuoteProviderAsync(item, quote, ct);
+
                 var transfer = new Transfer
                 {
                     Reference = await GenerateUniqueTransferReferenceAsync(ct),
@@ -547,10 +550,10 @@ public class BusinessPaymentBatchService : IBusinessPaymentBatchService
         {
             errors.Add("destinationCurrencyCode is required.");
         }
-        else if (item.DestinationCurrencyCode.Length > 10)
+        else if (item.DestinationCurrencyCode.Length > 20)
         {
-            errors.Add("destinationCurrencyCode cannot exceed 10 characters.");
-            item.DestinationCurrencyCode = Truncate(item.DestinationCurrencyCode, 10);
+            errors.Add("destinationCurrencyCode cannot exceed 20 characters.");
+            item.DestinationCurrencyCode = Truncate(item.DestinationCurrencyCode, 20);
         }
         if (!decimal.TryParse(Read(row, "sourceamount"), NumberStyles.Number, CultureInfo.InvariantCulture, out var amount) || amount <= 0)
             errors.Add("sourceAmount must be a positive number.");
@@ -643,9 +646,74 @@ public class BusinessPaymentBatchService : IBusinessPaymentBatchService
 
         await EnsureCorridorAsync(item.DestinationCountryCode, item.DestinationCurrencyCode, false, ct);
         var quote = await CreateQuoteAsync(batch, item, transferType, userId, ct);
+
+        await EnsureBankDestinationVerifiedForQuoteProviderAsync(item, quote, ct);
+
         item.TransferQuote = quote;
         item.TransferQuoteId = quote.Id;
         CopyQuote(item, quote);
+    }
+
+    private async Task EnsureBankDestinationVerifiedForQuoteProviderAsync(
+        BusinessPaymentBatchItem item,
+        TransferQuote quote,
+        CancellationToken ct)
+    {
+        if (!item.BusinessBeneficiaryBankAccountId.HasValue)
+        {
+            return;
+        }
+
+        var account = await _db.BusinessBeneficiaryBankAccounts
+            .AsNoTracking()
+            .FirstOrDefaultAsync(x =>
+                x.Id == item.BusinessBeneficiaryBankAccountId.Value &&
+                x.BusinessBeneficiaryId == item.BusinessBeneficiaryId &&
+                x.IsActive &&
+                !x.IsDeleted,
+                ct)
+            ?? throw new InvalidOperationException(
+                "The batch bank account is no longer active.");
+
+        if (!await IsBankDestinationVerifiedForProviderAsync(
+                PayoutDestinationType.BusinessBeneficiaryBankAccount,
+                account.Id,
+                quote.ProviderCode,
+                account.IsVerified,
+                ct))
+        {
+            throw new InvalidOperationException(
+                "The batch bank account is not verified for the selected payout provider.");
+        }
+    }
+
+    private async Task<bool> IsBankDestinationVerifiedForProviderAsync(
+        PayoutDestinationType destinationType,
+        Guid destinationId,
+        string providerCode,
+        bool legacyIsVerified,
+        CancellationToken ct)
+    {
+        if (!Enum.TryParse<ProviderCode>(
+                providerCode,
+                true,
+                out var parsedProviderCode))
+        {
+            return legacyIsVerified;
+        }
+
+        var mapping = await _db.PayoutDestinationProviderMappings
+            .AsNoTracking()
+            .FirstOrDefaultAsync(x =>
+                x.DestinationType == destinationType &&
+                x.DestinationId == destinationId &&
+                x.ProviderCode == parsedProviderCode &&
+                !x.IsDeleted,
+                ct);
+
+        return mapping is null
+            ? legacyIsVerified
+            : mapping.IsActive && mapping.IsVerified;
     }
 
     private async Task<TransferQuote> CreateQuoteAsync(
@@ -1050,14 +1118,26 @@ public class BusinessPaymentBatchService : IBusinessPaymentBatchService
         row.TryGetValue(key, out var value) ? value : "";
     private static string NormalizeHeader(string value) =>
         new(value.Where(char.IsLetterOrDigit).Select(char.ToLowerInvariant).ToArray());
-    private static string NormalizeCode(string value)
+    private static string NormalizeCountryCode(string value)
     {
         if (string.IsNullOrWhiteSpace(value))
-            throw new InvalidOperationException("Country and currency codes are required.");
+            throw new InvalidOperationException("Country code is required.");
 
         var code = value.Trim().ToUpperInvariant();
         if (code.Length > 10)
-            throw new InvalidOperationException("Country and currency codes cannot exceed 10 characters.");
+            throw new InvalidOperationException("Country code cannot exceed 10 characters.");
+
+        return code;
+    }
+
+    private static string NormalizeAssetCode(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            throw new InvalidOperationException("Asset code is required.");
+
+        var code = value.Trim().ToUpperInvariant();
+        if (code.Length > 20)
+            throw new InvalidOperationException("Asset code cannot exceed 20 characters.");
 
         return code;
     }
