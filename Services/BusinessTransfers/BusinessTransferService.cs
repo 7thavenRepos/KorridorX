@@ -286,23 +286,12 @@ public class BusinessTransferService : IBusinessTransferService
                 transfer.Id,
                 ct);
         }
-        else if (transfer.BusinessFundingSource == BusinessFundingSource.BusinessWallet)
+        else
         {
-            await _fundingService.ReserveTransferAsync(
+            await _fundingService.PrepareApprovedTransferFundingAsync(
                 transfer,
                 userId,
                 "BusinessTransfer",
-                null,
-                ct);
-        }
-        else
-        {
-            await _notifications.QueueBusinessAsync(
-                access.BusinessProfileId,
-                "Business transfer awaiting funding",
-                $"Transfer {transfer.Reference} is approved and waiting for external funding.",
-                "Transfer",
-                transfer.Id,
                 ct);
         }
 
@@ -465,22 +454,16 @@ public class BusinessTransferService : IBusinessTransferService
                     Title: "Transfer approved",
                     Description: "The transfer has been approved and is waiting for funding confirmation."));
 
-            if (transfer.BusinessFundingSource == BusinessFundingSource.BusinessWallet)
-            {
-                await _fundingService.ReserveTransferAsync(
-                    transfer,
-                    userId,
-                    "BusinessApproval",
-                    null,
-                    ct);
-            }
+            await _fundingService.PrepareApprovedTransferFundingAsync(
+                transfer,
+                userId,
+                "BusinessApproval",
+                ct);
 
             await _notifications.QueueBusinessAsync(
                 access.BusinessProfileId,
                 "Business transfer approved",
-                transfer.BusinessFundingSource == BusinessFundingSource.BusinessWallet
-                    ? $"Transfer {transfer.Reference} was approved and funded from the business wallet."
-                    : $"Transfer {transfer.Reference} was approved and is waiting for external funding.",
+                $"Transfer {transfer.Reference} completed its required approval workflow.",
                 "Transfer",
                 transfer.Id,
                 ct);

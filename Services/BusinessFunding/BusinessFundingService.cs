@@ -1,28 +1,22 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
-using KorridorX.Configuration;
 using KorridorX.Data;
 using KorridorX.Dtos.Audit;
 using KorridorX.Dtos.BusinessFunding;
 using KorridorX.Dtos.Payments;
-using KorridorX.Exceptions;
 using KorridorX.Extensions;
 using KorridorX.Infrastructure;
 using KorridorX.Models.FinancialCore;
 using KorridorX.Models.Enums;
 using KorridorX.Models.Payments;
-using KorridorX.Models.Providers;
 using KorridorX.Models.Transfers;
-using KorridorX.Providers.Remittance;
 using KorridorX.Services.Audit;
 using KorridorX.Services.BusinessTransfers;
-using KorridorX.Services.Compliance;
 using KorridorX.Services.Notifications;
 using KorridorX.Services.Payments;
 using KorridorX.Services.Transfers;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Options;
 
 namespace KorridorX.Services.BusinessFunding;
 
@@ -31,36 +25,24 @@ public class BusinessFundingService : IBusinessFundingService
     private readonly AppDbContext _db;
     private readonly IBusinessAccessService _accessService;
     private readonly ITransferStatusService _transferStatusService;
-    private readonly ICollectionPaymentMethodPolicy _paymentMethodPolicy;
-    private readonly ICollectionStatusService _collectionStatusService;
-    private readonly IRemittanceProvider _provider;
-    private readonly IComplianceGateService _complianceGateService;
+    private readonly ICollectionService _collectionService;
     private readonly INotificationQueueService _notifications;
     private readonly IAuditService _auditService;
-    private readonly IReadOnlyDictionary<string, string> _collectionWalletIds;
 
     public BusinessFundingService(
         AppDbContext db,
         IBusinessAccessService accessService,
         ITransferStatusService transferStatusService,
-        ICollectionPaymentMethodPolicy paymentMethodPolicy,
-        ICollectionStatusService collectionStatusService,
-        IRemittanceProvider provider,
-        IComplianceGateService complianceGateService,
+        ICollectionService collectionService,
         INotificationQueueService notifications,
-        IAuditService auditService,
-        IOptions<BlaaizOptions> blaaizOptions)
+        IAuditService auditService)
     {
         _db = db;
         _accessService = accessService;
         _transferStatusService = transferStatusService;
-        _paymentMethodPolicy = paymentMethodPolicy;
-        _collectionStatusService = collectionStatusService;
-        _provider = provider;
-        _complianceGateService = complianceGateService;
+        _collectionService = collectionService;
         _notifications = notifications;
         _auditService = auditService;
-        _collectionWalletIds = blaaizOptions.Value.CollectionWalletIds;
     }
 
     public async Task<PagedResult<BusinessWalletDto>> GetWalletsAsync(
@@ -568,80 +550,27 @@ public class BusinessFundingService : IBusinessFundingService
         CreateBusinessExternalCollectionRequestDto request,
         CancellationToken ct = default)
     {
-        var access = await _accessService.EnsurePermissionAsync(userId, BusinessPermission.ManageFunding, ct);
-        var transfer = await _db.Transfers
-            .Include(x => x.BusinessProfile)
-            .FirstOrDefaultAsync(x =>
-                x.Id == transferId &&
-                x.BusinessProfileId == access.BusinessProfileId &&
-                !x.IsDeleted,
-                ct)
-            ?? throw new InvalidOperationException("Business transfer not found.");
+        var access = await _accessService.EnsurePermissionAsync(
+            userId,
+            BusinessPermission.ManageFunding,
+            ct);
 
-        ValidateExternalCollectionTransfer(transfer);
+        var details = await _collectionService.CreateBusinessRemittanceCollectionAsync(
+            access.BusinessProfileId,
+            userId,
+            transferId,
+            request.PaymentMethod,
+            ct);
 
-        var existing = await _db.Collections
-            .Include(x => x.Transfer)
-            .Include(x => x.Attempts)
-            .FirstOrDefaultAsync(x => x.TransferId == transfer.Id && !x.IsDeleted, ct);
-        if (existing is not null)
-        {
-            return ToCollectionDetailsDto(existing);
-        }
-
-        if (!_paymentMethodPolicy.IsSupported(
-                transfer.SourceCountryCode,
-                transfer.SourceCurrencyCode,
-                request.PaymentMethod))
-        {
-            throw new InvalidOperationException(
-                $"Payment method '{request.PaymentMethod}' is not supported for {transfer.SourceCountryCode}/{transfer.SourceCurrencyCode}.");
-        }
-
-        var collection = new Collection
-        {
-            TransferId = transfer.Id,
-            Transfer = transfer,
-            Purpose = PaymentOperationPurpose.Remittance,
-            RelatedEntityType = nameof(Transfer),
-            RelatedEntityId = transfer.Id,
-            Reference = await GenerateUniqueCollectionReferenceAsync(ct),
-            CurrencyCode = transfer.SourceCurrencyCode,
-            Amount = transfer.TotalPayableAmount,
-            PaymentMethod = request.PaymentMethod,
-            Status = CollectionStatus.Pending,
-            ProviderCode = transfer.ProviderCode,
-            CreatedByUserId = userId
-        };
-
-        collection.Attempts.Add(new CollectionAttempt
-        {
-            CollectionId = collection.Id,
-            Collection = collection,
-            Status = ProviderRequestStatus.Pending,
-            RequestPayloadJson = JsonSerializer.Serialize(new
-            {
-                businessProfileId = access.BusinessProfileId,
-                transferId = transfer.Id,
-                transferReference = transfer.Reference,
-                collectionReference = collection.Reference,
-                amount = collection.Amount,
-                currencyCode = collection.CurrencyCode,
-                paymentMethod = request.PaymentMethod.ToString()
-            })
-        });
-
-        _db.Collections.Add(collection);
         await _notifications.QueueBusinessAsync(
             access.BusinessProfileId,
             "Business transfer funding requested",
-            $"External funding was selected for transfer {transfer.Reference}.",
+            $"External funding was selected for transfer {details.Collection.TransferReference}.",
             "Transfer",
-            transfer.Id,
+            transferId,
             ct);
 
-        await _db.SaveChangesAsync(ct);
-        return ToCollectionDetailsDto(collection);
+        return details;
     }
 
     public async Task<CollectionDetailsDto> InitiateExternalCollectionAsync(
@@ -650,173 +579,27 @@ public class BusinessFundingService : IBusinessFundingService
         InitiateCollectionRequestDto request,
         CancellationToken ct = default)
     {
-        var access = await _accessService.EnsurePermissionAsync(userId, BusinessPermission.ManageFunding, ct);
-        var collection = await _db.Collections
-            .Include(x => x.Transfer)
-            .ThenInclude(x => x!.BusinessProfile)
-            .ThenInclude(x => x!.OwnerUser)
-            .Include(x => x.Attempts)
-            .FirstOrDefaultAsync(x =>
-                x.Id == collectionId &&
-                x.Purpose == PaymentOperationPurpose.Remittance &&
-                x.TransferId != null &&
-                x.Transfer != null &&
-                x.Transfer.BusinessProfileId == access.BusinessProfileId &&
-                !x.IsDeleted &&
-                !x.Transfer.IsDeleted,
-                ct)
-            ?? throw new InvalidOperationException("Business collection not found.");
-
-        var transfer = collection.Transfer
-            ?? throw new InvalidOperationException("Business remittance collection is missing its transfer.");
-
-        ValidateExternalCollectionTransfer(transfer);
-        if (collection.Status is CollectionStatus.Initiated or CollectionStatus.Processing or CollectionStatus.Successful)
-        {
-            return ToCollectionDetailsDto(collection);
-        }
-
-        if (collection.PaymentMethod is not PaymentMethod.Card and not PaymentMethod.Interac)
-        {
-            throw new InvalidOperationException(
-                $"Live provider initiation is not yet supported for '{collection.PaymentMethod}'.");
-        }
-
-        var business = transfer.BusinessProfile
-            ?? throw new InvalidOperationException("Business profile is missing from the transfer.");
-        var compliance = await _complianceGateService.EnsureBusinessCanInitiateMoneyMovementAsync(
-            business.Id,
-            _provider.ProviderCode,
+        var access = await _accessService.EnsurePermissionAsync(
+            userId,
+            BusinessPermission.ManageFunding,
             ct);
 
-        var email = request.PayerEmail ?? business.ContactEmail ?? business.OwnerUser.Email;
-        if (string.IsNullOrWhiteSpace(email))
-        {
-            throw new InvalidOperationException("A business payer email is required.");
-        }
+        var details = await _collectionService.InitiateBusinessRemittanceCollectionAsync(
+            access.BusinessProfileId,
+            userId,
+            collectionId,
+            request,
+            ct);
 
-        var customerName = string.IsNullOrWhiteSpace(request.CustomerName)
-            ? business.BusinessName
-            : request.CustomerName.Trim();
-        var walletId = ResolveCollectionWalletId(collection.CurrencyCode);
-        var cardRequest = request.Card;
-        var card = cardRequest is null
-            ? null
-            : new RemittanceCardDetails(
-                cardRequest.CardHolderName,
-                cardRequest.CardNumber,
-                cardRequest.Expiry,
-                cardRequest.Cvc);
+        await _notifications.QueueBusinessAsync(
+            access.BusinessProfileId,
+            "Business funding initiated",
+            $"Funding for transfer {details.Collection.TransferReference} has been initiated.",
+            "Collection",
+            collectionId,
+            ct);
 
-        var sanitizedRequest = JsonSerializer.Serialize(new
-        {
-            businessProfileId = business.Id,
-            collectionId = collection.Id,
-            transferId = collection.TransferId,
-            amount = collection.Amount,
-            currencyCode = collection.CurrencyCode,
-            paymentMethod = collection.PaymentMethod.ToString(),
-            payerEmail = email,
-            customerName,
-            redirectUrl = request.RedirectUrl,
-            interacExpiryHours = request.InteracExpiryHours,
-            card = card is null ? null : new
-            {
-                cardHolderName = card.CardHolderName,
-                cardNumber = MaskCardNumber(card.CardNumber),
-                expiry = card.Expiry,
-                cvc = "***REDACTED***"
-            }
-        });
-
-        var attempt = new CollectionAttempt
-        {
-            CollectionId = collection.Id,
-            Collection = collection,
-            Status = ProviderRequestStatus.Pending,
-            RequestPayloadJson = sanitizedRequest,
-            AttemptedAt = DateTime.UtcNow
-        };
-        collection.Attempts.Add(attempt);
-        await _db.SaveChangesAsync(ct);
-
-        try
-        {
-            var result = await _provider.InitiateCollectionAsync(
-                new RemittanceCollectionRequest(
-                    collection.TransferId ?? throw new InvalidOperationException("Business remittance collection is missing its transfer."),
-                    collection.Id,
-                    collection.PaymentMethod,
-                    collection.Amount,
-                    collection.CurrencyCode,
-                    compliance.ProviderCustomerId,
-                    email,
-                    customerName,
-                    business.ContactPhone,
-                    walletId,
-                    request.RedirectUrl,
-                    card,
-                    request.InteracExpiryHours),
-                ct);
-
-            _collectionStatusService.ApplyTransition(
-                collection,
-                CollectionStatus.Initiated,
-                new CollectionStatusTransitionContext(
-                    Source: "BusinessProvider",
-                    Reason: "Business collection was initiated with Blaaiz.",
-                    ChangedByUserId: userId,
-                    ProviderCollectionId: result.ProviderTransactionId,
-                    ProviderReference: result.ProviderReference,
-                    CheckoutUrl: result.CheckoutUrl,
-                    ProviderExpiresAt: result.ExpiresAt,
-                    ProviderRequestId: result.ProviderRequestLogId.ToString(),
-                    ProviderResponseId: result.ProviderTransactionId,
-                    RequestPayloadJson: sanitizedRequest,
-                    ResponsePayloadJson: result.RawResponseJson,
-                    MetadataJson: JsonSerializer.Serialize(new
-                    {
-                        businessProfileId = business.Id,
-                        providerStatus = result.ProviderStatus
-                    })),
-                attempt);
-
-            await UpsertProviderTransactionAsync(collection, result, ct);
-            await _notifications.QueueBusinessAsync(
-                business.Id,
-                "Business funding initiated",
-                $"Funding for transfer {transfer.Reference} has been initiated.",
-                "Collection",
-                collection.Id,
-                ct);
-
-            await _db.SaveChangesAsync(ct);
-            return ToCollectionDetailsDto(collection);
-        }
-        catch (InvalidOperationException ex)
-        {
-            attempt.Status = ProviderRequestStatus.Failed;
-            attempt.ErrorMessage = Clean(ex.Message, 1000);
-            attempt.LastUpdatedAt = DateTime.UtcNow;
-            await _db.SaveChangesAsync(ct);
-            throw;
-        }
-        catch (ProviderIntegrationException ex)
-        {
-            _collectionStatusService.ApplyTransition(
-                collection,
-                CollectionStatus.Failed,
-                new CollectionStatusTransitionContext(
-                    Source: "BusinessProvider",
-                    Reason: ex.Message,
-                    ChangedByUserId: userId,
-                    ProviderRequestId: ex.RequestLogId?.ToString(),
-                    RequestPayloadJson: sanitizedRequest,
-                    ResponsePayloadJson: ex.ProviderResponse),
-                attempt);
-            await _db.SaveChangesAsync(ct);
-            throw;
-        }
+        return details;
     }
 
     public async Task EnsureAvailableBalanceAsync(
@@ -847,6 +630,53 @@ public class BusinessFundingService : IBusinessFundingService
         {
             throw new InvalidOperationException(
                 $"Insufficient {normalizedCurrency} business-wallet balance. Available: {wallet.AvailableBalance:N2}; required: {amount:N2}.");
+        }
+    }
+
+    public async Task PrepareApprovedTransferFundingAsync(
+        Transfer transfer,
+        Guid? actionedByUserId,
+        string source,
+        CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(transfer);
+
+        if (!transfer.BusinessProfileId.HasValue)
+        {
+            throw new InvalidOperationException("Only business transfers can use business funding orchestration.");
+        }
+
+        if (transfer.Status != TransferStatus.PendingPayment)
+        {
+            throw new InvalidOperationException($"Business transfer funding cannot be prepared while the transfer status is '{transfer.Status}'.");
+        }
+
+        if (transfer.ApprovalStatus is BusinessApprovalStatus.Pending or BusinessApprovalStatus.Rejected)
+        {
+            throw new InvalidOperationException("The transfer must complete its approval workflow before funding can be prepared.");
+        }
+
+        var fundingSource = transfer.BusinessFundingSource
+            ?? throw new InvalidOperationException("Business transfer funding source is missing.");
+
+        switch (fundingSource)
+        {
+            case BusinessFundingSource.BusinessWallet:
+                await ReserveTransferAsync(transfer, actionedByUserId, source, null, ct);
+                break;
+
+            case BusinessFundingSource.ExternalCollection:
+                await _notifications.QueueBusinessAsync(
+                    transfer.BusinessProfileId.Value,
+                    "Business transfer awaiting funding",
+                    $"Transfer {transfer.Reference} is approved and waiting for external funding.",
+                    "Transfer",
+                    transfer.Id,
+                    ct);
+                break;
+
+            default:
+                throw new InvalidOperationException($"Business funding source '{fundingSource}' is not supported.");
         }
     }
 
@@ -1334,19 +1164,6 @@ public class BusinessFundingService : IBusinessFundingService
                 MetadataJson: JsonSerializer.Serialize(new { reservationReference })));
     }
 
-    private static void ValidateExternalCollectionTransfer(Transfer transfer)
-    {
-        if (!transfer.BusinessProfileId.HasValue)
-            throw new InvalidOperationException("Only business transfers can use business external collections.");
-        if (transfer.BusinessFundingSource != BusinessFundingSource.ExternalCollection)
-            throw new InvalidOperationException("The transfer is not configured for external collection funding.");
-        if (transfer.Status != TransferStatus.PendingPayment)
-            throw new InvalidOperationException(
-                $"External funding cannot be initiated while the transfer status is '{transfer.Status}'.");
-        if (transfer.ApprovalStatus is BusinessApprovalStatus.Pending or BusinessApprovalStatus.Rejected)
-            throw new InvalidOperationException("The transfer must complete approval before funding can be initiated.");
-    }
-
     private static void EnsureWalletNotClosed(FinancialAccount wallet)
     {
         if (wallet.Status == FinancialAccountStatus.Closed)
@@ -1359,58 +1176,6 @@ public class BusinessFundingService : IBusinessFundingService
         {
             throw new InvalidOperationException($"Business wallet is '{wallet.Status}'.");
         }
-    }
-
-    private async Task<string> GenerateUniqueCollectionReferenceAsync(CancellationToken ct)
-    {
-        for (var i = 0; i < 10; i++)
-        {
-            var reference = GenerateReference("KXBCOL");
-            if (!await _db.Collections.AsNoTracking().AnyAsync(x => x.Reference == reference, ct))
-                return reference;
-        }
-        throw new InvalidOperationException("Unable to generate a unique business collection reference.");
-    }
-
-    private string ResolveCollectionWalletId(string currencyCode)
-    {
-        if (!_collectionWalletIds.TryGetValue(currencyCode, out var walletId) || string.IsNullOrWhiteSpace(walletId))
-        {
-            throw new InvalidOperationException(
-                $"Blaaiz collection wallet is not configured for {currencyCode}.");
-        }
-        return walletId;
-    }
-
-    private async Task UpsertProviderTransactionAsync(
-        Collection collection,
-        RemittanceCollectionResult result,
-        CancellationToken ct)
-    {
-        var transaction = await _db.ProviderTransactions.FirstOrDefaultAsync(x =>
-            x.ProviderCode == _provider.ProviderCode &&
-            x.ProviderTransactionId == result.ProviderTransactionId,
-            ct);
-        if (transaction is null)
-        {
-            transaction = new ProviderTransaction
-            {
-                ProviderCode = _provider.ProviderCode,
-                TransferId = collection.TransferId,
-                CollectionId = collection.Id,
-                ProviderTransactionId = result.ProviderTransactionId,
-                TransactionType = "collection"
-            };
-            _db.ProviderTransactions.Add(transaction);
-        }
-
-        transaction.ProviderReference = result.ProviderReference;
-        transaction.ProviderStatus = result.ProviderStatus;
-        transaction.CurrencyCode = collection.CurrencyCode;
-        transaction.Amount = collection.Amount;
-        transaction.RawPayloadJson = result.RawResponseJson;
-        transaction.ProviderCreatedAt = null;
-        transaction.LastSyncedAt = DateTime.UtcNow;
     }
 
     private static CollectionDetailsDto ToCollectionDetailsDto(Collection collection)
@@ -1502,9 +1267,4 @@ public class BusinessFundingService : IBusinessFundingService
         return cleaned.Length <= maxLength ? cleaned : cleaned[..maxLength];
     }
 
-    private static string MaskCardNumber(string cardNumber)
-    {
-        var digits = new string(cardNumber.Where(char.IsDigit).ToArray());
-        return digits.Length <= 4 ? "****" : $"**** **** **** {digits[^4..]}";
-    }
 }

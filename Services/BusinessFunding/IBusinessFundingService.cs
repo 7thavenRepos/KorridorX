@@ -75,6 +75,12 @@ public interface IBusinessFundingService
         decimal amount,
         CancellationToken ct = default);
 
+    Task PrepareApprovedTransferFundingAsync(
+        Transfer transfer,
+        Guid? actionedByUserId,
+        string source,
+        CancellationToken ct = default);
+
     Task ReserveTransferAsync(
         Transfer transfer,
         Guid? actionedByUserId,
