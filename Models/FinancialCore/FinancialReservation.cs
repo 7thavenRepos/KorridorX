@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations.Schema;
 using KorridorX.Models.Common;
 using KorridorX.Models.Enums;
 
@@ -16,6 +17,10 @@ public class FinancialReservation : AuditableEntity
 
     public string Reference { get; set; } = "";
     public decimal Amount { get; set; }
+    public decimal CapturedAmount { get; set; }
+    public decimal ReleasedAmount { get; set; }
+    [NotMapped]
+    public decimal RemainingAmount => Amount - CapturedAmount - ReleasedAmount;
     public FinancialReservationStatus Status { get; set; } = FinancialReservationStatus.Active;
 
     public DateTime ReservedAt { get; set; } = DateTime.UtcNow;

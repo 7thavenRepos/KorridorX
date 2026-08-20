@@ -3,6 +3,7 @@ using System;
 using KorridorX.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace KorridorX.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260820204149_FinancialCoreV2_MarketplaceFoundation")]
+    partial class FinancialCoreV2_MarketplaceFoundation
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -3490,10 +3493,6 @@ namespace KorridorX.Migrations
                         .HasPrecision(36, 18)
                         .HasColumnType("numeric(36,18)");
 
-                    b.Property<decimal>("CapturedAmount")
-                        .HasPrecision(36, 18)
-                        .HasColumnType("numeric(36,18)");
-
                     b.Property<DateTime?>("CapturedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -3544,10 +3543,6 @@ namespace KorridorX.Migrations
                     b.Property<string>("ReleaseReason")
                         .HasMaxLength(1000)
                         .HasColumnType("character varying(1000)");
-
-                    b.Property<decimal>("ReleasedAmount")
-                        .HasPrecision(36, 18)
-                        .HasColumnType("numeric(36,18)");
 
                     b.Property<DateTime?>("ReleasedAt")
                         .HasColumnType("timestamp with time zone");

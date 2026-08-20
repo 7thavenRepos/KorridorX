@@ -8,6 +8,7 @@ using KorridorX.Models.Fx;
 using KorridorX.Models.Finance;
 using KorridorX.Models.Identity;
 using KorridorX.Models.Lookups;
+using KorridorX.Models.Marketplace;
 using KorridorX.Models.Notifications;
 using KorridorX.Models.Payments;
 using KorridorX.Models.Providers;
@@ -53,6 +54,11 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<Guid
     public DbSet<LedgerTransaction> LedgerTransactions => Set<LedgerTransaction>();
     public DbSet<LedgerPosting> LedgerPostings => Set<LedgerPosting>();
     public DbSet<FinancialReservation> FinancialReservations => Set<FinancialReservation>();
+
+    public DbSet<MarketplacePair> MarketplacePairs => Set<MarketplacePair>();
+    public DbSet<TradeOrder> TradeOrders => Set<TradeOrder>();
+    public DbSet<TradeMatch> TradeMatches => Set<TradeMatch>();
+    public DbSet<Trade> Trades => Set<Trade>();
 
     public DbSet<Collection> Collections => Set<Collection>();
     public DbSet<CollectionAttempt> CollectionAttempts => Set<CollectionAttempt>();

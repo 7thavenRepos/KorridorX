@@ -104,6 +104,8 @@ public class FinancialReservationConfiguration : IEntityTypeConfiguration<Financ
         builder.Property(x => x.RelatedEntityType).HasMaxLength(100);
         builder.Property(x => x.ContextEntityType).HasMaxLength(100);
         builder.Property(x => x.Amount).HasPrecision(36, 18);
+        builder.Property(x => x.CapturedAmount).HasPrecision(36, 18);
+        builder.Property(x => x.ReleasedAmount).HasPrecision(36, 18);
         builder.Property(x => x.ReleaseReason).HasMaxLength(1000);
         builder.Property(x => x.Status).IsConcurrencyToken();
 

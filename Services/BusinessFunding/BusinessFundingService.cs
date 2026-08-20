@@ -758,6 +758,8 @@ public class BusinessFundingService : IBusinessFundingService
             ContextEntityId = businessPaymentBatchId,
             Reference = GenerateReference("KXRES"),
             Amount = transfer.TotalPayableAmount,
+            CapturedAmount = 0m,
+            ReleasedAmount = 0m,
             Status = FinancialReservationStatus.Active,
             ReservedAt = DateTime.UtcNow,
             CreatedByUserId = actionedByUserId
@@ -825,6 +827,8 @@ public class BusinessFundingService : IBusinessFundingService
         wallet.LastUpdatedAt = DateTime.UtcNow;
         wallet.LastUpdatedByUserId = actionedByUserId;
         reservation.Status = FinancialReservationStatus.Active;
+        reservation.CapturedAmount = 0m;
+        reservation.ReleasedAmount = 0m;
         reservation.ReservedAt = DateTime.UtcNow;
         reservation.ReleasedAt = null;
         reservation.ReleaseReason = null;
@@ -877,6 +881,8 @@ public class BusinessFundingService : IBusinessFundingService
         wallet.LastUpdatedAt = DateTime.UtcNow;
         wallet.LastUpdatedByUserId = actionedByUserId;
         reservation.Status = FinancialReservationStatus.Captured;
+        reservation.CapturedAmount = reservation.Amount;
+        reservation.ReleasedAmount = 0m;
         reservation.CapturedAt = DateTime.UtcNow;
         reservation.LastUpdatedAt = DateTime.UtcNow;
         reservation.LastUpdatedByUserId = actionedByUserId;
@@ -941,6 +947,8 @@ public class BusinessFundingService : IBusinessFundingService
         wallet.LastUpdatedAt = DateTime.UtcNow;
         wallet.LastUpdatedByUserId = actionedByUserId;
         reservation.Status = FinancialReservationStatus.Released;
+        reservation.CapturedAmount = 0m;
+        reservation.ReleasedAmount = reservation.Amount;
         reservation.ReleasedAt = DateTime.UtcNow;
         reservation.ReleaseReason = Clean(reason, 1000);
         reservation.LastUpdatedAt = DateTime.UtcNow;
