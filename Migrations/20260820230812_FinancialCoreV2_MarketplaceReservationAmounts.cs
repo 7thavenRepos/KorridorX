@@ -8,6 +8,7 @@ namespace KorridorX.Migrations
     public partial class FinancialCoreV2_MarketplaceReservationAmounts : Migration
     {
         /// <inheritdoc />
+
         protected override void Up(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.AddColumn<decimal>(
@@ -27,8 +28,24 @@ namespace KorridorX.Migrations
                 scale: 18,
                 nullable: false,
                 defaultValue: 0m);
-        }
 
+            // Backfill reservations that were already captured before
+            // partial reservation accounting was introduced.
+            migrationBuilder.Sql("""
+        UPDATE "FinancialReservations"
+        SET "CapturedAmount" = "Amount"
+        WHERE "Status" = 2;
+        """);
+
+            // Backfill reservations that were already released before
+            // partial reservation accounting was introduced.
+            migrationBuilder.Sql("""
+        UPDATE "FinancialReservations"
+        SET "ReleasedAmount" = "Amount"
+        WHERE "Status" = 3;
+        """);
+        }
+         
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {

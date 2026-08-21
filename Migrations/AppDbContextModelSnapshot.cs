@@ -4264,6 +4264,320 @@ namespace KorridorX.Migrations
                     b.ToTable("RefreshTokens");
                 });
 
+            modelBuilder.Entity("KorridorX.Models.Instant.InstantPair", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CreatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("DeletedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("DestinationAssetCode")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<Guid>("HouseDestinationFinancialAccountId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("HouseSourceFinancialAccountId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime?>("LastUpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("LastUpdatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal?>("MaximumSourceAmount")
+                        .HasPrecision(36, 18)
+                        .HasColumnType("numeric(36,18)");
+
+                    b.Property<decimal>("MinimumSourceAmount")
+                        .HasPrecision(36, 18)
+                        .HasColumnType("numeric(36,18)");
+
+                    b.Property<int>("QuoteValiditySeconds")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("SourceAmountIncrement")
+                        .HasPrecision(36, 18)
+                        .HasColumnType("numeric(36,18)");
+
+                    b.Property<string>("SourceAssetCode")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<int>("Status")
+                        .IsConcurrencyToken()
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Code")
+                        .IsUnique()
+                        .HasFilter("\"IsDeleted\" = false");
+
+                    b.HasIndex("DestinationAssetCode");
+
+                    b.HasIndex("HouseDestinationFinancialAccountId");
+
+                    b.HasIndex("HouseSourceFinancialAccountId");
+
+                    b.HasIndex("Status");
+
+                    b.HasIndex("SourceAssetCode", "DestinationAssetCode")
+                        .IsUnique()
+                        .HasFilter("\"IsDeleted\" = false");
+
+                    b.ToTable("InstantPairs");
+                });
+
+            modelBuilder.Entity("KorridorX.Models.Instant.InstantQuote", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("CancelledAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("ConsumedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CreatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("CustomerRate")
+                        .HasPrecision(18, 8)
+                        .HasColumnType("numeric(18,8)");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("DeletedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("DestinationAmount")
+                        .HasPrecision(36, 18)
+                        .HasColumnType("numeric(36,18)");
+
+                    b.Property<Guid>("ExchangeRateId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("HouseDestinationFinancialAccountId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("HouseSourceFinancialAccountId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("InstantPairId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime?>("LastUpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("LastUpdatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("ProviderRate")
+                        .HasPrecision(18, 8)
+                        .HasColumnType("numeric(18,8)");
+
+                    b.Property<string>("Reference")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)");
+
+                    b.Property<decimal>("SourceAmount")
+                        .HasPrecision(36, 18)
+                        .HasColumnType("numeric(36,18)");
+
+                    b.Property<int>("Status")
+                        .IsConcurrencyToken()
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("UserDestinationFinancialAccountId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("UserSourceFinancialAccountId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ExchangeRateId");
+
+                    b.HasIndex("HouseDestinationFinancialAccountId");
+
+                    b.HasIndex("HouseSourceFinancialAccountId");
+
+                    b.HasIndex("Reference")
+                        .IsUnique();
+
+                    b.HasIndex("UserDestinationFinancialAccountId");
+
+                    b.HasIndex("UserSourceFinancialAccountId");
+
+                    b.HasIndex("InstantPairId", "Status", "ExpiresAt");
+
+                    b.HasIndex("UserId", "Status", "ExpiresAt");
+
+                    b.ToTable("InstantQuotes");
+                });
+
+            modelBuilder.Entity("KorridorX.Models.Instant.InstantTrade", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("CompletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CreatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("CustomerRate")
+                        .HasPrecision(18, 8)
+                        .HasColumnType("numeric(18,8)");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("DeletedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("DestinationAmount")
+                        .HasPrecision(36, 18)
+                        .HasColumnType("numeric(36,18)");
+
+                    b.Property<Guid?>("DestinationLedgerTransactionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("FailedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("FailureReason")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<Guid>("HouseDestinationFinancialAccountId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("HouseSourceFinancialAccountId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("InstantPairId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("InstantQuoteId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime?>("LastUpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("LastUpdatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Reference")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)");
+
+                    b.Property<Guid?>("ReservationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("SettlementStartedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<decimal>("SourceAmount")
+                        .HasPrecision(36, 18)
+                        .HasColumnType("numeric(36,18)");
+
+                    b.Property<Guid?>("SourceLedgerTransactionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Status")
+                        .IsConcurrencyToken()
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("UserDestinationFinancialAccountId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("UserSourceFinancialAccountId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DestinationLedgerTransactionId");
+
+                    b.HasIndex("HouseDestinationFinancialAccountId");
+
+                    b.HasIndex("HouseSourceFinancialAccountId");
+
+                    b.HasIndex("InstantQuoteId")
+                        .IsUnique();
+
+                    b.HasIndex("Reference")
+                        .IsUnique();
+
+                    b.HasIndex("ReservationId")
+                        .IsUnique()
+                        .HasFilter("\"ReservationId\" IS NOT NULL");
+
+                    b.HasIndex("SourceLedgerTransactionId");
+
+                    b.HasIndex("UserDestinationFinancialAccountId");
+
+                    b.HasIndex("UserSourceFinancialAccountId");
+
+                    b.HasIndex("InstantPairId", "Status", "CreatedAt");
+
+                    b.HasIndex("UserId", "Status", "CreatedAt");
+
+                    b.ToTable("InstantTrades");
+                });
+
             modelBuilder.Entity("KorridorX.Models.Lookups.Asset", b =>
                 {
                     b.Property<string>("Code")
@@ -8433,6 +8747,164 @@ namespace KorridorX.Migrations
                     b.Navigation("User");
                 });
 
+            modelBuilder.Entity("KorridorX.Models.Instant.InstantPair", b =>
+                {
+                    b.HasOne("KorridorX.Models.Lookups.Asset", "DestinationAsset")
+                        .WithMany()
+                        .HasForeignKey("DestinationAssetCode")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("KorridorX.Models.FinancialCore.FinancialAccount", "HouseDestinationFinancialAccount")
+                        .WithMany()
+                        .HasForeignKey("HouseDestinationFinancialAccountId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("KorridorX.Models.FinancialCore.FinancialAccount", "HouseSourceFinancialAccount")
+                        .WithMany()
+                        .HasForeignKey("HouseSourceFinancialAccountId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("KorridorX.Models.Lookups.Asset", "SourceAsset")
+                        .WithMany()
+                        .HasForeignKey("SourceAssetCode")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("DestinationAsset");
+
+                    b.Navigation("HouseDestinationFinancialAccount");
+
+                    b.Navigation("HouseSourceFinancialAccount");
+
+                    b.Navigation("SourceAsset");
+                });
+
+            modelBuilder.Entity("KorridorX.Models.Instant.InstantQuote", b =>
+                {
+                    b.HasOne("KorridorX.Models.Fx.ExchangeRate", "ExchangeRate")
+                        .WithMany()
+                        .HasForeignKey("ExchangeRateId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("KorridorX.Models.FinancialCore.FinancialAccount", "HouseDestinationFinancialAccount")
+                        .WithMany()
+                        .HasForeignKey("HouseDestinationFinancialAccountId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("KorridorX.Models.FinancialCore.FinancialAccount", "HouseSourceFinancialAccount")
+                        .WithMany()
+                        .HasForeignKey("HouseSourceFinancialAccountId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("KorridorX.Models.Instant.InstantPair", "InstantPair")
+                        .WithMany("Quotes")
+                        .HasForeignKey("InstantPairId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("KorridorX.Models.FinancialCore.FinancialAccount", "UserDestinationFinancialAccount")
+                        .WithMany()
+                        .HasForeignKey("UserDestinationFinancialAccountId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("KorridorX.Models.FinancialCore.FinancialAccount", "UserSourceFinancialAccount")
+                        .WithMany()
+                        .HasForeignKey("UserSourceFinancialAccountId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("ExchangeRate");
+
+                    b.Navigation("HouseDestinationFinancialAccount");
+
+                    b.Navigation("HouseSourceFinancialAccount");
+
+                    b.Navigation("InstantPair");
+
+                    b.Navigation("UserDestinationFinancialAccount");
+
+                    b.Navigation("UserSourceFinancialAccount");
+                });
+
+            modelBuilder.Entity("KorridorX.Models.Instant.InstantTrade", b =>
+                {
+                    b.HasOne("KorridorX.Models.FinancialCore.LedgerTransaction", "DestinationLedgerTransaction")
+                        .WithMany()
+                        .HasForeignKey("DestinationLedgerTransactionId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("KorridorX.Models.FinancialCore.FinancialAccount", "HouseDestinationFinancialAccount")
+                        .WithMany()
+                        .HasForeignKey("HouseDestinationFinancialAccountId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("KorridorX.Models.FinancialCore.FinancialAccount", "HouseSourceFinancialAccount")
+                        .WithMany()
+                        .HasForeignKey("HouseSourceFinancialAccountId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("KorridorX.Models.Instant.InstantPair", "InstantPair")
+                        .WithMany("Trades")
+                        .HasForeignKey("InstantPairId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("KorridorX.Models.Instant.InstantQuote", "InstantQuote")
+                        .WithOne("Trade")
+                        .HasForeignKey("KorridorX.Models.Instant.InstantTrade", "InstantQuoteId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("KorridorX.Models.FinancialCore.FinancialReservation", "Reservation")
+                        .WithMany()
+                        .HasForeignKey("ReservationId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("KorridorX.Models.FinancialCore.LedgerTransaction", "SourceLedgerTransaction")
+                        .WithMany()
+                        .HasForeignKey("SourceLedgerTransactionId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("KorridorX.Models.FinancialCore.FinancialAccount", "UserDestinationFinancialAccount")
+                        .WithMany()
+                        .HasForeignKey("UserDestinationFinancialAccountId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("KorridorX.Models.FinancialCore.FinancialAccount", "UserSourceFinancialAccount")
+                        .WithMany()
+                        .HasForeignKey("UserSourceFinancialAccountId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("DestinationLedgerTransaction");
+
+                    b.Navigation("HouseDestinationFinancialAccount");
+
+                    b.Navigation("HouseSourceFinancialAccount");
+
+                    b.Navigation("InstantPair");
+
+                    b.Navigation("InstantQuote");
+
+                    b.Navigation("Reservation");
+
+                    b.Navigation("SourceLedgerTransaction");
+
+                    b.Navigation("UserDestinationFinancialAccount");
+
+                    b.Navigation("UserSourceFinancialAccount");
+                });
+
             modelBuilder.Entity("KorridorX.Models.Lookups.AssetNetwork", b =>
                 {
                     b.HasOne("KorridorX.Models.Lookups.Asset", "Asset")
@@ -9193,6 +9665,18 @@ namespace KorridorX.Migrations
                     b.Navigation("LoginHistories");
 
                     b.Navigation("RefreshTokens");
+                });
+
+            modelBuilder.Entity("KorridorX.Models.Instant.InstantPair", b =>
+                {
+                    b.Navigation("Quotes");
+
+                    b.Navigation("Trades");
+                });
+
+            modelBuilder.Entity("KorridorX.Models.Instant.InstantQuote", b =>
+                {
+                    b.Navigation("Trade");
                 });
 
             modelBuilder.Entity("KorridorX.Models.Lookups.Asset", b =>

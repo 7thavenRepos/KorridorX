@@ -17,6 +17,7 @@ using KorridorX.Services.BusinessBeneficiaries;
 using KorridorX.Services.BusinessTransfers;
 using KorridorX.Services.BusinessFunding;
 using KorridorX.Services.FinancialCore;
+using KorridorX.Services.Instant;
 using KorridorX.Services.Marketplace;
 using KorridorX.Services.Notifications;
 using KorridorX.Services.Operations;
@@ -300,6 +301,7 @@ builder.Services.AddScoped<IMarketplaceSettlementService, MarketplaceSettlementS
 builder.Services.AddScoped<IMarketplaceOperationsService, MarketplaceOperationsService>();
 builder.Services.AddScoped<IMarketplaceMatchingEngine, MarketplaceMatchingEngine>();
 builder.Services.AddScoped<IMarketplaceOrderService, MarketplaceOrderService>();
+builder.Services.AddScoped<IInstantTradingService, InstantTradingService>();
 builder.Services.AddScoped<INotificationQueueService, NotificationQueueService>();
 builder.Services.AddScoped<INotificationOperationsService, NotificationOperationsService>();
 builder.Services.AddScoped<INotificationDeliveryProvider, SmtpNotificationDeliveryProvider>();

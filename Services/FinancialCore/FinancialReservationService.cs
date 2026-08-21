@@ -88,9 +88,16 @@ public class FinancialReservationService : IFinancialReservationService
         };
 
         _db.FinancialReservations.Add(reservation);
+        var reservationLedgerType = type switch
+        {
+            FinancialReservationType.MarketplaceTrade => LedgerTransactionType.MarketplaceReservation,
+            FinancialReservationType.InstantTrade => LedgerTransactionType.InstantReservation,
+            _ => LedgerTransactionType.TransferReservation
+        };
+
         PostReservationLedger(
             account,
-            LedgerTransactionType.MarketplaceReservation,
+            reservationLedgerType,
             amount,
             $"Reserved {amount} {account.AssetCode} for {relatedEntityType} {relatedEntityId}.",
             actionedByUserId,

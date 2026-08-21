@@ -52,6 +52,7 @@ public enum LedgerTransactionType
     ManualAdjustment = 6,
     Reversal = 7,
     MarketplaceReservation = 8,
+    InstantReservation = 9,
     Deposit = 10,
     Withdrawal = 11,
     Trade = 20,
