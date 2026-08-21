@@ -14,8 +14,19 @@ namespace KorridorX.Services.EmbeddedFinance;
 
 public sealed class EmbeddedFinanceCustomerService : IEmbeddedFinanceCustomerService
 {
-    private readonly AppDbContext _db; private readonly IEmbeddedFinanceContextAccessor _context;
-    public EmbeddedFinanceCustomerService(AppDbContext db, IEmbeddedFinanceContextAccessor context) { _db = db; _context = context; }
+    private readonly AppDbContext _db;
+    private readonly IEmbeddedFinanceContextAccessor _context;
+    private readonly IEmbeddedWebhookPublisher _webhooks;
+
+    public EmbeddedFinanceCustomerService(
+        AppDbContext db,
+        IEmbeddedFinanceContextAccessor context,
+        IEmbeddedWebhookPublisher webhooks)
+    {
+        _db = db;
+        _context = context;
+        _webhooks = webhooks;
+    }
 
     public async Task<PagedResult<BusinessCustomerDto>> GetCustomersAsync(int page, int pageSize, CancellationToken ct = default)
     {
@@ -38,7 +49,26 @@ public sealed class EmbeddedFinanceCustomerService : IEmbeddedFinanceCustomerSer
         await using var tx = await _db.Database.BeginTransactionAsync(ct);
         var customer = new BusinessCustomer { BusinessProfileId=p.BusinessProfileId, ExternalReference=normalized.ExternalReference, DisplayName=normalized.DisplayName, Email=normalized.Email, PhoneNumber=normalized.PhoneNumber, CountryCode=normalized.CountryCode, MetadataJson=normalized.MetadataJson, Status=BusinessCustomerStatus.Active };
         _db.BusinessCustomers.Add(customer); _db.EmbeddedApiIdempotencyRecords.Add(new EmbeddedApiIdempotencyRecord { ApiApplicationId=p.ApiApplicationId, IdempotencyKey=key, RequestHash=hash, ResourceType=nameof(BusinessCustomer), ResourceId=customer.Id });
-        await _db.SaveChangesAsync(ct); await tx.CommitAsync(ct); return ToCustomerDto(customer);
+        await _db.SaveChangesAsync(ct);
+        await tx.CommitAsync(ct);
+
+        await _webhooks.PublishAsync(
+            p.BusinessProfileId,
+            "customer.created",
+            new
+            {
+                id = customer.Id,
+                customer.ExternalReference,
+                customer.DisplayName,
+                customer.Email,
+                customer.PhoneNumber,
+                customer.CountryCode,
+                status = customer.Status.ToString(),
+                customer.CreatedAt
+            },
+            ct);
+
+        return ToCustomerDto(customer);
     }
 
     public async Task<IReadOnlyList<CollectionAccountDto>> GetAccountsAsync(Guid businessCustomerId, CancellationToken ct = default)
@@ -61,7 +91,25 @@ public sealed class EmbeddedFinanceCustomerService : IEmbeddedFinanceCustomerSer
         var fa = new FinancialAccount { OwnerType=FinancialAccountOwnerType.BusinessCustomer, OwnerId=customer.Id, AccountCode=BuildAccountCode(customer.Id,asset.Code), AssetCode=asset.Code, AccountType=FinancialAccountType.Customer, Status=FinancialAccountStatus.Active, SettledBalance=0m, AvailableBalance=0m, HeldBalance=0m };
         var ca = new CollectionAccount { BusinessProfileId=p.BusinessProfileId, BusinessCustomerId=customer.Id, ExternalReference=normalized.ExternalReference, AssetCode=asset.Code, FinancialAccountId=fa.Id, FinancialAccount=fa, Status=CollectionAccountStatus.Pending };
         _db.FinancialAccounts.Add(fa); _db.CollectionAccounts.Add(ca); _db.EmbeddedApiIdempotencyRecords.Add(new EmbeddedApiIdempotencyRecord { ApiApplicationId=p.ApiApplicationId, IdempotencyKey=key, RequestHash=hash, ResourceType=nameof(CollectionAccount), ResourceId=ca.Id });
-        await _db.SaveChangesAsync(ct); await tx.CommitAsync(ct); return ToAccountDto(ca);
+        await _db.SaveChangesAsync(ct);
+        await tx.CommitAsync(ct);
+
+        await _webhooks.PublishAsync(
+            p.BusinessProfileId,
+            "account.created",
+            new
+            {
+                id = ca.Id,
+                businessCustomerId = customer.Id,
+                ca.ExternalReference,
+                ca.AssetCode,
+                ca.FinancialAccountId,
+                status = ca.Status.ToString(),
+                ca.CreatedAt
+            },
+            ct);
+
+        return ToAccountDto(ca);
     }
 
     private EmbeddedFinancePrincipal RequireScope(EmbeddedFinanceScope scope) { var p=_context.GetRequiredPrincipal(); if(!p.HasScope(scope)) throw new UnauthorizedAccessException($"API application does not have required scope '{scope}'."); return p; }

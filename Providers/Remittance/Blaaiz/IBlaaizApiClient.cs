@@ -107,6 +107,17 @@ public interface IBlaaizApiClient
         Guid businessProfileId,
         CancellationToken ct = default);
 
+    Task<BlaaizApiResult<BlaaizVirtualBankAccountEnvelope>> CreateVirtualBankAccountAsync(
+        BlaaizVirtualBankAccountRequest request,
+        Guid? businessCustomerId = null,
+        CancellationToken ct = default);
+
+    Task<BlaaizApiResult<BlaaizVirtualBankAccountEnvelope>> GetVirtualBankAccountsAsync(
+        string walletId,
+        string customerId,
+        Guid? businessCustomerId = null,
+        CancellationToken ct = default);
+
     Task<BlaaizApiResult<BlaaizCardCollectionResponse>> InitiateCardCollectionAsync(
         BlaaizCardCollectionRequest request,
         Guid transferId,
@@ -121,7 +132,7 @@ public interface IBlaaizApiClient
 
     Task<BlaaizApiResult<BlaaizPayoutResponse>> InitiatePayoutAsync(
         BlaaizPayoutRequest request,
-        Guid transferId,
+        Guid? transferId,
         Guid payoutId,
         CancellationToken ct = default);
 

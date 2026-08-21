@@ -115,6 +115,64 @@ public class FinancialReservationService : IFinancialReservationService
         return reservation;
     }
 
+    public async Task<FinancialReservation> CaptureAsync(
+        Guid reservationId,
+        decimal amount,
+        Guid? actionedByUserId,
+        CancellationToken ct = default)
+    {
+        var reservation = await _db.FinancialReservations
+            .Include(x => x.FinancialAccount)
+            .FirstOrDefaultAsync(x => x.Id == reservationId && !x.IsDeleted, ct)
+            ?? throw new InvalidOperationException("Financial reservation not found.");
+
+        var remaining = reservation.Amount - reservation.CapturedAmount - reservation.ReleasedAmount;
+        if (amount <= 0m)
+            throw new InvalidOperationException("Capture amount must be greater than zero.");
+        if (amount > remaining)
+            throw new InvalidOperationException("Capture amount exceeds the active reservation balance.");
+        if (reservation.Status != FinancialReservationStatus.Active)
+            throw new InvalidOperationException("Only an active reservation can capture funds.");
+
+        var account = reservation.FinancialAccount;
+        if (account.HeldBalance < amount || account.SettledBalance < amount)
+            throw new InvalidOperationException("Financial-account balances are inconsistent with the reservation.");
+
+        account.HeldBalance -= amount;
+        account.SettledBalance -= amount;
+        account.LastUpdatedAt = DateTime.UtcNow;
+        account.LastUpdatedByUserId = actionedByUserId;
+
+        reservation.CapturedAmount += amount;
+        if (reservation.Amount - reservation.CapturedAmount - reservation.ReleasedAmount <= 0m)
+        {
+            reservation.Status = FinancialReservationStatus.Captured;
+            reservation.CapturedAt = DateTime.UtcNow;
+        }
+
+        reservation.LastUpdatedAt = DateTime.UtcNow;
+        reservation.LastUpdatedByUserId = actionedByUserId;
+
+        PostReservationLedger(
+            account,
+            LedgerTransactionType.ReservationCapture,
+            amount,
+            $"Captured {amount} {account.AssetCode} from reservation {reservation.Reference}.",
+            actionedByUserId,
+            reservation.RelatedEntityType,
+            reservation.RelatedEntityId,
+            reservation.ContextEntityType,
+            reservation.ContextEntityId,
+            LedgerBalanceBucket.Held,
+            LedgerPostingSide.Debit,
+            account.HeldBalance,
+            LedgerBalanceBucket.External,
+            LedgerPostingSide.Credit,
+            null);
+
+        return reservation;
+    }
+
     public async Task<FinancialReservation> ReleaseAsync(
         Guid reservationId,
         decimal amount,

@@ -1,6 +1,7 @@
 using KorridorX.Data;
 using KorridorX.Models.Enums;
 using KorridorX.Models.Transfers;
+using KorridorX.Services.EmbeddedFinance;
 
 namespace KorridorX.Services.Transfers;
 
@@ -100,10 +101,14 @@ public class TransferStatusService : ITransferStatusService
         };
 
     private readonly AppDbContext _db;
+    private readonly IEmbeddedWebhookOutboxStager _webhookOutbox;
 
-    public TransferStatusService(AppDbContext db)
+    public TransferStatusService(
+        AppDbContext db,
+        IEmbeddedWebhookOutboxStager webhookOutbox)
     {
         _db = db;
+        _webhookOutbox = webhookOutbox;
     }
 
     public bool CanTransition(
@@ -183,7 +188,67 @@ public class TransferStatusService : ITransferStatusService
             OccurredAt = now
         });
 
+        StageEmbeddedLifecycleWebhook(
+            transfer,
+            newStatus,
+            source,
+            reason,
+            now);
+
         return true;
+    }
+
+    private void StageEmbeddedLifecycleWebhook(
+        Transfer transfer,
+        TransferStatus status,
+        string source,
+        string? reason,
+        DateTime occurredAt)
+    {
+        if (!transfer.BusinessProfileId.HasValue ||
+            !transfer.BusinessCustomerId.HasValue)
+        {
+            return;
+        }
+
+        var webhookEventType = status switch
+        {
+            TransferStatus.Processing => "transfer.processing",
+            TransferStatus.Completed => "transfer.completed",
+            TransferStatus.Failed => "transfer.failed",
+            TransferStatus.RefundPending => "transfer.refund_pending",
+            TransferStatus.Refunded => "transfer.refunded",
+            _ => null
+        };
+
+        if (webhookEventType is null)
+            return;
+
+        _webhookOutbox.Stage(
+            transfer.BusinessProfileId.Value,
+            webhookEventType,
+            new
+            {
+                id = transfer.Id,
+                businessCustomerId = transfer.BusinessCustomerId.Value,
+                reference = transfer.Reference,
+                externalReference = transfer.ExternalReference,
+                status = status.ToString(),
+                sourceCountryCode = transfer.SourceCountryCode,
+                destinationCountryCode = transfer.DestinationCountryCode,
+                sourceCurrencyCode = transfer.SourceCurrencyCode,
+                destinationCurrencyCode = transfer.DestinationCurrencyCode,
+                sourceAmount = transfer.SourceAmount,
+                destinationAmount = transfer.DestinationAmount,
+                feeAmount = transfer.FeeAmount,
+                feeCurrencyCode = transfer.FeeCurrencyCode,
+                totalPayableAmount = transfer.TotalPayableAmount,
+                providerCode = transfer.ProviderCode,
+                transitionSource = source,
+                reason,
+                occurredAt
+            },
+            occurredAt);
     }
 
     private static void ApplyStatusTimestamp(

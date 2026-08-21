@@ -853,7 +853,9 @@ public class BusinessFundingService : IBusinessFundingService
         Guid? actionedByUserId,
         string source)
     {
-        if (!transfer.BusinessProfileId.HasValue || transfer.BusinessFundingSource != BusinessFundingSource.BusinessWallet)
+        if (!transfer.BusinessProfileId.HasValue ||
+            (!transfer.SourceFinancialAccountId.HasValue &&
+             transfer.BusinessFundingSource != BusinessFundingSource.BusinessWallet))
         {
             return false;
         }
@@ -907,7 +909,9 @@ public class BusinessFundingService : IBusinessFundingService
         Guid? actionedByUserId,
         string source)
     {
-        if (!transfer.BusinessProfileId.HasValue || transfer.BusinessFundingSource != BusinessFundingSource.BusinessWallet)
+        if (!transfer.BusinessProfileId.HasValue ||
+            (!transfer.SourceFinancialAccountId.HasValue &&
+             transfer.BusinessFundingSource != BusinessFundingSource.BusinessWallet))
         {
             return false;
         }

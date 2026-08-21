@@ -83,7 +83,7 @@ public sealed record RemittanceKycDocumentSubmissionResult(
 
 
 public sealed record RemittancePayoutRequest(
-    Guid TransferId,
+    Guid? TransferId,
     Guid PayoutId,
     PaymentMethod PaymentMethod,
     decimal DestinationAmount,

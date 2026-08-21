@@ -170,4 +170,45 @@ public class AdminProviderRecoveryController : ControllerBase
 
         return userId;
     }
+    [HttpGet("embedded/transfers")]
+    public async Task<IActionResult> GetEmbeddedTransfers([FromQuery] string? reference, [FromQuery] int take = 100, CancellationToken ct = default)
+    {
+        take = Math.Clamp(take, 1, 200);
+        var query = _db.Transfers.AsNoTracking().Where(x => x.BusinessCustomerId != null && !x.IsDeleted);
+        if (!string.IsNullOrWhiteSpace(reference)) { var v = reference.Trim(); query = query.Where(x => x.Reference == v || x.ExternalReference == v); }
+        var rows = await query.OrderByDescending(x => x.CreatedAt).Take(take)
+            .Select(x => new { x.Id, x.Reference, x.ExternalReference, x.BusinessProfileId, x.BusinessCustomerId,
+                x.SourceFinancialAccountId, x.Status, x.ProviderCode, x.ProviderTransferId, x.ProviderReference,
+                x.SourceAmount, x.SourceCurrencyCode, x.DestinationAmount, x.DestinationCurrencyCode,
+                x.FailureReason, x.CreatedAt, x.LastUpdatedAt }).ToListAsync(ct);
+        return Ok(ApiResponses.Ok(rows, "Embedded transfers retrieved successfully."));
+    }
+
+    [HttpGet("embedded/payouts")]
+    public async Task<IActionResult> GetEmbeddedPayouts([FromQuery] int take = 100, CancellationToken ct = default)
+    {
+        take = Math.Clamp(take, 1, 200);
+        var rows = await _db.Payouts.AsNoTracking()
+            .Where(x => x.ContextEntityType == nameof(KorridorX.Models.EmbeddedFinance.BusinessCustomer) && !x.IsDeleted)
+            .OrderByDescending(x => x.CreatedAt).Take(take)
+            .Select(x => new { x.Id, x.Reference, x.ContextEntityId, x.FinancialAccountId, x.Status, x.ProviderCode,
+                x.ProviderPayoutId, x.ProviderReference, x.Amount, x.CurrencyCode, x.FailureReason, x.CreatedAt, x.LastUpdatedAt })
+            .ToListAsync(ct);
+        return Ok(ApiResponses.Ok(rows, "Embedded payouts retrieved successfully."));
+    }
+
+    [HttpGet("embedded/webhook-deliveries")]
+    public async Task<IActionResult> GetEmbeddedWebhookDeliveries([FromQuery] KorridorX.Models.Enums.BusinessWebhookDeliveryStatus? status, [FromQuery] int take = 100, CancellationToken ct = default)
+    {
+        take = Math.Clamp(take, 1, 200);
+        var query = _db.BusinessWebhookDeliveries.AsNoTracking().Include(x => x.BusinessWebhookEvent).Include(x => x.BusinessWebhookEndpoint).Where(x => !x.IsDeleted);
+        if (status.HasValue) query = query.Where(x => x.Status == status.Value);
+        var rows = await query.OrderByDescending(x => x.CreatedAt).Take(take)
+            .Select(x => new { x.Id, x.BusinessWebhookEndpointId, x.BusinessWebhookEndpoint.BusinessProfileId,
+                x.BusinessWebhookEvent.EventId, x.BusinessWebhookEvent.EventType, x.Status, x.AttemptCount,
+                x.NextAttemptAt, x.LastAttemptAt, x.DeliveredAt, x.DeadLetteredAt, x.LastResponseStatusCode,
+                x.ErrorMessage, x.CreatedAt }).ToListAsync(ct);
+        return Ok(ApiResponses.Ok(rows, "Embedded webhook deliveries retrieved successfully."));
+    }
+
 }

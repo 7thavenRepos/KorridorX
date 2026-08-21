@@ -135,6 +135,21 @@ public class PayoutService : IPayoutService
                 _remittanceProvider.ProviderCode,
                 ct);
 
+        var payoutProviderCustomerId = compliance.ProviderCustomerId;
+        if (transfer.BusinessCustomerId.HasValue)
+        {
+            payoutProviderCustomerId = await _db.ProviderCustomers
+                .AsNoTracking()
+                .Where(x =>
+                    x.ProviderCode == _remittanceProvider.ProviderCode &&
+                    x.BusinessCustomerId == transfer.BusinessCustomerId.Value &&
+                    !x.IsDeleted)
+                .Select(x => x.ProviderCustomerId)
+                .SingleOrDefaultAsync(ct)
+                ?? throw new InvalidOperationException(
+                    "Embedded business customer has not completed provider onboarding for transfers.");
+        }
+
         var walletId = ResolvePayoutWalletId(transfer.SourceCurrencyCode);
 
         if (payout is null)
@@ -202,7 +217,7 @@ public class PayoutService : IPayoutService
                     transfer.DestinationAmount,
                     transfer.SourceCurrencyCode,
                     transfer.DestinationCurrencyCode,
-                    compliance.ProviderCustomerId,
+                    payoutProviderCustomerId,
                     walletId,
                     destination.FirstName,
                     destination.LastName,

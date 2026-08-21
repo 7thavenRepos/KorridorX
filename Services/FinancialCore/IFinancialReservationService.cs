@@ -16,6 +16,12 @@ public interface IFinancialReservationService
         Guid? contextEntityId = null,
         CancellationToken ct = default);
 
+    Task<FinancialReservation> CaptureAsync(
+        Guid reservationId,
+        decimal amount,
+        Guid? actionedByUserId,
+        CancellationToken ct = default);
+
     Task<FinancialReservation> ReleaseAsync(
         Guid reservationId,
         decimal amount,

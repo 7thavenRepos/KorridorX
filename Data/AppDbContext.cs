@@ -44,6 +44,9 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<Guid
     public DbSet<CollectionAccount> CollectionAccounts => Set<CollectionAccount>();
     public DbSet<ProviderAccountMapping> ProviderAccountMappings => Set<ProviderAccountMapping>();
     public DbSet<EmbeddedApiIdempotencyRecord> EmbeddedApiIdempotencyRecords => Set<EmbeddedApiIdempotencyRecord>();
+    public DbSet<BusinessWebhookEndpoint> BusinessWebhookEndpoints => Set<BusinessWebhookEndpoint>();
+    public DbSet<BusinessWebhookEvent> BusinessWebhookEvents => Set<BusinessWebhookEvent>();
+    public DbSet<BusinessWebhookDelivery> BusinessWebhookDeliveries => Set<BusinessWebhookDelivery>();
 
     public DbSet<Recipient> Recipients => Set<Recipient>();
     public DbSet<RecipientBankAccount> RecipientBankAccounts => Set<RecipientBankAccount>();

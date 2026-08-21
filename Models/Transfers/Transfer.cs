@@ -10,12 +10,19 @@ namespace KorridorX.Models.Transfers;
 public class Transfer : AuditableEntity
 {
     public string Reference { get; set; } = "";
+    public string? ExternalReference { get; set; }
 
     public Guid? CustomerProfileId { get; set; }
     public CustomerProfile? CustomerProfile { get; set; }
 
     public Guid? BusinessProfileId { get; set; }
     public BusinessProfile? BusinessProfile { get; set; }
+
+    public Guid? BusinessCustomerId { get; set; }
+    public KorridorX.Models.EmbeddedFinance.BusinessCustomer? BusinessCustomer { get; set; }
+
+    public Guid? SourceFinancialAccountId { get; set; }
+    public KorridorX.Models.FinancialCore.FinancialAccount? SourceFinancialAccount { get; set; }
 
     public Guid? RecipientId { get; set; }
     public Recipient? Recipient { get; set; }

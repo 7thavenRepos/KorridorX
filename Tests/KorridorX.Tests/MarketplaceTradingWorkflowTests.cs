@@ -59,7 +59,9 @@ public sealed class MarketplaceTradingWorkflowTests
             buyer.UserId,
             LimitOrder(pair.Id, TradeOrderSide.Buy, 10m, 12m));
 
-        Assert.Equal(TradeOrderStatus.Filled, sell.Status);
+        var refreshedSell = await orders.GetOrderAsync(seller.UserId, sell.Id);
+
+        Assert.Equal(TradeOrderStatus.Filled, refreshedSell.Status);
         Assert.Equal(TradeOrderStatus.PartiallyFilled, buy.Status);
         Assert.Equal(4m, buy.FilledQuantity);
         Assert.Equal(6m, buy.RemainingQuantity);

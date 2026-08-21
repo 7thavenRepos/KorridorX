@@ -9,8 +9,13 @@ public class TransferConfiguration : IEntityTypeConfiguration<Transfer>
     public void Configure(EntityTypeBuilder<Transfer> builder)
     {
         builder.HasIndex(x => x.Reference).IsUnique();
+        builder.HasIndex(x => new { x.BusinessCustomerId, x.ExternalReference })
+            .IsUnique()
+            .HasFilter("\"BusinessCustomerId\" IS NOT NULL AND \"ExternalReference\" IS NOT NULL AND \"IsDeleted\" = false");
         builder.HasIndex(x => x.CustomerProfileId);
         builder.HasIndex(x => x.BusinessProfileId);
+        builder.HasIndex(x => x.BusinessCustomerId);
+        builder.HasIndex(x => x.SourceFinancialAccountId);
         builder.HasIndex(x => x.RecipientId);
         builder.HasIndex(x => x.BusinessBeneficiaryId);
         builder.HasIndex(x => x.TransferQuoteId).IsUnique();
@@ -29,6 +34,7 @@ public class TransferConfiguration : IEntityTypeConfiguration<Transfer>
         builder.HasIndex(x => new { x.RiskDecision, x.RiskLevel });
 
         builder.Property(x => x.Reference).HasMaxLength(50);
+        builder.Property(x => x.ExternalReference).HasMaxLength(50);
         builder.Property(x => x.PurposeNote).HasMaxLength(500);
         builder.Property(x => x.SourceCountryCode).HasMaxLength(10);
         builder.Property(x => x.DestinationCountryCode).HasMaxLength(10);
@@ -62,6 +68,16 @@ public class TransferConfiguration : IEntityTypeConfiguration<Transfer>
         builder.HasOne(x => x.BusinessProfile)
             .WithMany()
             .HasForeignKey(x => x.BusinessProfileId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasOne(x => x.BusinessCustomer)
+            .WithMany()
+            .HasForeignKey(x => x.BusinessCustomerId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasOne(x => x.SourceFinancialAccount)
+            .WithMany()
+            .HasForeignKey(x => x.SourceFinancialAccountId)
             .OnDelete(DeleteBehavior.Restrict);
 
         builder.HasOne(x => x.Recipient)

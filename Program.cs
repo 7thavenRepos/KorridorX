@@ -307,6 +307,25 @@ builder.Services.AddScoped<IEmbeddedFinanceManagementService, EmbeddedFinanceMan
 builder.Services.AddScoped<IEmbeddedFinanceCustomerService, EmbeddedFinanceCustomerService>();
 builder.Services.AddScoped<IEmbeddedFinanceCredentialAuthenticator, EmbeddedFinanceCredentialAuthenticator>();
 builder.Services.AddScoped<IEmbeddedFinanceContextAccessor, HttpEmbeddedFinanceContextAccessor>();
+builder.Services.AddScoped<ICollectionAccountProvisioningService, CollectionAccountProvisioningService>();
+builder.Services.AddScoped<IEmbeddedInboundCollectionService, EmbeddedInboundCollectionService>();
+builder.Services.AddScoped<IEmbeddedFinancePayoutService, EmbeddedFinancePayoutService>();
+builder.Services.AddScoped<IEmbeddedFinanceTransferService, EmbeddedFinanceTransferService>();
+builder.Services.AddScoped<IEmbeddedPayoutSettlementService, EmbeddedPayoutSettlementService>();
+builder.Services.AddScoped<ICollectionAccountProvisioner, BlaaizCollectionAccountProvisioner>();
+builder.Services.AddScoped<IEmbeddedWebhookUrlSecurityValidator, EmbeddedWebhookUrlSecurityValidator>();
+builder.Services.AddScoped<IEmbeddedWebhookManagementService, EmbeddedWebhookManagementService>();
+builder.Services.AddScoped<IEmbeddedWebhookOutboxStager, EmbeddedWebhookOutboxStager>();
+builder.Services.AddScoped<IEmbeddedWebhookPublisher, EmbeddedWebhookPublisher>();
+builder.Services.AddScoped<IEmbeddedWebhookSender, EmbeddedWebhookSender>();
+builder.Services.AddHttpClient(EmbeddedWebhookSender.HttpClientName, client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(15);
+})
+.ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
+{
+    AllowAutoRedirect = false
+});
 builder.Services.AddScoped<INotificationQueueService, NotificationQueueService>();
 builder.Services.AddScoped<INotificationOperationsService, NotificationOperationsService>();
 builder.Services.AddScoped<INotificationDeliveryProvider, SmtpNotificationDeliveryProvider>();
@@ -346,6 +365,7 @@ builder.Services.AddScoped<IProviderReconciliationService, ProviderReconciliatio
 builder.Services.AddHostedService<PayoutDispatchWorker>();
 builder.Services.AddHostedService<BlaaizReconciliationWorker>();
 builder.Services.AddHostedService<NotificationDeliveryWorker>();
+builder.Services.AddHostedService<EmbeddedWebhookDeliveryWorker>();
 builder.Services.AddHostedService<ComplianceRescreeningWorker>();
 builder.Services.AddHostedService<DataRetentionWorker>();
 builder.Services.AddHostedService<SupportSlaWorker>();

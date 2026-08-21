@@ -105,3 +105,47 @@ public sealed class EmbeddedApiIdempotencyRecordConfiguration : IEntityTypeConfi
         builder.HasOne(x => x.ApiApplication).WithMany(x => x.IdempotencyRecords).HasForeignKey(x => x.ApiApplicationId).OnDelete(DeleteBehavior.Restrict);
     }
 }
+
+
+public sealed class BusinessWebhookEndpointConfiguration : IEntityTypeConfiguration<BusinessWebhookEndpoint>
+{
+    public void Configure(EntityTypeBuilder<BusinessWebhookEndpoint> builder)
+    {
+        builder.HasIndex(x => new { x.BusinessProfileId, x.Url }).IsUnique().HasFilter("\"IsDeleted\" = false");
+        builder.HasIndex(x => new { x.ApiApplicationId, x.Status });
+        builder.Property(x => x.Url).HasMaxLength(1000);
+        builder.Property(x => x.EventTypesCsv).HasMaxLength(4000);
+        builder.Property(x => x.SigningSecretProtected).HasColumnType("text");
+        builder.Property(x => x.SigningSecretLastFour).HasMaxLength(4);
+        builder.Property(x => x.Status).IsConcurrencyToken();
+        builder.HasOne(x => x.ApiApplication).WithMany().HasForeignKey(x => x.ApiApplicationId).OnDelete(DeleteBehavior.Restrict);
+    }
+}
+
+public sealed class BusinessWebhookEventConfiguration : IEntityTypeConfiguration<BusinessWebhookEvent>
+{
+    public void Configure(EntityTypeBuilder<BusinessWebhookEvent> builder)
+    {
+        builder.HasIndex(x => x.EventId).IsUnique();
+        builder.HasIndex(x => new { x.BusinessProfileId, x.OccurredAt });
+        builder.HasIndex(x => new { x.BusinessProfileId, x.EventType, x.OccurredAt });
+        builder.Property(x => x.EventId).HasMaxLength(80);
+        builder.Property(x => x.EventType).HasMaxLength(150);
+        builder.Property(x => x.PayloadJson).HasColumnType("text");
+    }
+}
+
+public sealed class BusinessWebhookDeliveryConfiguration : IEntityTypeConfiguration<BusinessWebhookDelivery>
+{
+    public void Configure(EntityTypeBuilder<BusinessWebhookDelivery> builder)
+    {
+        builder.HasIndex(x => new { x.BusinessWebhookEventId, x.BusinessWebhookEndpointId }).IsUnique();
+        builder.HasIndex(x => new { x.Status, x.NextAttemptAt });
+        builder.HasIndex(x => x.LockId);
+        builder.Property(x => x.Status).IsConcurrencyToken();
+        builder.Property(x => x.LastResponseBody).HasMaxLength(4000);
+        builder.Property(x => x.ErrorMessage).HasMaxLength(2000);
+        builder.HasOne(x => x.BusinessWebhookEvent).WithMany(x => x.Deliveries).HasForeignKey(x => x.BusinessWebhookEventId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne(x => x.BusinessWebhookEndpoint).WithMany(x => x.Deliveries).HasForeignKey(x => x.BusinessWebhookEndpointId).OnDelete(DeleteBehavior.Restrict);
+    }
+}

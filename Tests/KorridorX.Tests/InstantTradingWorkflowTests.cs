@@ -4,6 +4,7 @@ using KorridorX.Dtos.Instant;
 using KorridorX.Models.Enums;
 using KorridorX.Models.FinancialCore;
 using KorridorX.Models.Fx;
+using KorridorX.Models.Lookups;
 using KorridorX.Services.Instant;
 using KorridorX.Tests.Infrastructure;
 using Microsoft.EntityFrameworkCore;
@@ -381,8 +382,27 @@ public sealed class InstantTradingWorkflowTests
             .Where(x => x.CountryCode == countryCode && assetCodes.Contains(x.AssetCode))
             .ToListAsync();
 
-        foreach (var mapping in mappings)
-            mapping.CanUseInstant = true;
+        foreach (var assetCode in assetCodes.Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            var mapping = mappings.FirstOrDefault(x =>
+                string.Equals(x.AssetCode, assetCode, StringComparison.OrdinalIgnoreCase));
+
+            if (mapping is null)
+            {
+                mapping = new CountryAsset
+                {
+                    CountryCode = countryCode,
+                    AssetCode = assetCode,
+                    CanUseInstant = true
+                };
+                db.CountryAssets.Add(mapping);
+                mappings.Add(mapping);
+            }
+            else
+            {
+                mapping.CanUseInstant = true;
+            }
+        }
 
         var assets = await db.Assets
             .Where(x => assetCodes.Contains(x.Code))

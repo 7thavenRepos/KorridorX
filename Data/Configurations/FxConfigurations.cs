@@ -27,6 +27,8 @@ public class TransferQuoteConfiguration : IEntityTypeConfiguration<TransferQuote
     {
         builder.HasIndex(x => x.CustomerProfileId);
         builder.HasIndex(x => x.BusinessProfileId);
+        builder.HasIndex(x => x.BusinessCustomerId);
+        builder.HasIndex(x => x.SourceFinancialAccountId);
         builder.HasIndex(x => x.ExpiresAt);
         builder.HasIndex(x => x.ProviderQuoteId);
         builder.HasIndex(x => new { x.CustomerProfileId, x.IsUsed, x.ExpiresAt });
@@ -56,6 +58,16 @@ public class TransferQuoteConfiguration : IEntityTypeConfiguration<TransferQuote
         builder.HasOne(x => x.BusinessProfile)
             .WithMany()
             .HasForeignKey(x => x.BusinessProfileId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasOne(x => x.BusinessCustomer)
+            .WithMany()
+            .HasForeignKey(x => x.BusinessCustomerId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasOne(x => x.SourceFinancialAccount)
+            .WithMany()
+            .HasForeignKey(x => x.SourceFinancialAccountId)
             .OnDelete(DeleteBehavior.Restrict);
     }
 }

@@ -11,6 +11,7 @@ using KorridorX.Models.Webhooks;
 using KorridorX.Providers.Remittance;
 using KorridorX.Services.Payments;
 using KorridorX.Services.Compliance;
+using KorridorX.Services.EmbeddedFinance;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 
@@ -24,6 +25,8 @@ public class BlaaizWebhookService : IBlaaizWebhookService
     private readonly IPayoutStatusService _payoutStatusService;
     private readonly IRemittanceProvider _provider;
     private readonly IComplianceScreeningService _screeningService;
+    private readonly IEmbeddedInboundCollectionService _embeddedInboundCollections;
+    private readonly IEmbeddedPayoutSettlementService _embeddedPayoutSettlement;
 
     public BlaaizWebhookService(
         AppDbContext db,
@@ -31,7 +34,9 @@ public class BlaaizWebhookService : IBlaaizWebhookService
         ICollectionStatusService collectionStatusService,
         IPayoutStatusService payoutStatusService,
         IRemittanceProvider provider,
-        IComplianceScreeningService screeningService)
+        IComplianceScreeningService screeningService,
+        IEmbeddedInboundCollectionService embeddedInboundCollections,
+        IEmbeddedPayoutSettlementService embeddedPayoutSettlement)
     {
         _db = db;
         _options = options.Value;
@@ -39,6 +44,8 @@ public class BlaaizWebhookService : IBlaaizWebhookService
         _payoutStatusService = payoutStatusService;
         _provider = provider;
         _screeningService = screeningService;
+        _embeddedInboundCollections = embeddedInboundCollections;
+        _embeddedPayoutSettlement = embeddedPayoutSettlement;
     }
 
     public Task<BlaaizWebhookResult> ProcessCollectionWebhookAsync(
@@ -269,6 +276,33 @@ public class BlaaizWebhookService : IBlaaizWebhookService
 
         if (collection is null)
         {
+            var inboundStatus = ReadOptionalString(data, root, "transaction_status", "status") ?? EventStatus(eventType);
+            var inboundAmount = ReadOptionalDecimal(data, root, "transaction_amount", "amount");
+            var inboundCurrency = ReadOptionalString(data, root, "transaction_currency", "currency");
+
+            if (!isRefund && !string.IsNullOrWhiteSpace(collectionTransactionId) && inboundAmount.HasValue && !string.IsNullOrWhiteSpace(inboundCurrency))
+            {
+                var embeddedProcessed = await _embeddedInboundCollections.TryProcessBlaaizDepositAsync(
+                    new EmbeddedInboundCollectionRequest(
+                        collectionTransactionId,
+                        collectionReference,
+                        inboundStatus,
+                        inboundCurrency,
+                        inboundAmount.Value,
+                        ReadOptionalDecimal(data, root, "amount_without_fee"),
+                        ReadOptionalDecimal(data, root, "fee", "transaction_fee"),
+                        ReadOptionalString(data, root, "fee_currency", "transaction_currency", "currency"),
+                        ReadOptionalString(data, root, "virtual_bank_account_id", "virtual_account_id", "bank_account_id", "account_id", "business_bank_account_id"),
+                        ReadOptionalString(data, root, "customer_id"),
+                        ReadOptionalString(data, root, "account_reference", "reservation_reference", "virtual_account_reference"),
+                        ReadOptionalString(data, root, "account_number", "virtual_account_number", "bank_account_number"),
+                        rawPayload,
+                        ReadOptionalDateTime(data, root, "updated_at", "date", "timestamp") ?? DateTime.UtcNow),
+                    ct);
+
+                if (embeddedProcessed) return true;
+            }
+
             return false;
         }
 
@@ -416,10 +450,11 @@ public class BlaaizWebhookService : IBlaaizWebhookService
             reference
         });
 
+        var payoutStatusChanged = false;
         if (payout.Status == mappedStatus ||
             _payoutStatusService.CanTransition(payout.Status, mappedStatus))
         {
-            _payoutStatusService.ApplyTransition(
+            payoutStatusChanged = _payoutStatusService.ApplyTransition(
                 payout,
                 mappedStatus,
                 new PayoutStatusTransitionContext(
@@ -432,6 +467,14 @@ public class BlaaizWebhookService : IBlaaizWebhookService
                     MetadataJson: metadata,
                     OccurredAt: occurredAt),
                 latestAttempt);
+        }
+
+        if (payout.Purpose == PaymentOperationPurpose.Withdrawal)
+        {
+            await _embeddedPayoutSettlement.ApplyStatusEffectAsync(
+                payout,
+                payoutStatusChanged,
+                ct);
         }
 
         if (payout.Transfer is not null)

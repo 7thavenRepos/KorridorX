@@ -487,6 +487,63 @@ public class BlaaizApiClient : IBlaaizApiClient
             ct);
     }
 
+    public Task<BlaaizApiResult<BlaaizVirtualBankAccountEnvelope>> CreateVirtualBankAccountAsync(
+        BlaaizVirtualBankAccountRequest request,
+        Guid? businessCustomerId = null,
+        CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(request.WalletId))
+            throw new InvalidOperationException("Blaaiz wallet ID is required.");
+
+        if (string.IsNullOrWhiteSpace(request.CustomerId))
+            throw new InvalidOperationException("Blaaiz customer ID is required.");
+
+        return SendAsync<BlaaizVirtualBankAccountRequest, BlaaizVirtualBankAccountEnvelope>(
+            HttpMethod.Post,
+            "/api/external/virtual-bank-account",
+            request,
+            JsonSerializer.Serialize(new
+            {
+                wallet_id = request.WalletId,
+                customer_id = request.CustomerId,
+                businessCustomerId
+            }),
+            null,
+            null,
+            null,
+            null,
+            ct);
+    }
+
+    public Task<BlaaizApiResult<BlaaizVirtualBankAccountEnvelope>> GetVirtualBankAccountsAsync(
+        string walletId,
+        string customerId,
+        Guid? businessCustomerId = null,
+        CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(walletId))
+            throw new InvalidOperationException("Blaaiz wallet ID is required.");
+
+        if (string.IsNullOrWhiteSpace(customerId))
+            throw new InvalidOperationException("Blaaiz customer ID is required.");
+
+        var endpoint =
+            "/api/external/virtual-bank-account" +
+            $"?wallet_id={Uri.EscapeDataString(walletId.Trim())}" +
+            $"&customer_id={Uri.EscapeDataString(customerId.Trim())}";
+
+        return SendAsync<object, BlaaizVirtualBankAccountEnvelope>(
+            HttpMethod.Get,
+            endpoint,
+            null,
+            JsonSerializer.Serialize(new { walletId, customerId, businessCustomerId }),
+            null,
+            null,
+            null,
+            null,
+            ct);
+    }
+
     public Task<BlaaizApiResult<BlaaizCardCollectionResponse>> InitiateCardCollectionAsync(
         BlaaizCardCollectionRequest request,
         Guid transferId,
@@ -541,7 +598,7 @@ public class BlaaizApiClient : IBlaaizApiClient
 
     public Task<BlaaizApiResult<BlaaizPayoutResponse>> InitiatePayoutAsync(
         BlaaizPayoutRequest request,
-        Guid transferId,
+        Guid? transferId,
         Guid payoutId,
         CancellationToken ct = default)
     {

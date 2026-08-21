@@ -2871,6 +2871,200 @@ namespace KorridorX.Migrations
                     b.ToTable("BusinessCustomers");
                 });
 
+            modelBuilder.Entity("KorridorX.Models.EmbeddedFinance.BusinessWebhookDelivery", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("AttemptCount")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("BusinessWebhookEndpointId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("BusinessWebhookEventId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("DeadLetteredAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("DeliveredAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ErrorMessage")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime?>("LastAttemptAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("LastResponseBody")
+                        .HasMaxLength(4000)
+                        .HasColumnType("character varying(4000)");
+
+                    b.Property<int?>("LastResponseStatusCode")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("LastUpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("LockId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("LockedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("NextAttemptAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Status")
+                        .IsConcurrencyToken()
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BusinessWebhookEndpointId");
+
+                    b.HasIndex("LockId");
+
+                    b.HasIndex("BusinessWebhookEventId", "BusinessWebhookEndpointId")
+                        .IsUnique();
+
+                    b.HasIndex("Status", "NextAttemptAt");
+
+                    b.ToTable("BusinessWebhookDeliveries");
+                });
+
+            modelBuilder.Entity("KorridorX.Models.EmbeddedFinance.BusinessWebhookEndpoint", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ApiApplicationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("BusinessProfileId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CreatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("DeletedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("EventTypesCsv")
+                        .IsRequired()
+                        .HasMaxLength(4000)
+                        .HasColumnType("character varying(4000)");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime?>("LastUpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("LastUpdatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("MaxAttempts")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("SigningSecretLastFour")
+                        .IsRequired()
+                        .HasMaxLength(4)
+                        .HasColumnType("character varying(4)");
+
+                    b.Property<string>("SigningSecretProtected")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("Status")
+                        .IsConcurrencyToken()
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Url")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ApiApplicationId", "Status");
+
+                    b.HasIndex("BusinessProfileId", "Url")
+                        .IsUnique()
+                        .HasFilter("\"IsDeleted\" = false");
+
+                    b.ToTable("BusinessWebhookEndpoints");
+                });
+
+            modelBuilder.Entity("KorridorX.Models.EmbeddedFinance.BusinessWebhookEvent", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("BusinessProfileId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("EventId")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<string>("EventType")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime?>("LastUpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("OccurredAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("PayloadJson")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("EventId")
+                        .IsUnique();
+
+                    b.HasIndex("BusinessProfileId", "OccurredAt");
+
+                    b.HasIndex("BusinessProfileId", "EventType", "OccurredAt");
+
+                    b.ToTable("BusinessWebhookEvents");
+                });
+
             modelBuilder.Entity("KorridorX.Models.EmbeddedFinance.CollectionAccount", b =>
                 {
                     b.Property<Guid>("Id")
@@ -4329,6 +4523,9 @@ namespace KorridorX.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<Guid?>("BusinessCustomerId")
+                        .HasColumnType("uuid");
+
                     b.Property<Guid?>("BusinessProfileId")
                         .HasColumnType("uuid");
 
@@ -4417,6 +4614,9 @@ namespace KorridorX.Migrations
                         .HasMaxLength(20)
                         .HasColumnType("character varying(20)");
 
+                    b.Property<Guid?>("SourceFinancialAccountId")
+                        .HasColumnType("uuid");
+
                     b.Property<decimal>("TotalPayableAmount")
                         .HasPrecision(36, 18)
                         .HasColumnType("numeric(36,18)");
@@ -4429,6 +4629,8 @@ namespace KorridorX.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("BusinessCustomerId");
+
                     b.HasIndex("BusinessProfileId");
 
                     b.HasIndex("CustomerProfileId");
@@ -4436,6 +4638,8 @@ namespace KorridorX.Migrations
                     b.HasIndex("ExpiresAt");
 
                     b.HasIndex("ProviderQuoteId");
+
+                    b.HasIndex("SourceFinancialAccountId");
 
                     b.HasIndex("BusinessProfileId", "IsUsed", "ExpiresAt");
 
@@ -6354,6 +6558,9 @@ namespace KorridorX.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<Guid?>("BusinessCustomerId")
+                        .HasColumnType("uuid");
+
                     b.Property<Guid?>("BusinessProfileId")
                         .HasColumnType("uuid");
 
@@ -6401,9 +6608,15 @@ namespace KorridorX.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("BusinessCustomerId");
+
                     b.HasIndex("BusinessProfileId");
 
                     b.HasIndex("CustomerProfileId");
+
+                    b.HasIndex("ProviderCode", "BusinessCustomerId")
+                        .IsUnique()
+                        .HasFilter("\"BusinessCustomerId\" IS NOT NULL");
 
                     b.HasIndex("ProviderCode", "CustomerProfileId")
                         .IsUnique();
@@ -7333,6 +7546,9 @@ namespace KorridorX.Migrations
                     b.Property<Guid?>("BusinessBeneficiaryMobileWalletId")
                         .HasColumnType("uuid");
 
+                    b.Property<Guid?>("BusinessCustomerId")
+                        .HasColumnType("uuid");
+
                     b.Property<int?>("BusinessFundingSource")
                         .HasColumnType("integer");
 
@@ -7387,6 +7603,10 @@ namespace KorridorX.Migrations
                         .IsRequired()
                         .HasMaxLength(20)
                         .HasColumnType("character varying(20)");
+
+                    b.Property<string>("ExternalReference")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
 
                     b.Property<DateTime?>("FailedAt")
                         .HasColumnType("timestamp with time zone");
@@ -7510,6 +7730,9 @@ namespace KorridorX.Migrations
                         .HasMaxLength(20)
                         .HasColumnType("character varying(20)");
 
+                    b.Property<Guid?>("SourceFinancialAccountId")
+                        .HasColumnType("uuid");
+
                     b.Property<int>("Status")
                         .IsConcurrencyToken()
                         .HasColumnType("integer");
@@ -7537,6 +7760,8 @@ namespace KorridorX.Migrations
 
                     b.HasIndex("BusinessBeneficiaryMobileWalletId");
 
+                    b.HasIndex("BusinessCustomerId");
+
                     b.HasIndex("BusinessProfileId");
 
                     b.HasIndex("CreatedAt");
@@ -7560,10 +7785,16 @@ namespace KorridorX.Migrations
                     b.HasIndex("Reference")
                         .IsUnique();
 
+                    b.HasIndex("SourceFinancialAccountId");
+
                     b.HasIndex("Status");
 
                     b.HasIndex("TransferQuoteId")
                         .IsUnique();
+
+                    b.HasIndex("BusinessCustomerId", "ExternalReference")
+                        .IsUnique()
+                        .HasFilter("\"BusinessCustomerId\" IS NOT NULL AND \"ExternalReference\" IS NOT NULL AND \"IsDeleted\" = false");
 
                     b.HasIndex("BusinessProfileId", "CreatedAt");
 
@@ -9020,6 +9251,36 @@ namespace KorridorX.Migrations
                     b.Navigation("Country");
                 });
 
+            modelBuilder.Entity("KorridorX.Models.EmbeddedFinance.BusinessWebhookDelivery", b =>
+                {
+                    b.HasOne("KorridorX.Models.EmbeddedFinance.BusinessWebhookEndpoint", "BusinessWebhookEndpoint")
+                        .WithMany("Deliveries")
+                        .HasForeignKey("BusinessWebhookEndpointId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("KorridorX.Models.EmbeddedFinance.BusinessWebhookEvent", "BusinessWebhookEvent")
+                        .WithMany("Deliveries")
+                        .HasForeignKey("BusinessWebhookEventId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("BusinessWebhookEndpoint");
+
+                    b.Navigation("BusinessWebhookEvent");
+                });
+
+            modelBuilder.Entity("KorridorX.Models.EmbeddedFinance.BusinessWebhookEndpoint", b =>
+                {
+                    b.HasOne("KorridorX.Models.EmbeddedFinance.ApiApplication", "ApiApplication")
+                        .WithMany()
+                        .HasForeignKey("ApiApplicationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("ApiApplication");
+                });
+
             modelBuilder.Entity("KorridorX.Models.EmbeddedFinance.CollectionAccount", b =>
                 {
                     b.HasOne("KorridorX.Models.Lookups.Asset", "Asset")
@@ -9232,6 +9493,11 @@ namespace KorridorX.Migrations
 
             modelBuilder.Entity("KorridorX.Models.Fx.TransferQuote", b =>
                 {
+                    b.HasOne("KorridorX.Models.EmbeddedFinance.BusinessCustomer", "BusinessCustomer")
+                        .WithMany()
+                        .HasForeignKey("BusinessCustomerId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("KorridorX.Models.Customers.BusinessProfile", "BusinessProfile")
                         .WithMany()
                         .HasForeignKey("BusinessProfileId")
@@ -9242,9 +9508,18 @@ namespace KorridorX.Migrations
                         .HasForeignKey("CustomerProfileId")
                         .OnDelete(DeleteBehavior.Restrict);
 
+                    b.HasOne("KorridorX.Models.FinancialCore.FinancialAccount", "SourceFinancialAccount")
+                        .WithMany()
+                        .HasForeignKey("SourceFinancialAccountId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("BusinessCustomer");
+
                     b.Navigation("BusinessProfile");
 
                     b.Navigation("CustomerProfile");
+
+                    b.Navigation("SourceFinancialAccount");
                 });
 
             modelBuilder.Entity("KorridorX.Models.Identity.LoginHistory", b =>
@@ -9660,6 +9935,11 @@ namespace KorridorX.Migrations
 
             modelBuilder.Entity("KorridorX.Models.Providers.ProviderCustomer", b =>
                 {
+                    b.HasOne("KorridorX.Models.EmbeddedFinance.BusinessCustomer", "BusinessCustomer")
+                        .WithMany()
+                        .HasForeignKey("BusinessCustomerId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("KorridorX.Models.Customers.BusinessProfile", "BusinessProfile")
                         .WithMany()
                         .HasForeignKey("BusinessProfileId")
@@ -9669,6 +9949,8 @@ namespace KorridorX.Migrations
                         .WithMany()
                         .HasForeignKey("CustomerProfileId")
                         .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("BusinessCustomer");
 
                     b.Navigation("BusinessProfile");
 
@@ -9918,6 +10200,11 @@ namespace KorridorX.Migrations
                         .HasForeignKey("BusinessBeneficiaryMobileWalletId")
                         .OnDelete(DeleteBehavior.Restrict);
 
+                    b.HasOne("KorridorX.Models.EmbeddedFinance.BusinessCustomer", "BusinessCustomer")
+                        .WithMany()
+                        .HasForeignKey("BusinessCustomerId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("KorridorX.Models.Customers.BusinessProfile", "BusinessProfile")
                         .WithMany()
                         .HasForeignKey("BusinessProfileId")
@@ -9943,6 +10230,11 @@ namespace KorridorX.Migrations
                         .HasForeignKey("RecipientMobileWalletId")
                         .OnDelete(DeleteBehavior.Restrict);
 
+                    b.HasOne("KorridorX.Models.FinancialCore.FinancialAccount", "SourceFinancialAccount")
+                        .WithMany()
+                        .HasForeignKey("SourceFinancialAccountId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("KorridorX.Models.Fx.TransferQuote", "TransferQuote")
                         .WithMany()
                         .HasForeignKey("TransferQuoteId")
@@ -9955,6 +10247,8 @@ namespace KorridorX.Migrations
 
                     b.Navigation("BusinessBeneficiaryMobileWallet");
 
+                    b.Navigation("BusinessCustomer");
+
                     b.Navigation("BusinessProfile");
 
                     b.Navigation("CustomerProfile");
@@ -9964,6 +10258,8 @@ namespace KorridorX.Migrations
                     b.Navigation("RecipientBankAccount");
 
                     b.Navigation("RecipientMobileWallet");
+
+                    b.Navigation("SourceFinancialAccount");
 
                     b.Navigation("TransferQuote");
                 });
@@ -10170,6 +10466,16 @@ namespace KorridorX.Migrations
             modelBuilder.Entity("KorridorX.Models.EmbeddedFinance.BusinessCustomer", b =>
                 {
                     b.Navigation("CollectionAccounts");
+                });
+
+            modelBuilder.Entity("KorridorX.Models.EmbeddedFinance.BusinessWebhookEndpoint", b =>
+                {
+                    b.Navigation("Deliveries");
+                });
+
+            modelBuilder.Entity("KorridorX.Models.EmbeddedFinance.BusinessWebhookEvent", b =>
+                {
+                    b.Navigation("Deliveries");
                 });
 
             modelBuilder.Entity("KorridorX.Models.EmbeddedFinance.CollectionAccount", b =>

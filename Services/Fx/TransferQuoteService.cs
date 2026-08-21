@@ -195,6 +195,8 @@ public class TransferQuoteService : ITransferQuoteService
             Id = quote.Id,
             CustomerProfileId = quote.CustomerProfileId,
             BusinessProfileId = quote.BusinessProfileId,
+            BusinessCustomerId = quote.BusinessCustomerId,
+            SourceFinancialAccountId = quote.SourceFinancialAccountId,
             SourceCountryCode = quote.SourceCountryCode,
             DestinationCountryCode = quote.DestinationCountryCode,
             SourceCurrencyCode = quote.SourceCurrencyCode,

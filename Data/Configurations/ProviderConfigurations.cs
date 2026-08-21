@@ -21,8 +21,12 @@ public class ProviderCustomerConfiguration : IEntityTypeConfiguration<ProviderCu
     {
         builder.HasIndex(x => x.CustomerProfileId);
         builder.HasIndex(x => x.BusinessProfileId);
+        builder.HasIndex(x => x.BusinessCustomerId);
         builder.HasIndex(x => new { x.ProviderCode, x.ProviderCustomerId }).IsUnique();
         builder.HasIndex(x => new { x.ProviderCode, x.CustomerProfileId }).IsUnique();
+        builder.HasIndex(x => new { x.ProviderCode, x.BusinessCustomerId })
+            .IsUnique()
+            .HasFilter("\"BusinessCustomerId\" IS NOT NULL");
 
         builder.Property(x => x.ProviderCustomerId).HasMaxLength(150);
         builder.Property(x => x.ProviderStatus).HasMaxLength(100);
@@ -35,6 +39,11 @@ public class ProviderCustomerConfiguration : IEntityTypeConfiguration<ProviderCu
         builder.HasOne(x => x.BusinessProfile)
             .WithMany()
             .HasForeignKey(x => x.BusinessProfileId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasOne(x => x.BusinessCustomer)
+            .WithMany()
+            .HasForeignKey(x => x.BusinessCustomerId)
             .OnDelete(DeleteBehavior.Restrict);
     }
 }

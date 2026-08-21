@@ -60,6 +60,46 @@ public static class ApiTestClient
             response.StatusCode);
     }
 
+    public static async Task<RegistrationResultDto> RegisterAndConfirmAsync(
+        this HttpClient client,
+        IServiceProvider services,
+        RegisterRequestDto request,
+        CancellationToken ct = default)
+    {
+        using var registerResponse = await client.PostJsonAsync("/api/auth/register", request, ct);
+        await registerResponse.EnsureSuccessWithBodyAsync(ct);
+
+        var registerEnvelope = await registerResponse
+            .ReadApiResponseAsync<RegistrationResultDto>(ct);
+
+        var registration = registerEnvelope.Data
+            ?? throw new InvalidOperationException("Registration returned no data.");
+
+        if (registration.EmailConfirmationRequired)
+        {
+            await using var scope = services.CreateAsyncScope();
+
+            var userManager = scope.ServiceProvider
+                .GetRequiredService<UserManager<ApplicationUser>>();
+
+            var user = await userManager.FindByEmailAsync(request.Email)
+                ?? throw new InvalidOperationException("Registered user was not found.");
+
+            var rawToken = await userManager.GenerateEmailConfirmationTokenAsync(user);
+
+            using var confirmationResponse = await client.PostJsonAsync(
+                "/api/auth/email-confirmation/confirm",
+                new EmailConfirmationDto(
+                    user.Id,
+                    IdentityTokenCodec.Encode(rawToken)),
+                ct);
+
+            await confirmationResponse.EnsureSuccessWithBodyAsync(ct);
+        }
+
+        return registration;
+    }
+
     public static async Task<(RegistrationResultDto Registration, AuthResponseDto Authentication)>
         RegisterConfirmAndLoginAsync(
             this HttpClient client,
