@@ -311,6 +311,7 @@ builder.Services.AddScoped<ICollectionAccountProvisioningService, CollectionAcco
 builder.Services.AddScoped<IEmbeddedInboundCollectionService, EmbeddedInboundCollectionService>();
 builder.Services.AddScoped<IEmbeddedFinancePayoutService, EmbeddedFinancePayoutService>();
 builder.Services.AddScoped<IEmbeddedFinanceTransferService, EmbeddedFinanceTransferService>();
+builder.Services.AddScoped<IEmbeddedTradingService, EmbeddedTradingService>();
 builder.Services.AddScoped<IEmbeddedPayoutSettlementService, EmbeddedPayoutSettlementService>();
 builder.Services.AddScoped<ICollectionAccountProvisioner, BlaaizCollectionAccountProvisioner>();
 builder.Services.AddScoped<IEmbeddedWebhookUrlSecurityValidator, EmbeddedWebhookUrlSecurityValidator>();

@@ -318,6 +318,208 @@ public class MarketplaceOrderService : IMarketplaceOrderService
     }
 
 
+
+    public async Task<TradeOrderDto> CreateOrderForOwnerAsync(
+        FinancialAccountOwnerType ownerType,
+        Guid ownerId,
+        Guid? actionedByUserId,
+        CreateTradeOrderRequestDto request,
+        CancellationToken ct = default)
+    {
+        if (request.OrderType != TradeOrderType.Limit)
+            throw new InvalidOperationException("Only limit orders are enabled in the initial marketplace release.");
+
+        if (request.TimeInForce is not TradeOrderTimeInForce.GoodTillCancelled and not TradeOrderTimeInForce.ImmediateOrCancel)
+            throw new InvalidOperationException("Only good-till-cancelled and immediate-or-cancel orders are enabled in the initial marketplace release.");
+
+        var pair = await _db.MarketplacePairs
+            .Include(x => x.BaseAsset)
+            .Include(x => x.QuoteAsset)
+            .FirstOrDefaultAsync(x => x.Id == request.MarketplacePairId && !x.IsDeleted, ct)
+            ?? throw new InvalidOperationException("Marketplace pair not found.");
+
+        ValidatePairAndOrder(pair, request);
+
+        var accounts = await _db.FinancialAccounts
+            .Where(x =>
+                x.OwnerType == ownerType &&
+                x.OwnerId == ownerId &&
+                x.AccountType == FinancialAccountType.Customer &&
+                (x.AssetCode == pair.BaseAssetCode || x.AssetCode == pair.QuoteAssetCode) &&
+                !x.IsDeleted)
+            .ToListAsync(ct);
+
+        var baseAccount = accounts.FirstOrDefault(x => x.AssetCode == pair.BaseAssetCode)
+            ?? throw new InvalidOperationException($"A {pair.BaseAssetCode} financial account is required to trade this pair.");
+        var quoteAccount = accounts.FirstOrDefault(x => x.AssetCode == pair.QuoteAssetCode)
+            ?? throw new InvalidOperationException($"A {pair.QuoteAssetCode} financial account is required to trade this pair.");
+
+        EnsureTradeAccount(baseAccount, ownerType, ownerId, pair.BaseAssetCode);
+        EnsureTradeAccount(quoteAccount, ownerType, ownerId, pair.QuoteAssetCode);
+
+        var order = new TradeOrder
+        {
+            Reference = GenerateReference("KXORD"),
+            MarketplacePairId = pair.Id,
+            MarketplacePair = pair,
+            OwnerType = ownerType,
+            OwnerId = ownerId,
+            BaseFinancialAccountId = baseAccount.Id,
+            BaseFinancialAccount = baseAccount,
+            QuoteFinancialAccountId = quoteAccount.Id,
+            QuoteFinancialAccount = quoteAccount,
+            Side = request.Side,
+            OrderType = request.OrderType,
+            TimeInForce = request.TimeInForce,
+            Status = TradeOrderStatus.PendingReservation,
+            OriginalQuantity = request.Quantity,
+            RemainingQuantity = request.Quantity,
+            FilledQuantity = 0m,
+            LimitPrice = request.LimitPrice,
+            ExpiresAt = request.ExpiresAt,
+            CreatedByUserId = actionedByUserId
+        };
+
+        await using (var tx = await _db.Database.BeginTransactionAsync(ct))
+        {
+            _db.TradeOrders.Add(order);
+            await _db.SaveChangesAsync(ct);
+
+            var reservationAccount = request.Side == TradeOrderSide.Sell ? baseAccount : quoteAccount;
+            var reservationAmount = request.Side == TradeOrderSide.Sell
+                ? request.Quantity
+                : request.Quantity * request.LimitPrice!.Value;
+
+            var reservation = await _reservationService.ReserveAsync(
+                reservationAccount.Id,
+                FinancialReservationType.MarketplaceTrade,
+                nameof(TradeOrder),
+                order.Id,
+                reservationAmount,
+                actionedByUserId,
+                nameof(MarketplacePair),
+                pair.Id,
+                ct);
+
+            order.ReservationId = reservation.Id;
+            order.Reservation = reservation;
+            order.Status = TradeOrderStatus.Open;
+            order.OpenedAt = DateTime.UtcNow;
+            order.LastUpdatedAt = DateTime.UtcNow;
+            order.LastUpdatedByUserId = actionedByUserId;
+
+            await _db.SaveChangesAsync(ct);
+            await tx.CommitAsync(ct);
+        }
+
+        await _matchingEngine.MatchOrderAsync(order.Id, ct);
+
+        if (request.TimeInForce == TradeOrderTimeInForce.ImmediateOrCancel)
+        {
+            var refreshed = await _db.TradeOrders.AsNoTracking().FirstAsync(x => x.Id == order.Id, ct);
+            if (refreshed.Status is TradeOrderStatus.Open or TradeOrderStatus.PartiallyFilled)
+                await CancelOrderForOwnerAsync(ownerType, ownerId, actionedByUserId, order.Id, ct);
+        }
+
+        return await GetOrderForOwnerAsync(ownerType, ownerId, order.Id, ct);
+    }
+
+    public async Task<TradeOrderDto> CancelOrderForOwnerAsync(
+        FinancialAccountOwnerType ownerType,
+        Guid ownerId,
+        Guid? actionedByUserId,
+        Guid orderId,
+        CancellationToken ct = default)
+    {
+        await using var tx = await _db.Database.BeginTransactionAsync(ct);
+
+        var order = await _db.TradeOrders
+            .Include(x => x.MarketplacePair)
+            .FirstOrDefaultAsync(x =>
+                x.Id == orderId &&
+                x.OwnerType == ownerType &&
+                x.OwnerId == ownerId &&
+                !x.IsDeleted,
+                ct)
+            ?? throw new InvalidOperationException("Trade order not found.");
+
+        if (order.Status == TradeOrderStatus.Cancelled)
+            return ToDto(order);
+
+        if (order.Status is TradeOrderStatus.Filled or TradeOrderStatus.Expired or TradeOrderStatus.Rejected)
+            throw new InvalidOperationException($"Order cannot be cancelled while its status is '{order.Status}'.");
+
+        if (order.ReservationId.HasValue)
+        {
+            var releaseAmount = await CalculateCancellationReleaseAmountAsync(order, ct);
+            if (releaseAmount > 0m)
+            {
+                await _reservationService.ReleaseAsync(
+                    order.ReservationId.Value,
+                    releaseAmount,
+                    $"Marketplace order {order.Reference} cancelled.",
+                    actionedByUserId,
+                    ct);
+            }
+        }
+
+        order.Status = TradeOrderStatus.Cancelled;
+        order.CancelledAt = DateTime.UtcNow;
+        order.CancellationReason = "Cancelled by owner.";
+        order.LastUpdatedAt = DateTime.UtcNow;
+        order.LastUpdatedByUserId = actionedByUserId;
+
+        await _db.SaveChangesAsync(ct);
+        await tx.CommitAsync(ct);
+        return ToDto(order);
+    }
+
+    public async Task<TradeOrderDto> GetOrderForOwnerAsync(
+        FinancialAccountOwnerType ownerType,
+        Guid ownerId,
+        Guid orderId,
+        CancellationToken ct = default)
+    {
+        var order = await _db.TradeOrders
+            .AsNoTracking()
+            .Include(x => x.MarketplacePair)
+            .FirstOrDefaultAsync(x =>
+                x.Id == orderId &&
+                x.OwnerType == ownerType &&
+                x.OwnerId == ownerId &&
+                !x.IsDeleted,
+                ct)
+            ?? throw new InvalidOperationException("Trade order not found.");
+
+        return ToDto(order);
+    }
+
+    public async Task<PagedResult<TradeOrderDto>> GetOrdersForOwnerAsync(
+        FinancialAccountOwnerType ownerType,
+        Guid ownerId,
+        int page = 1,
+        int pageSize = 20,
+        CancellationToken ct = default)
+    {
+        page = Math.Max(page, 1);
+        pageSize = Math.Clamp(pageSize, 1, 100);
+
+        var query = _db.TradeOrders
+            .AsNoTracking()
+            .Include(x => x.MarketplacePair)
+            .Where(x => x.OwnerType == ownerType && x.OwnerId == ownerId && !x.IsDeleted)
+            .OrderByDescending(x => x.CreatedAt);
+
+        var total = await query.CountAsync(ct);
+        var items = await query.Skip((page - 1) * pageSize).Take(pageSize).ToListAsync(ct);
+
+        return new PagedResult<TradeOrderDto>
+        {
+            Items = items.Select(ToDto).ToList(),
+            Meta = new PageMeta { Page = page, PageSize = pageSize, TotalItems = total }
+        };
+    }
+
     private async Task<decimal> CalculateCancellationReleaseAmountAsync(TradeOrder order, CancellationToken ct)
     {
         if (!order.ReservationId.HasValue)
@@ -414,11 +616,18 @@ public class MarketplaceOrderService : IMarketplaceOrderService
         }
     }
 
-    private static void EnsureTradeAccount(FinancialAccount account, Guid userId, string expectedAssetCode)
+    private static void EnsureTradeAccount(FinancialAccount account, Guid userId, string expectedAssetCode) =>
+        EnsureTradeAccount(account, FinancialAccountOwnerType.User, userId, expectedAssetCode);
+
+    private static void EnsureTradeAccount(
+        FinancialAccount account,
+        FinancialAccountOwnerType ownerType,
+        Guid ownerId,
+        string expectedAssetCode)
     {
-        if (account.OwnerType != FinancialAccountOwnerType.User || account.OwnerId != userId)
+        if (account.OwnerType != ownerType || account.OwnerId != ownerId)
         {
-            throw new InvalidOperationException("Financial account ownership does not match the authenticated user.");
+            throw new InvalidOperationException("Financial account ownership does not match the trading owner.");
         }
 
         if (!string.Equals(account.AssetCode, expectedAssetCode, StringComparison.OrdinalIgnoreCase))

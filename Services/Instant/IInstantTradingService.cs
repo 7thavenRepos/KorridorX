@@ -10,6 +10,25 @@ public interface IInstantTradingService
     Task<InstantQuoteDto> CreateQuoteAsync(Guid userId, CreateInstantQuoteRequestDto request, CancellationToken ct = default);
     Task<InstantTradeDto> ExecuteQuoteAsync(Guid userId, Guid quoteId, CancellationToken ct = default);
     Task<PagedResult<InstantTradeDto>> GetMyTradesAsync(Guid userId, int page = 1, int pageSize = 20, CancellationToken ct = default);
+    Task<InstantQuoteDto> CreateQuoteForOwnerAsync(
+        FinancialAccountOwnerType ownerType,
+        Guid ownerId,
+        string countryCode,
+        CreateInstantQuoteRequestDto request,
+        Guid? actionedByUserId = null,
+        CancellationToken ct = default);
+    Task<InstantTradeDto> ExecuteQuoteForOwnerAsync(
+        FinancialAccountOwnerType ownerType,
+        Guid ownerId,
+        Guid quoteId,
+        Guid? actionedByUserId = null,
+        CancellationToken ct = default);
+    Task<PagedResult<InstantTradeDto>> GetTradesForOwnerAsync(
+        FinancialAccountOwnerType ownerType,
+        Guid ownerId,
+        int page = 1,
+        int pageSize = 20,
+        CancellationToken ct = default);
 
     Task<InstantPairDto> CreatePairAsync(Guid actionedByUserId, CreateInstantPairRequestDto request, CancellationToken ct = default);
     Task<InstantPairDto> UpdatePairAsync(Guid actionedByUserId, Guid pairId, UpdateInstantPairRequestDto request, CancellationToken ct = default);

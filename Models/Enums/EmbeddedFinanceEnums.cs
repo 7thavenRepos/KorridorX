@@ -15,9 +15,11 @@ public enum EmbeddedFinanceScope : long
     TransfersRead = 1L << 8,
     TransfersWrite = 1L << 9,
     WebhooksManage = 1L << 10,
+    TradingRead = 1L << 11,
+    TradingWrite = 1L << 12,
     All = CustomersRead | CustomersWrite | AccountsRead | AccountsWrite |
           CollectionsRead | CollectionsWrite | PayoutsRead | PayoutsWrite |
-          TransfersRead | TransfersWrite | WebhooksManage
+          TransfersRead | TransfersWrite | WebhooksManage | TradingRead | TradingWrite
 }
 
 public enum ApiApplicationStatus { Active = 1, Suspended = 2, Disabled = 3 }

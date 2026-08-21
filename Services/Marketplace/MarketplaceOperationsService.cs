@@ -16,6 +16,12 @@ public interface IMarketplaceOperationsService
     Task<MarketplacePairDto> SetPairStatusAsync(Guid pairId, MarketplacePairStatus status, Guid? actionedByUserId, CancellationToken ct = default);
 
     Task<PagedResult<TradeHistoryDto>> GetMyTradesAsync(Guid userId, int page = 1, int pageSize = 20, CancellationToken ct = default);
+    Task<PagedResult<TradeHistoryDto>> GetTradesForOwnerAsync(
+        FinancialAccountOwnerType ownerType,
+        Guid ownerId,
+        int page = 1,
+        int pageSize = 20,
+        CancellationToken ct = default);
     Task<PagedResult<TradeOrderDto>> GetOrdersAsync(Guid? pairId, TradeOrderStatus? status, int page = 1, int pageSize = 50, CancellationToken ct = default);
     Task<PagedResult<TradeDto>> GetTradesAsync(Guid? pairId, TradeStatus? status, int page = 1, int pageSize = 50, CancellationToken ct = default);
     Task<PagedResult<TradeMatchDto>> GetMatchesAsync(Guid? pairId, TradeMatchStatus? status, int page = 1, int pageSize = 50, CancellationToken ct = default);
@@ -174,6 +180,56 @@ public class MarketplaceOperationsService : IMarketplaceOperationsService
             var isBuyer =
                 x.BuyerBaseFinancialAccount.OwnerType == FinancialAccountOwnerType.User &&
                 x.BuyerBaseFinancialAccount.OwnerId == userId;
+
+            return new TradeHistoryDto(
+                x.Id,
+                x.Reference,
+                x.TradeMatchId,
+                x.MarketplacePairId,
+                x.MarketplacePair.Code,
+                isBuyer ? TradeOrderSide.Buy : TradeOrderSide.Sell,
+                x.Price,
+                x.BaseQuantity,
+                x.QuoteQuantity,
+                x.Status,
+                x.CreatedAt,
+                x.CompletedAt);
+        }).ToList();
+
+        return Page(items, total, page, pageSize);
+    }
+
+    public async Task<PagedResult<TradeHistoryDto>> GetTradesForOwnerAsync(
+        FinancialAccountOwnerType ownerType,
+        Guid ownerId,
+        int page = 1,
+        int pageSize = 20,
+        CancellationToken ct = default)
+    {
+        page = Math.Max(page, 1);
+        pageSize = Math.Clamp(pageSize, 1, 100);
+
+        var query = _db.Trades
+            .AsNoTracking()
+            .Include(x => x.MarketplacePair)
+            .Include(x => x.BuyerBaseFinancialAccount)
+            .Include(x => x.SellerBaseFinancialAccount)
+            .Where(x =>
+                !x.IsDeleted &&
+                ((x.BuyerBaseFinancialAccount.OwnerType == ownerType &&
+                  x.BuyerBaseFinancialAccount.OwnerId == ownerId) ||
+                 (x.SellerBaseFinancialAccount.OwnerType == ownerType &&
+                  x.SellerBaseFinancialAccount.OwnerId == ownerId)))
+            .OrderByDescending(x => x.CreatedAt);
+
+        var total = await query.CountAsync(ct);
+        var rows = await query.Skip((page - 1) * pageSize).Take(pageSize).ToListAsync(ct);
+
+        var items = rows.Select(x =>
+        {
+            var isBuyer =
+                x.BuyerBaseFinancialAccount.OwnerType == ownerType &&
+                x.BuyerBaseFinancialAccount.OwnerId == ownerId;
 
             return new TradeHistoryDto(
                 x.Id,

@@ -1,4 +1,6 @@
 using KorridorX.Dtos.EmbeddedFinance;
+using KorridorX.Dtos.Instant;
+using KorridorX.Dtos.Marketplace;
 using KorridorX.Infrastructure;
 using KorridorX.Services.EmbeddedFinance;
 using Microsoft.AspNetCore.Mvc;
@@ -11,16 +13,19 @@ public sealed class EmbeddedFinanceCustomersController : ControllerBase
     private readonly ICollectionAccountProvisioningService _provisioning;
     private readonly IEmbeddedFinancePayoutService _payouts;
     private readonly IEmbeddedFinanceTransferService _transfers;
+    private readonly IEmbeddedTradingService _trading;
     public EmbeddedFinanceCustomersController(
         IEmbeddedFinanceCustomerService service,
         ICollectionAccountProvisioningService provisioning,
         IEmbeddedFinancePayoutService payouts,
-        IEmbeddedFinanceTransferService transfers)
+        IEmbeddedFinanceTransferService transfers,
+        IEmbeddedTradingService trading)
     {
         _service = service;
         _provisioning = provisioning;
         _payouts = payouts;
         _transfers = transfers;
+        _trading = trading;
     }
     [HttpGet] public async Task<IActionResult> Customers([FromQuery]int page=1,[FromQuery]int pageSize=50,CancellationToken ct=default){var r=await _service.GetCustomersAsync(page,pageSize,ct);return Ok(ApiResponses.OkPaged(r.Items,r.Meta,"Business customers retrieved successfully."));}
     [HttpPost] public async Task<IActionResult> CreateCustomer([FromHeader(Name="Idempotency-Key")]string? key,[FromBody]CreateBusinessCustomerRequestDto request,CancellationToken ct)=>Ok(ApiResponses.Ok(await _service.CreateCustomerAsync(request,key??"",ct),"Business customer created successfully."));
@@ -149,5 +154,113 @@ public sealed class EmbeddedFinanceCustomersController : ControllerBase
                 key ?? "",
                 ct),
             "Embedded transfer created successfully."));
+
+
+    [HttpGet("{businessCustomerId:guid}/trading/balances")]
+    public async Task<IActionResult> TradingBalances(Guid businessCustomerId, CancellationToken ct) =>
+        Ok(ApiResponses.Ok(
+            await _trading.GetBalancesAsync(businessCustomerId, ct),
+            "Trading balances retrieved successfully."));
+
+    [HttpGet("{businessCustomerId:guid}/trading/marketplace/pairs")]
+    public async Task<IActionResult> MarketplacePairs(Guid businessCustomerId, CancellationToken ct) =>
+        Ok(ApiResponses.Ok(
+            await _trading.GetMarketplacePairsAsync(businessCustomerId, ct),
+            "Marketplace pairs retrieved successfully."));
+
+    [HttpGet("{businessCustomerId:guid}/trading/marketplace/pairs/{pairId:guid}/orderbook")]
+    public async Task<IActionResult> MarketplaceOrderBook(
+        Guid businessCustomerId,
+        Guid pairId,
+        [FromQuery] int depth = 20,
+        CancellationToken ct = default) =>
+        Ok(ApiResponses.Ok(
+            await _trading.GetOrderBookAsync(businessCustomerId, pairId, depth, ct),
+            "Marketplace order book retrieved successfully."));
+
+    [HttpPost("{businessCustomerId:guid}/trading/marketplace/orders")]
+    public async Task<IActionResult> CreateMarketplaceOrder(
+        Guid businessCustomerId,
+        [FromBody] CreateTradeOrderRequestDto request,
+        CancellationToken ct) =>
+        Ok(ApiResponses.Ok(
+            await _trading.CreateMarketplaceOrderAsync(businessCustomerId, request, ct),
+            "Marketplace order created successfully."));
+
+    [HttpGet("{businessCustomerId:guid}/trading/marketplace/orders")]
+    public async Task<IActionResult> MarketplaceOrders(
+        Guid businessCustomerId,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 20,
+        CancellationToken ct = default)
+    {
+        var result = await _trading.GetMarketplaceOrdersAsync(businessCustomerId, page, pageSize, ct);
+        return Ok(ApiResponses.OkPaged(result.Items, result.Meta, "Marketplace orders retrieved successfully."));
+    }
+
+    [HttpGet("{businessCustomerId:guid}/trading/marketplace/orders/{orderId:guid}")]
+    public async Task<IActionResult> MarketplaceOrder(
+        Guid businessCustomerId,
+        Guid orderId,
+        CancellationToken ct) =>
+        Ok(ApiResponses.Ok(
+            await _trading.GetMarketplaceOrderAsync(businessCustomerId, orderId, ct),
+            "Marketplace order retrieved successfully."));
+
+    [HttpPost("{businessCustomerId:guid}/trading/marketplace/orders/{orderId:guid}/cancel")]
+    public async Task<IActionResult> CancelMarketplaceOrder(
+        Guid businessCustomerId,
+        Guid orderId,
+        CancellationToken ct) =>
+        Ok(ApiResponses.Ok(
+            await _trading.CancelMarketplaceOrderAsync(businessCustomerId, orderId, ct),
+            "Marketplace order cancelled successfully."));
+
+    [HttpGet("{businessCustomerId:guid}/trading/marketplace/trades")]
+    public async Task<IActionResult> MarketplaceTrades(
+        Guid businessCustomerId,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 20,
+        CancellationToken ct = default)
+    {
+        var result = await _trading.GetMarketplaceTradesAsync(businessCustomerId, page, pageSize, ct);
+        return Ok(ApiResponses.OkPaged(result.Items, result.Meta, "Marketplace trades retrieved successfully."));
+    }
+
+    [HttpGet("{businessCustomerId:guid}/trading/instant/pairs")]
+    public async Task<IActionResult> InstantPairs(Guid businessCustomerId, CancellationToken ct) =>
+        Ok(ApiResponses.Ok(
+            await _trading.GetInstantPairsAsync(businessCustomerId, ct),
+            "Instant pairs retrieved successfully."));
+
+    [HttpPost("{businessCustomerId:guid}/trading/instant/quotes")]
+    public async Task<IActionResult> CreateInstantQuote(
+        Guid businessCustomerId,
+        [FromBody] CreateInstantQuoteRequestDto request,
+        CancellationToken ct) =>
+        Ok(ApiResponses.Ok(
+            await _trading.CreateInstantQuoteAsync(businessCustomerId, request, ct),
+            "Instant quote created successfully."));
+
+    [HttpPost("{businessCustomerId:guid}/trading/instant/quotes/{quoteId:guid}/execute")]
+    public async Task<IActionResult> ExecuteInstantQuote(
+        Guid businessCustomerId,
+        Guid quoteId,
+        CancellationToken ct) =>
+        Ok(ApiResponses.Ok(
+            await _trading.ExecuteInstantQuoteAsync(businessCustomerId, quoteId, ct),
+            "Instant quote executed successfully."));
+
+    [HttpGet("{businessCustomerId:guid}/trading/instant/trades")]
+    public async Task<IActionResult> InstantTrades(
+        Guid businessCustomerId,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 20,
+        CancellationToken ct = default)
+    {
+        var result = await _trading.GetInstantTradesAsync(businessCustomerId, page, pageSize, ct);
+        return Ok(ApiResponses.OkPaged(result.Items, result.Meta, "Instant trades retrieved successfully."));
+    }
+
 
 }

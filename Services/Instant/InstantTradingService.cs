@@ -145,6 +145,8 @@ public sealed class InstantTradingService : IInstantTradingService
             Reference = GenerateReference("KXIQ"),
             InstantPairId = pair.Id,
             UserId = userId,
+            OwnerType = FinancialAccountOwnerType.User,
+            OwnerId = userId,
             UserSourceFinancialAccountId = sourceAccount.Id,
             UserDestinationFinancialAccountId = destinationAccount.Id,
             HouseSourceFinancialAccountId = pair.HouseSourceFinancialAccountId,
@@ -165,6 +167,126 @@ public sealed class InstantTradingService : IInstantTradingService
         return ToQuoteDto(quote, pair);
     }
 
+    public async Task<InstantQuoteDto> CreateQuoteForOwnerAsync(
+        FinancialAccountOwnerType ownerType,
+        Guid ownerId,
+        string countryCode,
+        CreateInstantQuoteRequestDto request,
+        Guid? actionedByUserId = null,
+        CancellationToken ct = default)
+    {
+        var now = DateTime.UtcNow;
+        var normalizedCountry = (countryCode ?? "").Trim().ToUpperInvariant();
+
+        var pair = await _db.InstantPairs
+            .AsNoTracking()
+            .Include(x => x.SourceAsset)
+            .Include(x => x.DestinationAsset)
+            .Include(x => x.HouseSourceFinancialAccount)
+            .Include(x => x.HouseDestinationFinancialAccount)
+            .FirstOrDefaultAsync(x => x.Id == request.InstantPairId && !x.IsDeleted, ct)
+            ?? throw new InvalidOperationException("Instant trading pair not found.");
+
+        if (pair.Status != InstantPairStatus.Active)
+            throw new InvalidOperationException("Instant trading is not active for this pair.");
+
+        ValidateSourceAmount(pair, request.SourceAmount);
+
+        if (!pair.SourceAsset.IsSupported || !pair.SourceAsset.InstantEnabled ||
+            !pair.DestinationAsset.IsSupported || !pair.DestinationAsset.InstantEnabled)
+            throw new InvalidOperationException("One or more assets are not enabled for instant trading.");
+
+        ValidateHouseAccount(pair.HouseSourceFinancialAccount, pair.SourceAssetCode, "source");
+        ValidateHouseAccount(pair.HouseDestinationFinancialAccount, pair.DestinationAssetCode, "destination");
+
+        var countryAssets = await _db.CountryAssets
+            .AsNoTracking()
+            .Where(x =>
+                x.CountryCode == normalizedCountry &&
+                (x.AssetCode == pair.SourceAssetCode || x.AssetCode == pair.DestinationAssetCode))
+            .ToListAsync(ct);
+
+        if (!countryAssets.Any(x => x.AssetCode == pair.SourceAssetCode && x.CanUseInstant) ||
+            !countryAssets.Any(x => x.AssetCode == pair.DestinationAssetCode && x.CanUseInstant))
+            throw new InvalidOperationException("Instant trading is not enabled for one or more assets in the owner's country.");
+
+        var accounts = await _db.FinancialAccounts
+            .AsNoTracking()
+            .Where(x =>
+                x.OwnerType == ownerType &&
+                x.OwnerId == ownerId &&
+                x.AccountType == FinancialAccountType.Customer &&
+                (x.AssetCode == pair.SourceAssetCode || x.AssetCode == pair.DestinationAssetCode) &&
+                !x.IsDeleted)
+            .ToListAsync(ct);
+
+        var sourceAccount = accounts.SingleOrDefault(x => x.AssetCode == pair.SourceAssetCode)
+            ?? throw new InvalidOperationException($"Owner {pair.SourceAssetCode} account not found.");
+        var destinationAccount = accounts.SingleOrDefault(x => x.AssetCode == pair.DestinationAssetCode)
+            ?? throw new InvalidOperationException($"Owner {pair.DestinationAssetCode} account not found.");
+
+        ValidateOwnerAccount(sourceAccount, ownerType, ownerId, pair.SourceAssetCode, "source");
+        ValidateOwnerAccount(destinationAccount, ownerType, ownerId, pair.DestinationAssetCode, "destination");
+
+        if (sourceAccount.AvailableBalance < request.SourceAmount)
+            throw new InvalidOperationException($"Insufficient {pair.SourceAssetCode} available balance.");
+
+        var staleBefore = now.AddMinutes(-_treasuryOptions.FxRateStaleMinutes);
+        var rate = await _db.ExchangeRates
+            .AsNoTracking()
+            .Where(x =>
+                !x.IsDeleted &&
+                x.IsActive &&
+                x.SourceCurrencyCode == pair.SourceAssetCode &&
+                x.DestinationCurrencyCode == pair.DestinationAssetCode &&
+                x.EffectiveFrom <= now &&
+                (!x.EffectiveTo.HasValue || x.EffectiveTo > now))
+            .OrderByDescending(x => x.EffectiveFrom)
+            .FirstOrDefaultAsync(ct)
+            ?? throw new InvalidOperationException("No active FX rate is available for this instant pair.");
+
+        if (rate.EffectiveFrom < staleBefore)
+            throw new InvalidOperationException("The current instant FX rate is stale.");
+
+        var destinationAmount = decimal.Round(
+            request.SourceAmount * rate.CustomerRate,
+            pair.DestinationAsset.DecimalPlaces,
+            MidpointRounding.ToZero);
+
+        if (destinationAmount <= 0m)
+            throw new InvalidOperationException("The calculated instant destination amount is invalid.");
+
+        if (pair.HouseDestinationFinancialAccount.AvailableBalance < destinationAmount ||
+            pair.HouseDestinationFinancialAccount.SettledBalance < destinationAmount)
+            throw new InvalidOperationException($"House {pair.DestinationAssetCode} liquidity is insufficient.");
+
+        var quote = new InstantQuote
+        {
+            Reference = GenerateReference("KXIQ"),
+            InstantPairId = pair.Id,
+            UserId = ownerType == FinancialAccountOwnerType.User ? ownerId : Guid.Empty,
+            OwnerType = ownerType,
+            OwnerId = ownerId,
+            UserSourceFinancialAccountId = sourceAccount.Id,
+            UserDestinationFinancialAccountId = destinationAccount.Id,
+            HouseSourceFinancialAccountId = pair.HouseSourceFinancialAccountId,
+            HouseDestinationFinancialAccountId = pair.HouseDestinationFinancialAccountId,
+            ExchangeRateId = rate.Id,
+            SourceAmount = request.SourceAmount,
+            DestinationAmount = destinationAmount,
+            ProviderRate = rate.ProviderRate,
+            CustomerRate = rate.CustomerRate,
+            Status = InstantQuoteStatus.Active,
+            ExpiresAt = now.AddSeconds(pair.QuoteValiditySeconds),
+            CreatedByUserId = actionedByUserId
+        };
+
+        _db.InstantQuotes.Add(quote);
+        await _db.SaveChangesAsync(ct);
+
+        return ToQuoteDto(quote, pair);
+    }
+
     public async Task<InstantTradeDto> ExecuteQuoteAsync(
         Guid userId,
         Guid quoteId,
@@ -174,7 +296,36 @@ public sealed class InstantTradingService : IInstantTradingService
         {
             try
             {
-                return await ExecuteQuoteOnceAsync(userId, quoteId, ct);
+                return await ExecuteQuoteOnceAsync(FinancialAccountOwnerType.User, userId, userId, quoteId, ct);
+            }
+            catch (DbUpdateConcurrencyException) when (attempt < MaxExecutionAttempts)
+            {
+                _db.ChangeTracker.Clear();
+            }
+            catch (PostgresException ex) when (
+                attempt < MaxExecutionAttempts &&
+                (ex.SqlState == PostgresErrorCodes.SerializationFailure ||
+                 ex.SqlState == PostgresErrorCodes.UniqueViolation))
+            {
+                _db.ChangeTracker.Clear();
+            }
+        }
+
+        throw new InvalidOperationException("Instant quote execution could not be completed.");
+    }
+
+    public async Task<InstantTradeDto> ExecuteQuoteForOwnerAsync(
+        FinancialAccountOwnerType ownerType,
+        Guid ownerId,
+        Guid quoteId,
+        Guid? actionedByUserId = null,
+        CancellationToken ct = default)
+    {
+        for (var attempt = 1; attempt <= MaxExecutionAttempts; attempt++)
+        {
+            try
+            {
+                return await ExecuteQuoteOnceAsync(ownerType, ownerId, actionedByUserId, quoteId, ct);
             }
             catch (DbUpdateConcurrencyException) when (attempt < MaxExecutionAttempts)
             {
@@ -193,7 +344,9 @@ public sealed class InstantTradingService : IInstantTradingService
     }
 
     private async Task<InstantTradeDto> ExecuteQuoteOnceAsync(
-        Guid userId,
+        FinancialAccountOwnerType ownerType,
+        Guid ownerId,
+        Guid? actionedByUserId,
         Guid quoteId,
         CancellationToken ct)
     {
@@ -206,8 +359,8 @@ public sealed class InstantTradingService : IInstantTradingService
 
         if (existing is not null)
         {
-            if (existing.UserId != userId)
-                throw new UnauthorizedAccessException("Instant trade does not belong to the authenticated user.");
+            if (existing.OwnerType != ownerType || existing.OwnerId != ownerId)
+                throw new UnauthorizedAccessException("Instant trade does not belong to the trading owner.");
 
             if (existing.Status == InstantTradeStatus.Completed)
             {
@@ -228,8 +381,8 @@ public sealed class InstantTradingService : IInstantTradingService
             .FirstOrDefaultAsync(x => x.Id == quoteId && !x.IsDeleted, ct)
             ?? throw new InvalidOperationException("Instant quote not found.");
 
-        if (quote.UserId != userId)
-            throw new UnauthorizedAccessException("Instant quote does not belong to the authenticated user.");
+        if (quote.OwnerType != ownerType || quote.OwnerId != ownerId)
+            throw new UnauthorizedAccessException("Instant quote does not belong to the trading owner.");
 
         if (quote.Status == InstantQuoteStatus.Consumed)
         {
@@ -265,15 +418,17 @@ public sealed class InstantTradingService : IInstantTradingService
         if (quote.InstantPair.Status != InstantPairStatus.Active)
             throw new InvalidOperationException("Instant trading is currently paused for this pair.");
 
-        ValidateUserAccount(
+        ValidateOwnerAccount(
             quote.UserSourceFinancialAccount,
-            userId,
+            ownerType,
+            ownerId,
             quote.InstantPair.SourceAssetCode,
             "source");
 
-        ValidateUserAccount(
+        ValidateOwnerAccount(
             quote.UserDestinationFinancialAccount,
-            userId,
+            ownerType,
+            ownerId,
             quote.InstantPair.DestinationAssetCode,
             "destination");
 
@@ -297,7 +452,9 @@ public sealed class InstantTradingService : IInstantTradingService
             Reference = GenerateReference("KXIT"),
             InstantQuoteId = quote.Id,
             InstantPairId = quote.InstantPairId,
-            UserId = userId,
+            UserId = ownerType == FinancialAccountOwnerType.User ? ownerId : Guid.Empty,
+            OwnerType = ownerType,
+            OwnerId = ownerId,
             UserSourceFinancialAccountId = quote.UserSourceFinancialAccountId,
             UserDestinationFinancialAccountId = quote.UserDestinationFinancialAccountId,
             HouseSourceFinancialAccountId = quote.HouseSourceFinancialAccountId,
@@ -307,7 +464,7 @@ public sealed class InstantTradingService : IInstantTradingService
             CustomerRate = quote.CustomerRate,
             Status = InstantTradeStatus.Settling,
             SettlementStartedAt = now,
-            CreatedByUserId = userId
+            CreatedByUserId = actionedByUserId
         };
 
         _db.InstantTrades.Add(trade);
@@ -318,7 +475,7 @@ public sealed class InstantTradingService : IInstantTradingService
             nameof(InstantTrade),
             trade.Id,
             quote.SourceAmount,
-            userId,
+            actionedByUserId,
             nameof(InstantQuote),
             quote.Id,
             ct);
@@ -358,7 +515,7 @@ public sealed class InstantTradingService : IInstantTradingService
         var query = _db.InstantTrades
             .AsNoTracking()
             .Include(x => x.InstantPair)
-            .Where(x => x.UserId == userId && !x.IsDeleted);
+            .Where(x => x.OwnerType == FinancialAccountOwnerType.User && x.OwnerId == userId && !x.IsDeleted);
 
         var total = await query.CountAsync(ct);
         var items = await query
@@ -376,6 +533,35 @@ public sealed class InstantTradingService : IInstantTradingService
                 PageSize = pageSize,
                 TotalItems = total
             }
+        };
+    }
+
+    public async Task<PagedResult<InstantTradeDto>> GetTradesForOwnerAsync(
+        FinancialAccountOwnerType ownerType,
+        Guid ownerId,
+        int page = 1,
+        int pageSize = 20,
+        CancellationToken ct = default)
+    {
+        page = Math.Max(page, 1);
+        pageSize = Math.Clamp(pageSize, 1, 100);
+
+        var query = _db.InstantTrades
+            .AsNoTracking()
+            .Include(x => x.InstantPair)
+            .Where(x => x.OwnerType == ownerType && x.OwnerId == ownerId && !x.IsDeleted);
+
+        var total = await query.CountAsync(ct);
+        var items = await query
+            .OrderByDescending(x => x.CreatedAt)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync(ct);
+
+        return new PagedResult<InstantTradeDto>
+        {
+            Items = items.Select(ToTradeDto).ToList(),
+            Meta = new PageMeta { Page = page, PageSize = pageSize, TotalItems = total }
         };
     }
 
@@ -813,7 +999,7 @@ public sealed class InstantTradingService : IInstantTradingService
             ContextEntityType = nameof(InstantQuote),
             ContextEntityId = trade.InstantQuoteId,
             PostedAt = now,
-            CreatedByUserId = trade.UserId
+            CreatedByUserId = trade.CreatedByUserId
         };
 
         ledger.Postings.Add(new LedgerPosting
@@ -890,6 +1076,25 @@ public sealed class InstantTradingService : IInstantTradingService
 
         if (account.Status != FinancialAccountStatus.Active)
             throw new InvalidOperationException($"Configured house {side} account is not active.");
+    }
+
+    private static void ValidateOwnerAccount(
+        FinancialAccount account,
+        FinancialAccountOwnerType ownerType,
+        Guid ownerId,
+        string expectedAssetCode,
+        string side)
+    {
+        if (account.OwnerType != ownerType ||
+            account.OwnerId != ownerId ||
+            account.AccountType != FinancialAccountType.Customer)
+            throw new InvalidOperationException($"Instant {side} account ownership is invalid.");
+
+        if (!string.Equals(account.AssetCode, expectedAssetCode, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException($"Instant {side} account has the wrong asset.");
+
+        if (account.Status != FinancialAccountStatus.Active)
+            throw new InvalidOperationException($"Instant {side} account is not active.");
     }
 
     private static void ValidateUserAccount(

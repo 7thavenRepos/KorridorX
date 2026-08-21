@@ -12,7 +12,12 @@ public class InstantQuote : AuditableEntity
     public Guid InstantPairId { get; set; }
     public InstantPair InstantPair { get; set; } = null!;
 
+    // UserId is retained for backwards compatibility with the consumer instant API.
+    // OwnerType/OwnerId are the canonical ownership boundary for new flows.
     public Guid UserId { get; set; }
+
+    public FinancialAccountOwnerType OwnerType { get; set; } = FinancialAccountOwnerType.User;
+    public Guid OwnerId { get; set; }
 
     public Guid UserSourceFinancialAccountId { get; set; }
     public FinancialAccount UserSourceFinancialAccount { get; set; } = null!;

@@ -56,6 +56,7 @@ public sealed class InstantQuoteConfiguration : IEntityTypeConfiguration<Instant
     {
         builder.HasIndex(x => x.Reference).IsUnique();
         builder.HasIndex(x => new { x.UserId, x.Status, x.ExpiresAt });
+        builder.HasIndex(x => new { x.OwnerType, x.OwnerId, x.Status, x.ExpiresAt });
         builder.HasIndex(x => new { x.InstantPairId, x.Status, x.ExpiresAt });
 
         builder.Property(x => x.Reference).HasMaxLength(60);
@@ -104,6 +105,7 @@ public sealed class InstantTradeConfiguration : IEntityTypeConfiguration<Instant
         builder.HasIndex(x => x.Reference).IsUnique();
         builder.HasIndex(x => x.InstantQuoteId).IsUnique();
         builder.HasIndex(x => new { x.UserId, x.Status, x.CreatedAt });
+        builder.HasIndex(x => new { x.OwnerType, x.OwnerId, x.Status, x.CreatedAt });
         builder.HasIndex(x => new { x.InstantPairId, x.Status, x.CreatedAt });
         builder.HasIndex(x => x.ReservationId)
             .IsUnique()
