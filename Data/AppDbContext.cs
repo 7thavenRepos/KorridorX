@@ -4,6 +4,7 @@ using KorridorX.Models.BusinessTransfers;
 using KorridorX.Models.FinancialCore;
 using KorridorX.Models.Compliance;
 using KorridorX.Models.Customers;
+using KorridorX.Models.EmbeddedFinance;
 using KorridorX.Models.Fx;
 using KorridorX.Models.Finance;
 using KorridorX.Models.Identity;
@@ -36,6 +37,13 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<Guid
     public DbSet<CustomerProfile> CustomerProfiles => Set<CustomerProfile>();
     public DbSet<BusinessProfile> BusinessProfiles => Set<BusinessProfile>();
     public DbSet<BusinessUser> BusinessUsers => Set<BusinessUser>();
+
+    public DbSet<ApiApplication> ApiApplications => Set<ApiApplication>();
+    public DbSet<ApiCredential> ApiCredentials => Set<ApiCredential>();
+    public DbSet<BusinessCustomer> BusinessCustomers => Set<BusinessCustomer>();
+    public DbSet<CollectionAccount> CollectionAccounts => Set<CollectionAccount>();
+    public DbSet<ProviderAccountMapping> ProviderAccountMappings => Set<ProviderAccountMapping>();
+    public DbSet<EmbeddedApiIdempotencyRecord> EmbeddedApiIdempotencyRecords => Set<EmbeddedApiIdempotencyRecord>();
 
     public DbSet<Recipient> Recipients => Set<Recipient>();
     public DbSet<RecipientBankAccount> RecipientBankAccounts => Set<RecipientBankAccount>();

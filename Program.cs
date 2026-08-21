@@ -23,6 +23,7 @@ using KorridorX.Services.Notifications;
 using KorridorX.Services.Operations;
 using KorridorX.Services.Compliance;
 using KorridorX.Services.Customers;
+using KorridorX.Services.EmbeddedFinance;
 using KorridorX.Services.Finance;
 using KorridorX.Services.Fx;
 using KorridorX.Services.Payments;
@@ -302,6 +303,10 @@ builder.Services.AddScoped<IMarketplaceOperationsService, MarketplaceOperationsS
 builder.Services.AddScoped<IMarketplaceMatchingEngine, MarketplaceMatchingEngine>();
 builder.Services.AddScoped<IMarketplaceOrderService, MarketplaceOrderService>();
 builder.Services.AddScoped<IInstantTradingService, InstantTradingService>();
+builder.Services.AddScoped<IEmbeddedFinanceManagementService, EmbeddedFinanceManagementService>();
+builder.Services.AddScoped<IEmbeddedFinanceCustomerService, EmbeddedFinanceCustomerService>();
+builder.Services.AddScoped<IEmbeddedFinanceCredentialAuthenticator, EmbeddedFinanceCredentialAuthenticator>();
+builder.Services.AddScoped<IEmbeddedFinanceContextAccessor, HttpEmbeddedFinanceContextAccessor>();
 builder.Services.AddScoped<INotificationQueueService, NotificationQueueService>();
 builder.Services.AddScoped<INotificationOperationsService, NotificationOperationsService>();
 builder.Services.AddScoped<INotificationDeliveryProvider, SmtpNotificationDeliveryProvider>();
@@ -532,6 +537,7 @@ if (runtimeHostingOptions.RequireHttpsRedirection)
     app.UseHttpsRedirection();
 
 app.UseAuthentication();
+app.UseMiddleware<EmbeddedFinanceApiKeyMiddleware>();
 app.UseRateLimiter();
 app.UseAuthorization();
 
