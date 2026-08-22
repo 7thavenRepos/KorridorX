@@ -55,3 +55,24 @@ public enum TradeStatus
     Failed = 4,
     Reversed = 5
 }
+
+
+public enum BusinessTradingRfqStatus
+{
+    Open = 1,
+    Quoted = 2,
+    Accepted = 3,
+    Rejected = 4,
+    Cancelled = 5,
+    Expired = 6
+}
+
+public enum BusinessTradingRfqQuoteStatus
+{
+    Active = 1,
+    Accepted = 2,
+    Rejected = 3,
+    Withdrawn = 4,
+    Expired = 5,
+    Superseded = 6
+}

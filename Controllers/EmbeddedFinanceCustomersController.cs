@@ -263,4 +263,26 @@ public sealed class EmbeddedFinanceCustomersController : ControllerBase
     }
 
 
+    [HttpPost("{businessCustomerId:guid}/trading/rfqs")]
+    public async Task<IActionResult> CreateTradingRfq(Guid businessCustomerId, [FromBody] CreateBusinessTradingRfqRequestDto request, CancellationToken ct) => Ok(ApiResponses.Ok(await _trading.CreateRfqAsync(businessCustomerId, request, ct), "Trading RFQ created successfully."));
+
+    [HttpGet("{businessCustomerId:guid}/trading/rfqs")]
+    public async Task<IActionResult> TradingRfqs(Guid businessCustomerId, [FromQuery] int page = 1, [FromQuery] int pageSize = 20, CancellationToken ct = default)
+    {
+        var result = await _trading.GetRfqsAsync(businessCustomerId, page, pageSize, ct);
+        return Ok(ApiResponses.OkPaged(result.Items, result.Meta, "Trading RFQs retrieved successfully."));
+    }
+
+    [HttpGet("{businessCustomerId:guid}/trading/rfqs/{rfqId:guid}")]
+    public async Task<IActionResult> TradingRfq(Guid businessCustomerId, Guid rfqId, CancellationToken ct) => Ok(ApiResponses.Ok(await _trading.GetRfqAsync(businessCustomerId, rfqId, ct), "Trading RFQ retrieved successfully."));
+
+    [HttpPost("{businessCustomerId:guid}/trading/rfqs/{rfqId:guid}/quotes")]
+    public async Task<IActionResult> QuoteTradingRfq(Guid businessCustomerId, Guid rfqId, [FromBody] CreateBusinessTradingRfqQuoteRequestDto request, CancellationToken ct) => Ok(ApiResponses.Ok(await _trading.QuoteRfqAsync(businessCustomerId, rfqId, request, ct), "Trading RFQ quote submitted successfully."));
+
+    [HttpPost("{businessCustomerId:guid}/trading/rfqs/{rfqId:guid}/quotes/{quoteId:guid}/accept")]
+    public async Task<IActionResult> AcceptTradingRfqQuote(Guid businessCustomerId, Guid rfqId, Guid quoteId, CancellationToken ct) => Ok(ApiResponses.Ok(await _trading.AcceptRfqQuoteAsync(businessCustomerId, rfqId, quoteId, ct), "Trading RFQ quote accepted successfully."));
+
+    [HttpPost("{businessCustomerId:guid}/trading/rfqs/{rfqId:guid}/cancel")]
+    public async Task<IActionResult> CancelTradingRfq(Guid businessCustomerId, Guid rfqId, CancellationToken ct) => Ok(ApiResponses.Ok(await _trading.CancelRfqAsync(businessCustomerId, rfqId, ct), "Trading RFQ cancelled successfully."));
+
 }

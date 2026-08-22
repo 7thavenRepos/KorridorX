@@ -118,3 +118,42 @@ public record MarketplaceRecoveryResultDto(
     int Candidates,
     int RecoveredMatches,
     IReadOnlyList<MarketplaceOperationFailureDto> Failures);
+
+
+public record CreateBusinessTradingRfqRequestDto(
+    Guid MarketplacePairId,
+    Guid CounterpartyBusinessCustomerId,
+    TradeOrderSide Side,
+    decimal Quantity,
+    DateTime? ExpiresAt = null);
+
+public record CreateBusinessTradingRfqQuoteRequestDto(
+    decimal Price,
+    DateTime? ExpiresAt = null);
+
+public record BusinessTradingRfqQuoteDto(
+    Guid Id,
+    string Reference,
+    decimal Price,
+    BusinessTradingRfqQuoteStatus Status,
+    DateTime ExpiresAt,
+    DateTime CreatedAt);
+
+public record BusinessTradingRfqDto(
+    Guid Id,
+    string Reference,
+    Guid MarketplacePairId,
+    string PairCode,
+    FinancialAccountOwnerType RequesterOwnerType,
+    Guid RequesterOwnerId,
+    FinancialAccountOwnerType CounterpartyOwnerType,
+    Guid CounterpartyOwnerId,
+    TradeOrderSide Side,
+    decimal Quantity,
+    BusinessTradingRfqStatus Status,
+    DateTime ExpiresAt,
+    Guid? AcceptedQuoteId,
+    Guid? TradeMatchId,
+    DateTime CreatedAt,
+    DateTime? AcceptedAt,
+    IReadOnlyList<BusinessTradingRfqQuoteDto> Quotes);

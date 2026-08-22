@@ -18,19 +18,22 @@ public sealed class EmbeddedTradingService : IEmbeddedTradingService
     private readonly IMarketplaceOrderService _orders;
     private readonly IMarketplaceOperationsService _marketplaceOperations;
     private readonly IInstantTradingService _instant;
+    private readonly IBusinessTradingRfqService _rfqs;
 
     public EmbeddedTradingService(
         AppDbContext db,
         IEmbeddedFinanceContextAccessor context,
         IMarketplaceOrderService orders,
         IMarketplaceOperationsService marketplaceOperations,
-        IInstantTradingService instant)
+        IInstantTradingService instant,
+        IBusinessTradingRfqService rfqs)
     {
         _db = db;
         _context = context;
         _orders = orders;
         _marketplaceOperations = marketplaceOperations;
         _instant = instant;
+        _rfqs = rfqs;
     }
 
     public async Task<IReadOnlyList<EmbeddedTradingBalanceDto>> GetBalancesAsync(
@@ -213,6 +216,51 @@ public sealed class EmbeddedTradingService : IEmbeddedTradingService
             page,
             pageSize,
             ct);
+    }
+
+    public async Task<BusinessTradingRfqDto> CreateRfqAsync(Guid businessCustomerId, CreateBusinessTradingRfqRequestDto request, CancellationToken ct = default)
+    {
+        RequireScope(EmbeddedFinanceScope.TradingWrite);
+        var requester = await EnsureCustomerAsync(businessCustomerId, ct);
+        var counterparty = await EnsureCustomerAsync(request.CounterpartyBusinessCustomerId, ct);
+        await EnsureMarketplaceCountryAccessAsync(requester.CountryCode, request.MarketplacePairId, ct);
+        await EnsureMarketplaceCountryAccessAsync(counterparty.CountryCode, request.MarketplacePairId, ct);
+        return await _rfqs.CreateAsync(FinancialAccountOwnerType.BusinessCustomer, requester.Id, FinancialAccountOwnerType.BusinessCustomer, counterparty.Id, null, request.MarketplacePairId, request.Side, request.Quantity, request.ExpiresAt, ct);
+    }
+
+    public async Task<BusinessTradingRfqDto> QuoteRfqAsync(Guid businessCustomerId, Guid rfqId, CreateBusinessTradingRfqQuoteRequestDto request, CancellationToken ct = default)
+    {
+        RequireScope(EmbeddedFinanceScope.TradingWrite);
+        var customer = await EnsureCustomerAsync(businessCustomerId, ct);
+        return await _rfqs.QuoteAsync(FinancialAccountOwnerType.BusinessCustomer, customer.Id, null, rfqId, request.Price, request.ExpiresAt, ct);
+    }
+
+    public async Task<BusinessTradingRfqDto> AcceptRfqQuoteAsync(Guid businessCustomerId, Guid rfqId, Guid quoteId, CancellationToken ct = default)
+    {
+        RequireScope(EmbeddedFinanceScope.TradingWrite);
+        var customer = await EnsureCustomerAsync(businessCustomerId, ct);
+        return await _rfqs.AcceptAsync(FinancialAccountOwnerType.BusinessCustomer, customer.Id, null, rfqId, quoteId, ct);
+    }
+
+    public async Task<BusinessTradingRfqDto> CancelRfqAsync(Guid businessCustomerId, Guid rfqId, CancellationToken ct = default)
+    {
+        RequireScope(EmbeddedFinanceScope.TradingWrite);
+        var customer = await EnsureCustomerAsync(businessCustomerId, ct);
+        return await _rfqs.CancelAsync(FinancialAccountOwnerType.BusinessCustomer, customer.Id, null, rfqId, ct);
+    }
+
+    public async Task<BusinessTradingRfqDto> GetRfqAsync(Guid businessCustomerId, Guid rfqId, CancellationToken ct = default)
+    {
+        RequireScope(EmbeddedFinanceScope.TradingRead);
+        var customer = await EnsureCustomerAsync(businessCustomerId, ct);
+        return await _rfqs.GetAsync(FinancialAccountOwnerType.BusinessCustomer, customer.Id, rfqId, ct);
+    }
+
+    public async Task<PagedResult<BusinessTradingRfqDto>> GetRfqsAsync(Guid businessCustomerId, int page = 1, int pageSize = 20, CancellationToken ct = default)
+    {
+        RequireScope(EmbeddedFinanceScope.TradingRead);
+        var customer = await EnsureCustomerAsync(businessCustomerId, ct);
+        return await _rfqs.GetForOwnerAsync(FinancialAccountOwnerType.BusinessCustomer, customer.Id, page, pageSize, ct);
     }
 
     private EmbeddedFinancePrincipal RequireScope(EmbeddedFinanceScope scope)

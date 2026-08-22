@@ -302,6 +302,7 @@ builder.Services.AddScoped<IMarketplaceSettlementService, MarketplaceSettlementS
 builder.Services.AddScoped<IMarketplaceOperationsService, MarketplaceOperationsService>();
 builder.Services.AddScoped<IMarketplaceMatchingEngine, MarketplaceMatchingEngine>();
 builder.Services.AddScoped<IMarketplaceOrderService, MarketplaceOrderService>();
+builder.Services.AddScoped<IBusinessTradingRfqService, BusinessTradingRfqService>();
 builder.Services.AddScoped<IInstantTradingService, InstantTradingService>();
 builder.Services.AddScoped<IEmbeddedFinanceManagementService, EmbeddedFinanceManagementService>();
 builder.Services.AddScoped<IEmbeddedFinanceCustomerService, EmbeddedFinanceCustomerService>();

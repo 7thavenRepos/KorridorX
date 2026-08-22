@@ -19,4 +19,10 @@ public interface IEmbeddedTradingService
     Task<InstantQuoteDto> CreateInstantQuoteAsync(Guid businessCustomerId, CreateInstantQuoteRequestDto request, CancellationToken ct = default);
     Task<InstantTradeDto> ExecuteInstantQuoteAsync(Guid businessCustomerId, Guid quoteId, CancellationToken ct = default);
     Task<PagedResult<InstantTradeDto>> GetInstantTradesAsync(Guid businessCustomerId, int page, int pageSize, CancellationToken ct = default);
+    Task<BusinessTradingRfqDto> CreateRfqAsync(Guid businessCustomerId, CreateBusinessTradingRfqRequestDto request, CancellationToken ct = default);
+    Task<BusinessTradingRfqDto> QuoteRfqAsync(Guid businessCustomerId, Guid rfqId, CreateBusinessTradingRfqQuoteRequestDto request, CancellationToken ct = default);
+    Task<BusinessTradingRfqDto> AcceptRfqQuoteAsync(Guid businessCustomerId, Guid rfqId, Guid quoteId, CancellationToken ct = default);
+    Task<BusinessTradingRfqDto> CancelRfqAsync(Guid businessCustomerId, Guid rfqId, CancellationToken ct = default);
+    Task<BusinessTradingRfqDto> GetRfqAsync(Guid businessCustomerId, Guid rfqId, CancellationToken ct = default);
+    Task<PagedResult<BusinessTradingRfqDto>> GetRfqsAsync(Guid businessCustomerId, int page = 1, int pageSize = 20, CancellationToken ct = default);
 }

@@ -71,6 +71,8 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<Guid
     public DbSet<TradeOrder> TradeOrders => Set<TradeOrder>();
     public DbSet<TradeMatch> TradeMatches => Set<TradeMatch>();
     public DbSet<Trade> Trades => Set<Trade>();
+    public DbSet<BusinessTradingRfq> BusinessTradingRfqs => Set<BusinessTradingRfq>();
+    public DbSet<BusinessTradingRfqQuote> BusinessTradingRfqQuotes => Set<BusinessTradingRfqQuote>();
 
     public DbSet<InstantPair> InstantPairs => Set<InstantPair>();
     public DbSet<InstantQuote> InstantQuotes => Set<InstantQuote>();

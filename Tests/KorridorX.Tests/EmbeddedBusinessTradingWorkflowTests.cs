@@ -413,7 +413,8 @@ public sealed class EmbeddedBusinessTradingWorkflowTests
                 "test-key")),
             scope.ServiceProvider.GetRequiredService<IMarketplaceOrderService>(),
             scope.ServiceProvider.GetRequiredService<IMarketplaceOperationsService>(),
-            scope.ServiceProvider.GetRequiredService<IInstantTradingService>());
+            scope.ServiceProvider.GetRequiredService<IInstantTradingService>(),
+            scope.ServiceProvider.GetRequiredService<IBusinessTradingRfqService>());
     }
 
     private async Task<TenantFixture> CreateBusinessTenantAsync(

@@ -95,3 +95,33 @@ public class TradeConfiguration : IEntityTypeConfiguration<Trade>
         builder.HasOne(x => x.QuoteLedgerTransaction).WithMany().HasForeignKey(x => x.QuoteLedgerTransactionId).OnDelete(DeleteBehavior.Restrict);
     }
 }
+
+
+public class BusinessTradingRfqConfiguration : IEntityTypeConfiguration<BusinessTradingRfq>
+{
+    public void Configure(EntityTypeBuilder<BusinessTradingRfq> builder)
+    {
+        builder.HasIndex(x => x.Reference).IsUnique();
+        builder.HasIndex(x => new { x.RequesterOwnerType, x.RequesterOwnerId, x.Status, x.CreatedAt });
+        builder.HasIndex(x => new { x.CounterpartyOwnerType, x.CounterpartyOwnerId, x.Status, x.CreatedAt });
+        builder.HasIndex(x => x.TradeMatchId).IsUnique().HasFilter("\"TradeMatchId\" IS NOT NULL");
+        builder.Property(x => x.Reference).HasMaxLength(60);
+        builder.Property(x => x.Quantity).HasPrecision(36, 18);
+        builder.Property(x => x.Status).IsConcurrencyToken();
+        builder.HasOne(x => x.MarketplacePair).WithMany().HasForeignKey(x => x.MarketplacePairId).OnDelete(DeleteBehavior.Restrict);
+    }
+}
+
+public class BusinessTradingRfqQuoteConfiguration : IEntityTypeConfiguration<BusinessTradingRfqQuote>
+{
+    public void Configure(EntityTypeBuilder<BusinessTradingRfqQuote> builder)
+    {
+        builder.HasIndex(x => x.Reference).IsUnique();
+        builder.HasIndex(x => new { x.BusinessTradingRfqId, x.Status, x.CreatedAt });
+        builder.HasIndex(x => new { x.ResponderOwnerType, x.ResponderOwnerId, x.Status });
+        builder.Property(x => x.Reference).HasMaxLength(60);
+        builder.Property(x => x.Price).HasPrecision(36, 18);
+        builder.Property(x => x.Status).IsConcurrencyToken();
+        builder.HasOne(x => x.BusinessTradingRfq).WithMany(x => x.Quotes).HasForeignKey(x => x.BusinessTradingRfqId).OnDelete(DeleteBehavior.Restrict);
+    }
+}
