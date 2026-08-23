@@ -300,11 +300,17 @@ builder.Services.AddScoped<IBusinessPaymentBatchService, BusinessPaymentBatchSer
 builder.Services.AddScoped<IBusinessReportExportService, BusinessReportExportService>();
 builder.Services.AddScoped<IBusinessFundingService, BusinessFundingService>();
 builder.Services.AddScoped<IFinancialReservationService, FinancialReservationService>();
+builder.Services.Configure<DigitalAssetComplianceOptions>(
+    builder.Configuration.GetSection("DigitalAssets:Compliance"));
+builder.Services.AddScoped<IDigitalAssetProvider, BlaaizDigitalAssetProvider>();
 builder.Services.AddScoped<IDigitalAssetProviderRegistry, DigitalAssetProviderRegistry>();
 builder.Services.AddScoped<IDigitalAssetComplianceGate, DigitalAssetComplianceGate>();
 builder.Services.AddScoped<IEmbeddedDigitalAssetService, DigitalAssetService>();
 builder.Services.AddScoped<IDigitalAssetSettlementService, DigitalAssetService>();
+builder.Services.AddScoped<IDigitalAssetDepositIntentSettlementService, DigitalAssetService>();
 builder.Services.AddScoped<IDigitalAssetReconciliationService, DigitalAssetReconciliationService>();
+builder.Services.AddScoped<IDigitalAssetProviderOperationsService, DigitalAssetProviderOperationsService>();
+builder.Services.AddScoped<IDigitalAssetProviderWebhookService, DigitalAssetProviderWebhookService>();
 builder.Services.AddScoped<IMarketplaceSettlementService, MarketplaceSettlementService>();
 builder.Services.AddScoped<IMarketplaceOperationsService, MarketplaceOperationsService>();
 builder.Services.AddScoped<IMarketplaceMatchingEngine, MarketplaceMatchingEngine>();

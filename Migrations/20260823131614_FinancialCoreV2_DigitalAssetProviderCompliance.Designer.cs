@@ -3,6 +3,7 @@ using System;
 using KorridorX.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace KorridorX.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260823131614_FinancialCoreV2_DigitalAssetProviderCompliance")]
+    partial class FinancialCoreV2_DigitalAssetProviderCompliance
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -2832,121 +2835,6 @@ namespace KorridorX.Migrations
                         .HasFilter("\"DestinationTag\" IS NOT NULL");
 
                     b.ToTable("DigitalAssetDepositAddresses");
-                });
-
-            modelBuilder.Entity("KorridorX.Models.DigitalAssets.DigitalAssetDepositIntent", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Address")
-                        .HasMaxLength(300)
-                        .HasColumnType("character varying(300)");
-
-                    b.Property<decimal>("Amount")
-                        .HasPrecision(36, 18)
-                        .HasColumnType("numeric(36,18)");
-
-                    b.Property<string>("AssetCode")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)");
-
-                    b.Property<Guid>("AssetNetworkId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("BusinessCustomerId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("BusinessProfileId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid?>("CollectionId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime?>("CompletedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid?>("CreatedByUserId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime?>("DeletedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid?>("DeletedByUserId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime?>("FailedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("FailureReason")
-                        .HasMaxLength(2000)
-                        .HasColumnType("character varying(2000)");
-
-                    b.Property<Guid>("FinancialAccountId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime?>("InitiatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<bool>("IsDeleted")
-                        .HasColumnType("boolean");
-
-                    b.Property<DateTime?>("LastUpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid?>("LastUpdatedByUserId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("NetworkCode")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)");
-
-                    b.Property<string>("ProviderCode")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)");
-
-                    b.Property<string>("ProviderCollectionId")
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
-                    b.Property<DateTime?>("ProviderExpiresAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("ProviderReference")
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
-                    b.Property<string>("ProviderWalletId")
-                        .HasMaxLength(150)
-                        .HasColumnType("character varying(150)");
-
-                    b.Property<int>("Status")
-                        .HasColumnType("integer");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("AssetNetworkId");
-
-                    b.HasIndex("CollectionId");
-
-                    b.HasIndex("FinancialAccountId");
-
-                    b.HasIndex("ProviderCode", "ProviderCollectionId")
-                        .IsUnique()
-                        .HasFilter("\"ProviderCollectionId\" IS NOT NULL");
-
-                    b.HasIndex("Status", "ProviderExpiresAt");
-
-                    b.HasIndex("BusinessProfileId", "BusinessCustomerId", "CreatedAt");
-
-                    b.ToTable("DigitalAssetDepositIntents");
                 });
 
             modelBuilder.Entity("KorridorX.Models.DigitalAssets.DigitalAssetNetworkTransaction", b =>
@@ -10448,32 +10336,6 @@ namespace KorridorX.Migrations
                         .IsRequired();
 
                     b.Navigation("AssetNetwork");
-
-                    b.Navigation("FinancialAccount");
-                });
-
-            modelBuilder.Entity("KorridorX.Models.DigitalAssets.DigitalAssetDepositIntent", b =>
-                {
-                    b.HasOne("KorridorX.Models.Lookups.AssetNetwork", "AssetNetwork")
-                        .WithMany()
-                        .HasForeignKey("AssetNetworkId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("KorridorX.Models.Payments.Collection", "Collection")
-                        .WithMany()
-                        .HasForeignKey("CollectionId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
-                    b.HasOne("KorridorX.Models.FinancialCore.FinancialAccount", "FinancialAccount")
-                        .WithMany()
-                        .HasForeignKey("FinancialAccountId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("AssetNetwork");
-
-                    b.Navigation("Collection");
 
                     b.Navigation("FinancialAccount");
                 });

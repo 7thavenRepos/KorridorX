@@ -233,6 +233,8 @@ public sealed partial class TreasuryService
                      x.ScopeType == TreasuryLiquidityScopeType.ProviderWallet &&
                      x.TargetBalance.HasValue))
         {
+            var providerTarget = provider.TargetBalance.GetValueOrDefault();
+
             var treasury = positions
                 .Where(x =>
                     x.ScopeType == TreasuryLiquidityScopeType.FinancialAccount &&
@@ -242,27 +244,31 @@ public sealed partial class TreasuryService
                 .OrderByDescending(x => x.AvailableBalance)
                 .FirstOrDefault();
 
-            if (provider.ExternalBalance < provider.TargetBalance.Value &&
-                treasury is not null &&
-                treasury.AvailableBalance > treasury.TargetBalance!.Value)
+            if (treasury is not null)
             {
-                var amount = Math.Min(
-                    provider.TargetBalance.Value - provider.ExternalBalance,
-                    treasury.AvailableBalance - treasury.TargetBalance.Value);
+                var treasuryTarget = treasury.TargetBalance.GetValueOrDefault();
 
-                if (amount > 0m)
+                if (provider.ExternalBalance < providerTarget &&
+                    treasury.AvailableBalance > treasuryTarget)
                 {
-                    suggestions.Add(new TreasuryUnifiedRebalanceSuggestionDto
+                    var amount = Math.Min(
+                        providerTarget - provider.ExternalBalance,
+                        treasury.AvailableBalance - treasuryTarget);
+
+                    if (amount > 0m)
                     {
-                        ActionType = TreasuryLiquidityActionType.ProviderTopUp,
-                        AssetCode = provider.AssetCode,
-                        FromFinancialAccountId = treasury.SourceId,
-                        ProviderWalletBalanceId = provider.SourceId,
-                        ProviderCode = provider.ProviderCode,
-                        NetworkCode = provider.NetworkCode,
-                        SuggestedAmount = amount,
-                        Reason = "Provider liquidity is below target and internal Treasury liquidity is above target."
-                    });
+                        suggestions.Add(new TreasuryUnifiedRebalanceSuggestionDto
+                        {
+                            ActionType = TreasuryLiquidityActionType.ProviderTopUp,
+                            AssetCode = provider.AssetCode,
+                            FromFinancialAccountId = treasury.SourceId,
+                            ProviderWalletBalanceId = provider.SourceId,
+                            ProviderCode = provider.ProviderCode,
+                            NetworkCode = provider.NetworkCode,
+                            SuggestedAmount = amount,
+                            Reason = "Provider liquidity is below target and internal Treasury liquidity is above target."
+                        });
+                    }
                 }
             }
 
@@ -276,7 +282,7 @@ public sealed partial class TreasuryService
                     ProviderWalletBalanceId = provider.SourceId,
                     ProviderCode = provider.ProviderCode,
                     NetworkCode = provider.NetworkCode,
-                    SuggestedAmount = provider.ExternalBalance - provider.TargetBalance.Value,
+                    SuggestedAmount = provider.ExternalBalance - providerTarget,
                     Reason = "Provider liquidity is above maximum and should be swept toward Treasury."
                 });
             }

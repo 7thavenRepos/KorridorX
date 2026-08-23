@@ -10,10 +10,14 @@ using KorridorX.Providers.DigitalAssets;
 using KorridorX.Services.EmbeddedFinance;
 using KorridorX.Services.FinancialCore;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 
 namespace KorridorX.Services.DigitalAssets;
 
-public sealed class DigitalAssetService : IEmbeddedDigitalAssetService, IDigitalAssetSettlementService
+public sealed class DigitalAssetService :
+    IEmbeddedDigitalAssetService,
+    IDigitalAssetSettlementService,
+    IDigitalAssetDepositIntentSettlementService
 {
     private readonly AppDbContext _db;
     private readonly IEmbeddedFinanceContextAccessor _context;
@@ -21,6 +25,7 @@ public sealed class DigitalAssetService : IEmbeddedDigitalAssetService, IDigital
     private readonly IFinancialReservationService _reservations;
     private readonly IDigitalAssetComplianceGate _compliance;
     private readonly IEmbeddedWebhookPublisher _webhooks;
+    private readonly DigitalAssetComplianceOptions _complianceOptions;
 
     public DigitalAssetService(
         AppDbContext db,
@@ -29,6 +34,25 @@ public sealed class DigitalAssetService : IEmbeddedDigitalAssetService, IDigital
         IFinancialReservationService reservations,
         IDigitalAssetComplianceGate compliance,
         IEmbeddedWebhookPublisher webhooks)
+        : this(
+            db,
+            context,
+            providers,
+            reservations,
+            compliance,
+            webhooks,
+            Options.Create(new DigitalAssetComplianceOptions()))
+    {
+    }
+
+    public DigitalAssetService(
+        AppDbContext db,
+        IEmbeddedFinanceContextAccessor context,
+        IDigitalAssetProviderRegistry providers,
+        IFinancialReservationService reservations,
+        IDigitalAssetComplianceGate compliance,
+        IEmbeddedWebhookPublisher webhooks,
+        IOptions<DigitalAssetComplianceOptions> complianceOptions)
     {
         _db = db;
         _context = context;
@@ -36,6 +60,7 @@ public sealed class DigitalAssetService : IEmbeddedDigitalAssetService, IDigital
         _reservations = reservations;
         _compliance = compliance;
         _webhooks = webhooks;
+        _complianceOptions = complianceOptions.Value;
     }
 
     public async Task<IReadOnlyList<DigitalAssetDepositAddressDto>> GetDepositAddressesAsync(Guid businessCustomerId, CancellationToken ct = default)
@@ -90,6 +115,98 @@ public sealed class DigitalAssetService : IEmbeddedDigitalAssetService, IDigital
         _db.DigitalAssetDepositAddresses.Add(address);
         await _db.SaveChangesAsync(ct);
         return ToDepositAddressDto(address);
+    }
+
+    public async Task<IReadOnlyList<DigitalAssetDepositIntentDto>> GetDepositIntentsAsync(
+        Guid businessCustomerId,
+        CancellationToken ct = default)
+    {
+        var principal = RequireScope(EmbeddedFinanceScope.DigitalAssetsRead);
+        await EnsureCustomerAsync(principal.BusinessProfileId, businessCustomerId, ct);
+
+        var rows = await _db.DigitalAssetDepositIntents.AsNoTracking()
+            .Include(x => x.AssetNetwork)
+            .Where(x =>
+                x.BusinessProfileId == principal.BusinessProfileId &&
+                x.BusinessCustomerId == businessCustomerId &&
+                !x.IsDeleted)
+            .OrderByDescending(x => x.CreatedAt)
+            .ToListAsync(ct);
+
+        return rows.Select(ToDepositIntentDto).ToList();
+    }
+
+    public async Task<DigitalAssetDepositIntentDto> CreateDepositIntentAsync(
+        Guid businessCustomerId,
+        CreateDigitalAssetDepositIntentRequestDto request,
+        CancellationToken ct = default)
+    {
+        var principal = RequireScope(EmbeddedFinanceScope.DigitalAssetsWrite);
+        var customer = await EnsureCustomerAsync(principal.BusinessProfileId, businessCustomerId, ct);
+        EnsureActiveCustomer(customer);
+
+        if (request.Amount <= 0m)
+            throw new InvalidOperationException("Deposit amount must be greater than zero.");
+
+        var account = await GetCustomerAccountAsync(businessCustomerId, request.FinancialAccountId, ct);
+        var network = await GetNetworkAsync(request.AssetNetworkId, account.AssetCode, true, ct);
+        var provider = _providers.GetRequired(request.ProviderCode, account.AssetCode, network.NetworkCode);
+
+        if (provider is not IDigitalAssetCollectionProvider collections)
+            throw new InvalidOperationException($"Digital-asset provider '{provider.ProviderCode}' does not support amount-specific deposit intents.");
+
+        var intent = new DigitalAssetDepositIntent
+        {
+            BusinessProfileId = principal.BusinessProfileId,
+            BusinessCustomerId = businessCustomerId,
+            FinancialAccountId = account.Id,
+            FinancialAccount = account,
+            AssetNetworkId = network.Id,
+            AssetNetwork = network,
+            ProviderCode = provider.ProviderCode,
+            AssetCode = account.AssetCode,
+            NetworkCode = network.NetworkCode,
+            Amount = request.Amount,
+            Status = CollectionStatus.Pending
+        };
+
+        _db.DigitalAssetDepositIntents.Add(intent);
+        await _db.SaveChangesAsync(ct);
+
+        try
+        {
+            var result = await collections.CreateCollectionIntentAsync(
+                new DigitalAssetCollectionIntentRequest(
+                    intent.Id,
+                    principal.BusinessProfileId,
+                    businessCustomerId,
+                    account.Id,
+                    account.AssetCode,
+                    network.NetworkCode,
+                    request.Amount),
+                ct);
+
+            intent.ProviderWalletId = Clean(result.ProviderWalletId, 150);
+            intent.ProviderCollectionId = Required(result.ProviderCollectionId, 200, "Provider collection ID");
+            intent.ProviderReference = Clean(result.ProviderReference, 200);
+            intent.Address = Required(result.Address, 300, "Deposit address");
+            intent.Status = CollectionStatus.Initiated;
+            intent.ProviderExpiresAt = result.ExpiresAt;
+            intent.InitiatedAt = DateTime.UtcNow;
+            intent.LastUpdatedAt = DateTime.UtcNow;
+
+            await _db.SaveChangesAsync(ct);
+            return ToDepositIntentDto(intent);
+        }
+        catch (Exception ex)
+        {
+            intent.Status = CollectionStatus.Failed;
+            intent.FailedAt = DateTime.UtcNow;
+            intent.FailureReason = Clean(ex.Message, 2000);
+            intent.LastUpdatedAt = DateTime.UtcNow;
+            await _db.SaveChangesAsync(ct);
+            throw;
+        }
     }
 
     public async Task<IReadOnlyList<DigitalAssetWithdrawalDestinationDto>> GetWithdrawalDestinationsAsync(Guid businessCustomerId, CancellationToken ct = default)
@@ -214,6 +331,34 @@ public sealed class DigitalAssetService : IEmbeddedDigitalAssetService, IDigital
         _db.Payouts.Add(payout);
         _db.DigitalAssetWithdrawals.Add(withdrawal);
 
+        var travelRuleRequired =
+            _complianceOptions.TravelRuleThreshold > 0m &&
+            request.Amount >= _complianceOptions.TravelRuleThreshold;
+
+        if (travelRuleRequired && request.TravelRule is null)
+            throw new InvalidOperationException(
+                "Travel Rule information is required for this digital-asset withdrawal.");
+
+        var travelRule = new DigitalAssetTravelRuleRecord
+        {
+            BusinessProfileId = principal.BusinessProfileId,
+            BusinessCustomerId = businessCustomerId,
+            DigitalAssetWithdrawalId = withdrawal.Id,
+            DigitalAssetWithdrawal = withdrawal,
+            Status = travelRuleRequired
+                ? DigitalAssetTravelRuleStatus.Ready
+                : DigitalAssetTravelRuleStatus.NotRequired,
+            ThresholdAmount = _complianceOptions.TravelRuleThreshold,
+            AssetCode = account.AssetCode,
+            NetworkCode = destination.AssetNetwork.NetworkCode,
+            OriginatorVasp = Clean(request.TravelRule?.OriginatorVasp, 200),
+            BeneficiaryVasp = Clean(request.TravelRule?.BeneficiaryVasp, 200),
+            BeneficiaryName = Clean(request.TravelRule?.BeneficiaryName, 200),
+            PayloadJson = request.TravelRule?.PayloadJson
+        };
+
+        _db.DigitalAssetTravelRuleRecords.Add(travelRule);
+
         var reservation = await _reservations.ReserveAsync(
             account.Id, FinancialReservationType.Withdrawal, nameof(DigitalAssetWithdrawal),
             withdrawal.Id, totalDebit, null, nameof(Payout), payout.Id, ct);
@@ -303,6 +448,192 @@ public sealed class DigitalAssetService : IEmbeddedDigitalAssetService, IDigital
         var result = new List<DigitalAssetWithdrawalDto>();
         foreach (var id in ids) result.Add(await ToWithdrawalDtoAsync(id, ct));
         return result;
+    }
+
+    public async Task<bool> TryProcessProviderCollectionAsync(
+        string providerCode,
+        string providerCollectionId,
+        string? providerReference,
+        string providerStatus,
+        string? assetCode,
+        decimal? amount,
+        string rawPayload,
+        DateTime occurredAt,
+        CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(providerCode) ||
+            string.IsNullOrWhiteSpace(providerCollectionId))
+        {
+            return false;
+        }
+
+        await using var tx = await _db.Database.BeginTransactionAsync(IsolationLevel.Serializable, ct);
+
+        var intent = await _db.DigitalAssetDepositIntents
+            .Include(x => x.FinancialAccount)
+            .Include(x => x.AssetNetwork)
+            .FirstOrDefaultAsync(x =>
+                x.ProviderCode == providerCode.Trim() &&
+                x.ProviderCollectionId == providerCollectionId.Trim() &&
+                !x.IsDeleted,
+                ct);
+
+        if (intent is null)
+        {
+            await tx.RollbackAsync(ct);
+            return false;
+        }
+
+        if (amount.HasValue && amount.Value != intent.Amount)
+            throw new InvalidOperationException("Blaaiz crypto collection webhook amount does not match the KorridorX deposit intent.");
+
+        if (!string.IsNullOrWhiteSpace(assetCode) &&
+            !string.Equals(assetCode.Trim(), intent.AssetCode, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException("Blaaiz crypto collection webhook asset does not match the KorridorX deposit intent.");
+        }
+
+        intent.ProviderReference = Clean(providerReference, 200) ?? intent.ProviderReference;
+        var status = (providerStatus ?? "").Trim().ToUpperInvariant();
+        var now = occurredAt == default ? DateTime.UtcNow : occurredAt.ToUniversalTime();
+
+        if (status is "FAILED" or "REJECTED" or "CANCELLED")
+        {
+            intent.Status = CollectionStatus.Failed;
+            intent.FailedAt = now;
+            intent.FailureReason = $"Provider collection status: {status}";
+            intent.LastUpdatedAt = DateTime.UtcNow;
+            await _db.SaveChangesAsync(ct);
+            await tx.CommitAsync(ct);
+            return true;
+        }
+
+        if (status == "EXPIRED")
+        {
+            intent.Status = CollectionStatus.Expired;
+            intent.LastUpdatedAt = DateTime.UtcNow;
+            await _db.SaveChangesAsync(ct);
+            await tx.CommitAsync(ct);
+            return true;
+        }
+
+        var successful = status is "SUCCESSFUL" or "COMPLETED" or "CONFIRMED";
+        if (!successful)
+        {
+            intent.Status = CollectionStatus.Processing;
+            intent.LastUpdatedAt = DateTime.UtcNow;
+            await _db.SaveChangesAsync(ct);
+            await tx.CommitAsync(ct);
+            return true;
+        }
+
+        if (intent.CollectionId.HasValue)
+        {
+            var existing = await _db.Collections.AsNoTracking()
+                .FirstAsync(x => x.Id == intent.CollectionId.Value, ct);
+
+            if (existing.Amount != intent.Amount ||
+                !string.Equals(existing.CurrencyCode, intent.AssetCode, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException("Completed Blaaiz crypto collection replay does not match the original KorridorX credit.");
+            }
+
+            await tx.CommitAsync(ct);
+            return true;
+        }
+
+        var account = intent.FinancialAccount;
+        if (account.Status != FinancialAccountStatus.Active)
+            throw new InvalidOperationException("Destination Financial Account is not active.");
+
+        var collection = new Collection
+        {
+            Purpose = PaymentOperationPurpose.AccountFunding,
+            FinancialAccountId = account.Id,
+            FinancialAccount = account,
+            RelatedEntityType = nameof(DigitalAssetDepositIntent),
+            RelatedEntityId = intent.Id,
+            ContextEntityType = nameof(BusinessCustomer),
+            ContextEntityId = intent.BusinessCustomerId,
+            Reference = $"DAX-COL-{Guid.NewGuid():N}"[..40],
+            CurrencyCode = intent.AssetCode,
+            Amount = intent.Amount,
+            PaymentMethod = PaymentMethod.DigitalAsset,
+            Status = CollectionStatus.Successful,
+            ProviderCode = intent.ProviderCode,
+            ProviderCollectionId = intent.ProviderCollectionId,
+            ProviderReference = intent.ProviderReference,
+            ProviderExpiresAt = intent.ProviderExpiresAt,
+            InitiatedAt = intent.InitiatedAt ?? intent.CreatedAt,
+            ConfirmedAt = now
+        };
+        _db.Collections.Add(collection);
+
+        account.SettledBalance += intent.Amount;
+        account.AvailableBalance += intent.Amount;
+        account.LastUpdatedAt = DateTime.UtcNow;
+
+        var ledger = new LedgerTransaction
+        {
+            Reference = $"LED-DAXC-{Guid.NewGuid():N}"[..40],
+            AssetCode = intent.AssetCode,
+            Type = LedgerTransactionType.Deposit,
+            Status = LedgerTransactionStatus.Posted,
+            Amount = intent.Amount,
+            Description = $"Confirmed {intent.AssetCode} Blaaiz crypto collection on {intent.NetworkCode}.",
+            IdempotencyScope = $"DigitalAssetCollection:{intent.ProviderCode}",
+            IdempotencyKey = intent.ProviderCollectionId!,
+            RelatedEntityType = nameof(Collection),
+            RelatedEntityId = collection.Id,
+            ContextEntityType = nameof(DigitalAssetDepositIntent),
+            ContextEntityId = intent.Id,
+            PostedAt = now
+        };
+
+        ledger.Postings.Add(new LedgerPosting
+        {
+            FinancialAccountId = account.Id,
+            FinancialAccount = account,
+            BalanceBucket = LedgerBalanceBucket.External,
+            Side = LedgerPostingSide.Debit,
+            Amount = intent.Amount
+        });
+        ledger.Postings.Add(new LedgerPosting
+        {
+            FinancialAccountId = account.Id,
+            FinancialAccount = account,
+            BalanceBucket = LedgerBalanceBucket.Available,
+            Side = LedgerPostingSide.Credit,
+            Amount = intent.Amount,
+            AccountBalanceAfter = account.AvailableBalance
+        });
+        _db.LedgerTransactions.Add(ledger);
+
+        intent.CollectionId = collection.Id;
+        intent.Collection = collection;
+        intent.Status = CollectionStatus.Successful;
+        intent.CompletedAt = now;
+        intent.LastUpdatedAt = DateTime.UtcNow;
+        intent.FailureReason = null;
+
+        await _db.SaveChangesAsync(ct);
+        await tx.CommitAsync(ct);
+
+        await _webhooks.PublishAsync(intent.BusinessProfileId, "digital_asset.deposit.completed", new
+        {
+            id = intent.Id,
+            collectionId = collection.Id,
+            businessCustomerId = intent.BusinessCustomerId,
+            financialAccountId = account.Id,
+            assetCode = intent.AssetCode,
+            networkCode = intent.NetworkCode,
+            amount = intent.Amount,
+            address = intent.Address,
+            providerCollectionId = intent.ProviderCollectionId,
+            providerReference = intent.ProviderReference
+        }, ct);
+
+        return true;
     }
 
     public async Task ProcessInboundAsync(DigitalAssetInboundNotification notification, CancellationToken ct = default)
@@ -402,7 +733,14 @@ public sealed class DigitalAssetService : IEmbeddedDigitalAssetService, IDigital
         networkTx.BlockNumber = notification.BlockNumber ?? networkTx.BlockNumber;
         networkTx.ProviderReference = Clean(notification.ProviderReference, 200) ?? networkTx.ProviderReference;
         networkTx.RawPayloadJson = notification.RawPayloadJson ?? networkTx.RawPayloadJson;
-        if (notification.NetworkFee.HasValue && notification.NetworkFee.Value >= 0m) networkTx.NetworkFee = notification.NetworkFee.Value;
+        if (notification.NetworkFee.HasValue && notification.NetworkFee.Value >= 0m)
+        {
+            networkTx.NetworkFee = notification.NetworkFee.Value;
+            withdrawal.ActualNetworkFee = notification.NetworkFee.Value;
+            withdrawal.NetworkFeeVariance =
+                notification.NetworkFee.Value - withdrawal.NetworkFee;
+        }
+
         networkTx.LastUpdatedAt = DateTime.UtcNow;
 
         var status = (notification.Status ?? "").Trim().ToUpperInvariant();
@@ -651,6 +989,24 @@ public sealed class DigitalAssetService : IEmbeddedDigitalAssetService, IDigital
     private static DigitalAssetDepositAddressDto ToDepositAddressDto(DigitalAssetDepositAddress x) =>
         new(x.Id, x.FinancialAccountId, x.AssetNetworkId, x.AssetNetwork.AssetCode, x.AssetNetwork.NetworkCode,
             x.ProviderCode, x.Address, x.DestinationTag, x.Status, x.CreatedAt);
+
+    private static DigitalAssetDepositIntentDto ToDepositIntentDto(DigitalAssetDepositIntent x) =>
+        new(
+            x.Id,
+            x.FinancialAccountId,
+            x.AssetNetworkId,
+            x.AssetCode,
+            x.NetworkCode,
+            x.ProviderCode,
+            x.Amount,
+            x.Address,
+            x.ProviderCollectionId,
+            x.ProviderReference,
+            x.Status,
+            x.ProviderExpiresAt,
+            x.CreatedAt,
+            x.CompletedAt,
+            x.FailureReason);
 
     private static DigitalAssetWithdrawalDestinationDto ToDestinationDto(DigitalAssetWithdrawalDestination x) =>
         new(x.Id, x.AssetNetworkId, x.AssetCode, x.AssetNetwork.NetworkCode, x.Address, x.DestinationTag, x.Label, x.Status, x.CreatedAt);

@@ -50,3 +50,36 @@ public enum DigitalAssetWithdrawalStatus
     Cancelled = 6
 }
 
+public enum DigitalAssetWebhookReceiptStatus
+{
+    Received = 1,
+    Processed = 2,
+    Rejected = 3,
+    Failed = 4
+}
+
+public enum DigitalAssetAddressRiskLevel
+{
+    Unknown = 0,
+    Low = 1,
+    Medium = 2,
+    High = 3,
+    Severe = 4
+}
+
+public enum DigitalAssetAddressScreeningDirection
+{
+    DepositSource = 1,
+    WithdrawalDestination = 2
+}
+
+public enum DigitalAssetTravelRuleStatus
+{
+    NotRequired = 1,
+    Required = 2,
+    Ready = 3,
+    Submitted = 4,
+    Accepted = 5,
+    Rejected = 6
+}
+

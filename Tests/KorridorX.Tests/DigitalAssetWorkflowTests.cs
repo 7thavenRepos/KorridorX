@@ -11,8 +11,10 @@ using KorridorX.Services.DigitalAssets;
 using KorridorX.Services.EmbeddedFinance;
 using KorridorX.Services.FinancialCore;
 using KorridorX.Tests.Infrastructure;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 
 namespace KorridorX.Tests;
 
@@ -246,6 +248,12 @@ public sealed class DigitalAssetWorkflowTests
         var withdrawal = await db.DigitalAssetWithdrawals.AsNoTracking()
             .SingleAsync(x => x.Id == created.Id);
 
+        var travelRule = await db.DigitalAssetTravelRuleRecords.AsNoTracking()
+            .SingleAsync(x => x.DigitalAssetWithdrawalId == created.Id);
+
+        Assert.Equal(DigitalAssetTravelRuleStatus.NotRequired, travelRule.Status);
+        Assert.Equal(1000m, travelRule.ThresholdAmount);
+
         var reservation = await db.FinancialReservations.AsNoTracking()
             .SingleAsync(x => x.Id == withdrawal.ReservationId);
 
@@ -261,7 +269,7 @@ public sealed class DigitalAssetWorkflowTests
                 3,
                 txHash,
                 12345,
-                1m,
+                1.25m,
                 "provider-completed",
                 "{\"status\":\"confirmed\"}",
                 DateTime.UtcNow));
@@ -287,6 +295,21 @@ public sealed class DigitalAssetWorkflowTests
 
         Assert.Equal(DigitalAssetWithdrawalStatus.Completed, completedWithdrawal.Status);
         Assert.NotNull(completedWithdrawal.CompletedAt);
+        Assert.Equal(1.25m, completedWithdrawal.ActualNetworkFee);
+        Assert.Equal(0.25m, completedWithdrawal.NetworkFeeVariance);
+
+        var providerOperations = new DigitalAssetProviderOperationsService(
+            db,
+            new DigitalAssetProviderRegistry(new[] { provider }),
+            new EphemeralDataProtectionProvider());
+
+        var feeException = Assert.Single(
+            await providerOperations.GetFeeExceptionsAsync(0.10m),
+            x => x.WithdrawalId == created.Id);
+
+        Assert.Equal(1m, feeException.QuotedNetworkFee);
+        Assert.Equal(1.25m, feeException.ActualNetworkFee);
+        Assert.Equal(0.25m, feeException.Variance);
 
         var payout = await db.Payouts.AsNoTracking()
             .SingleAsync(x => x.Id == created.PayoutId);
@@ -301,6 +324,91 @@ public sealed class DigitalAssetWorkflowTests
         Assert.Equal(DigitalAssetTransactionStatus.Confirmed, networkTx.Status);
         Assert.Equal(3, networkTx.Confirmations);
         Assert.Equal(txHash, networkTx.TransactionHash);
+    }
+
+
+    [DatabaseIntegrationFact]
+    public async Task Travel_rule_threshold_requires_data_and_persists_ready_record()
+    {
+        await using var scope = _fixture.Factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        var setup = await CreateScenarioAsync(db, "travel-rule", 100m);
+        var provider = new FakeDigitalAssetProvider(
+            "TESTCHAIN",
+            $"0x{Guid.NewGuid():N}",
+            $"wd-{Guid.NewGuid():N}",
+            $"0x{Guid.NewGuid():N}");
+
+        var service = CreateService(
+            scope,
+            db,
+            setup.ProfileId,
+            EmbeddedFinanceScope.DigitalAssetsRead | EmbeddedFinanceScope.DigitalAssetsWrite,
+            provider,
+            new DigitalAssetComplianceOptions
+            {
+                TravelRuleThreshold = 10m
+            });
+
+        var destination = await service.CreateWithdrawalDestinationAsync(
+            setup.CustomerId,
+            new CreateDigitalAssetWithdrawalDestinationRequestDto(
+                setup.NetworkId,
+                $"0x{Guid.NewGuid():N}",
+                null,
+                "Travel Rule target"));
+
+        var missing = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            service.CreateWithdrawalAsync(
+                setup.CustomerId,
+                new CreateDigitalAssetWithdrawalRequestDto(
+                    setup.AccountId,
+                    destination.Id,
+                    20m,
+                    provider.ProviderCode,
+                    $"TR-MISSING-{Guid.NewGuid():N}")));
+
+        Assert.Contains("Travel Rule", missing.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(0, provider.WithdrawalSubmitCalls);
+
+        db.ChangeTracker.Clear();
+
+        Assert.Equal(
+            0,
+            await db.DigitalAssetWithdrawals.CountAsync(x =>
+                x.BusinessCustomerId == setup.CustomerId));
+
+        var created = await service.CreateWithdrawalAsync(
+            setup.CustomerId,
+            new CreateDigitalAssetWithdrawalRequestDto(
+                setup.AccountId,
+                destination.Id,
+                20m,
+                provider.ProviderCode,
+                $"TR-READY-{Guid.NewGuid():N}",
+                new DigitalAssetTravelRuleDataDto(
+                    "Originator Test VASP",
+                    "Beneficiary Test VASP",
+                    "Test Beneficiary",
+                    "{\"purpose\":\"integration-test\"}")));
+
+        Assert.Equal(DigitalAssetWithdrawalStatus.Submitted, created.Status);
+        Assert.Equal(1, provider.WithdrawalSubmitCalls);
+
+        db.ChangeTracker.Clear();
+
+        var record = await db.DigitalAssetTravelRuleRecords.AsNoTracking()
+            .SingleAsync(x => x.DigitalAssetWithdrawalId == created.Id);
+
+        Assert.Equal(DigitalAssetTravelRuleStatus.Ready, record.Status);
+        Assert.Equal(10m, record.ThresholdAmount);
+        Assert.Equal(setup.AssetCode, record.AssetCode);
+        Assert.Equal(setup.NetworkCode, record.NetworkCode);
+        Assert.Equal("Originator Test VASP", record.OriginatorVasp);
+        Assert.Equal("Beneficiary Test VASP", record.BeneficiaryVasp);
+        Assert.Equal("Test Beneficiary", record.BeneficiaryName);
+        Assert.Equal("{\"purpose\":\"integration-test\"}", record.PayloadJson);
     }
 
     [DatabaseIntegrationFact]
@@ -463,7 +571,8 @@ public sealed class DigitalAssetWorkflowTests
         AppDbContext db,
         Guid businessProfileId,
         EmbeddedFinanceScope scopes,
-        IDigitalAssetProvider provider)
+        IDigitalAssetProvider provider,
+        DigitalAssetComplianceOptions? complianceOptions = null)
     {
         return new DigitalAssetService(
             db,
@@ -476,7 +585,8 @@ public sealed class DigitalAssetWorkflowTests
             new DigitalAssetProviderRegistry(new[] { provider }),
             scope.ServiceProvider.GetRequiredService<IFinancialReservationService>(),
             new DigitalAssetComplianceGate(),
-            scope.ServiceProvider.GetRequiredService<IEmbeddedWebhookPublisher>());
+            scope.ServiceProvider.GetRequiredService<IEmbeddedWebhookPublisher>(),
+            Options.Create(complianceOptions ?? new DigitalAssetComplianceOptions()));
     }
 
     private async Task<Scenario> CreateScenarioAsync(

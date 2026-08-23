@@ -70,9 +70,14 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<Guid
     public DbSet<FinancialReservation> FinancialReservations => Set<FinancialReservation>();
 
     public DbSet<DigitalAssetDepositAddress> DigitalAssetDepositAddresses => Set<DigitalAssetDepositAddress>();
+    public DbSet<DigitalAssetDepositIntent> DigitalAssetDepositIntents => Set<DigitalAssetDepositIntent>();
     public DbSet<DigitalAssetWithdrawalDestination> DigitalAssetWithdrawalDestinations => Set<DigitalAssetWithdrawalDestination>();
     public DbSet<DigitalAssetNetworkTransaction> DigitalAssetNetworkTransactions => Set<DigitalAssetNetworkTransaction>();
     public DbSet<DigitalAssetWithdrawal> DigitalAssetWithdrawals => Set<DigitalAssetWithdrawal>();
+    public DbSet<DigitalAssetProviderConfiguration> DigitalAssetProviderConfigurations => Set<DigitalAssetProviderConfiguration>();
+    public DbSet<DigitalAssetWebhookReceipt> DigitalAssetWebhookReceipts => Set<DigitalAssetWebhookReceipt>();
+    public DbSet<DigitalAssetAddressRiskAssessment> DigitalAssetAddressRiskAssessments => Set<DigitalAssetAddressRiskAssessment>();
+    public DbSet<DigitalAssetTravelRuleRecord> DigitalAssetTravelRuleRecords => Set<DigitalAssetTravelRuleRecord>();
 
     public DbSet<MarketplacePair> MarketplacePairs => Set<MarketplacePair>();
     public DbSet<TradeOrder> TradeOrders => Set<TradeOrder>();

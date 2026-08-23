@@ -115,6 +115,8 @@ public sealed class DigitalAssetWithdrawalConfiguration : IEntityTypeConfigurati
         builder.Property(x => x.AssetCode).HasMaxLength(20);
         builder.Property(x => x.Amount).HasPrecision(36, 18);
         builder.Property(x => x.NetworkFee).HasPrecision(36, 18);
+        builder.Property(x => x.ActualNetworkFee).HasPrecision(36, 18);
+        builder.Property(x => x.NetworkFeeVariance).HasPrecision(36, 18);
         builder.Property(x => x.TotalDebitAmount).HasPrecision(36, 18);
         builder.Property(x => x.FailureReason).HasMaxLength(1000);
         builder.HasOne(x => x.FinancialAccount).WithMany().HasForeignKey(x => x.FinancialAccountId).OnDelete(DeleteBehavior.Restrict);
@@ -122,5 +124,119 @@ public sealed class DigitalAssetWithdrawalConfiguration : IEntityTypeConfigurati
         builder.HasOne(x => x.Destination).WithMany().HasForeignKey(x => x.DestinationId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne(x => x.Payout).WithMany().HasForeignKey(x => x.PayoutId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne(x => x.Reservation).WithMany().HasForeignKey(x => x.ReservationId).OnDelete(DeleteBehavior.Restrict);
+    }
+}
+
+public sealed class DigitalAssetProviderConfigurationConfiguration :
+    IEntityTypeConfiguration<DigitalAssetProviderConfiguration>
+{
+    public void Configure(EntityTypeBuilder<DigitalAssetProviderConfiguration> builder)
+    {
+        builder.HasIndex(x => x.ProviderCode).IsUnique().HasFilter("\"IsDeleted\" = false");
+        builder.Property(x => x.ProviderCode).HasMaxLength(50);
+        builder.Property(x => x.DisplayName).HasMaxLength(120);
+        builder.Property(x => x.BaseUrl).HasMaxLength(1000);
+        builder.Property(x => x.WebhookSecretProtected).HasColumnType("text");
+        builder.Property(x => x.WebhookSecretLastFour).HasMaxLength(4);
+        builder.Property(x => x.MetadataJson).HasColumnType("text");
+        builder.Property(x => x.LastHealthCheckMessage).HasMaxLength(1000);
+    }
+}
+
+public sealed class DigitalAssetWebhookReceiptConfiguration :
+    IEntityTypeConfiguration<DigitalAssetWebhookReceipt>
+{
+    public void Configure(EntityTypeBuilder<DigitalAssetWebhookReceipt> builder)
+    {
+        builder.HasIndex(x => new { x.ProviderCode, x.ProviderEventId }).IsUnique();
+        builder.HasIndex(x => new { x.Status, x.ReceivedAt });
+        builder.Property(x => x.ProviderCode).HasMaxLength(50);
+        builder.Property(x => x.ProviderEventId).HasMaxLength(200);
+        builder.Property(x => x.PayloadHash).HasMaxLength(64);
+        builder.Property(x => x.EventType).HasMaxLength(150);
+        builder.Property(x => x.ErrorMessage).HasMaxLength(2000);
+    }
+}
+
+public sealed class DigitalAssetAddressRiskAssessmentConfiguration :
+    IEntityTypeConfiguration<DigitalAssetAddressRiskAssessment>
+{
+    public void Configure(EntityTypeBuilder<DigitalAssetAddressRiskAssessment> builder)
+    {
+        builder.HasIndex(x => new
+        {
+            x.BusinessProfileId,
+            x.BusinessCustomerId,
+            x.AssetNetworkId,
+            x.Address,
+            x.Direction,
+            x.AssessedAt
+        });
+        builder.HasIndex(x => new { x.IsBlocking, x.RiskLevel, x.AssessedAt });
+        builder.Property(x => x.AssetCode).HasMaxLength(20);
+        builder.Property(x => x.Address).HasMaxLength(300);
+        builder.Property(x => x.ProviderCode).HasMaxLength(50);
+        builder.Property(x => x.ProviderReference).HasMaxLength(200);
+        builder.Property(x => x.RiskScore).HasPrecision(9, 6);
+        builder.Property(x => x.ReasonsJson).HasColumnType("text");
+        builder.Property(x => x.RawResultJson).HasColumnType("text");
+        builder.HasOne(x => x.AssetNetwork).WithMany()
+            .HasForeignKey(x => x.AssetNetworkId)
+            .OnDelete(DeleteBehavior.Restrict);
+    }
+}
+
+public sealed class DigitalAssetTravelRuleRecordConfiguration :
+    IEntityTypeConfiguration<DigitalAssetTravelRuleRecord>
+{
+    public void Configure(EntityTypeBuilder<DigitalAssetTravelRuleRecord> builder)
+    {
+        builder.HasIndex(x => x.DigitalAssetWithdrawalId).IsUnique();
+        builder.HasIndex(x => new { x.Status, x.CreatedAt });
+        builder.Property(x => x.ThresholdAmount).HasPrecision(36, 18);
+        builder.Property(x => x.AssetCode).HasMaxLength(20);
+        builder.Property(x => x.NetworkCode).HasMaxLength(50);
+        builder.Property(x => x.OriginatorVasp).HasMaxLength(200);
+        builder.Property(x => x.BeneficiaryVasp).HasMaxLength(200);
+        builder.Property(x => x.BeneficiaryName).HasMaxLength(200);
+        builder.Property(x => x.ProviderReference).HasMaxLength(200);
+        builder.Property(x => x.PayloadJson).HasColumnType("text");
+        builder.Property(x => x.FailureReason).HasMaxLength(2000);
+        builder.HasOne(x => x.DigitalAssetWithdrawal).WithMany()
+            .HasForeignKey(x => x.DigitalAssetWithdrawalId)
+            .OnDelete(DeleteBehavior.Restrict);
+    }
+}
+
+
+public sealed class DigitalAssetDepositIntentConfiguration :
+    IEntityTypeConfiguration<DigitalAssetDepositIntent>
+{
+    public void Configure(EntityTypeBuilder<DigitalAssetDepositIntent> builder)
+    {
+        builder.HasIndex(x => new { x.ProviderCode, x.ProviderCollectionId })
+            .IsUnique()
+            .HasFilter("\"ProviderCollectionId\" IS NOT NULL");
+        builder.HasIndex(x => new { x.BusinessProfileId, x.BusinessCustomerId, x.CreatedAt });
+        builder.HasIndex(x => x.FinancialAccountId);
+        builder.HasIndex(x => new { x.Status, x.ProviderExpiresAt });
+        builder.Property(x => x.ProviderCode).HasMaxLength(50);
+        builder.Property(x => x.ProviderWalletId).HasMaxLength(150);
+        builder.Property(x => x.ProviderCollectionId).HasMaxLength(200);
+        builder.Property(x => x.ProviderReference).HasMaxLength(200);
+        builder.Property(x => x.AssetCode).HasMaxLength(20);
+        builder.Property(x => x.NetworkCode).HasMaxLength(50);
+        builder.Property(x => x.Amount).HasPrecision(36, 18);
+        builder.Property(x => x.Address).HasMaxLength(300);
+        builder.Property(x => x.FailureReason).HasMaxLength(2000);
+        builder.HasOne(x => x.FinancialAccount).WithMany()
+            .HasForeignKey(x => x.FinancialAccountId)
+            .OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne(x => x.AssetNetwork).WithMany()
+            .HasForeignKey(x => x.AssetNetworkId)
+            .OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne(x => x.Collection).WithMany()
+            .HasForeignKey(x => x.CollectionId)
+            .OnDelete(DeleteBehavior.Restrict);
     }
 }

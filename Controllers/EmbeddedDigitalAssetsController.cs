@@ -20,6 +20,14 @@ public sealed class EmbeddedDigitalAssetsController : ControllerBase
     public async Task<IActionResult> CreateDepositAddress(Guid businessCustomerId, [FromBody] CreateDigitalAssetDepositAddressRequestDto request, CancellationToken ct) =>
         Ok(ApiResponses.Ok(await _service.CreateDepositAddressAsync(businessCustomerId, request, ct), "Digital-asset deposit address created successfully."));
 
+    [HttpGet("deposit-intents")]
+    public async Task<IActionResult> DepositIntents(Guid businessCustomerId, CancellationToken ct) =>
+        Ok(ApiResponses.Ok(await _service.GetDepositIntentsAsync(businessCustomerId, ct), "Digital-asset deposit intents retrieved successfully."));
+
+    [HttpPost("deposit-intents")]
+    public async Task<IActionResult> CreateDepositIntent(Guid businessCustomerId, [FromBody] CreateDigitalAssetDepositIntentRequestDto request, CancellationToken ct) =>
+        Ok(ApiResponses.Ok(await _service.CreateDepositIntentAsync(businessCustomerId, request, ct), "Digital-asset deposit intent created successfully."));
+
     [HttpGet("withdrawal-destinations")]
     public async Task<IActionResult> WithdrawalDestinations(Guid businessCustomerId, CancellationToken ct) =>
         Ok(ApiResponses.Ok(await _service.GetWithdrawalDestinationsAsync(businessCustomerId, ct), "Digital-asset withdrawal destinations retrieved successfully."));

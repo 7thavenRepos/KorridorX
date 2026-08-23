@@ -4,6 +4,20 @@ namespace KorridorX.Providers.Remittance.Blaaiz;
 
 public interface IBlaaizApiClient
 {
+    Task<BlaaizApiResult<BlaaizCryptoWalletListResponse>> ListCryptoWalletsAsync(
+        CancellationToken ct = default);
+
+    Task<BlaaizApiResult<BlaaizCryptoPayoutResponse>> InitiateCryptoPayoutAsync(
+        BlaaizCryptoPayoutRequest request,
+        string idempotencyKey,
+        Guid payoutId,
+        CancellationToken ct = default);
+
+    Task<BlaaizApiResult<BlaaizCryptoCollectionResponse>> InitiateCryptoCollectionAsync(
+        BlaaizCryptoCollectionRequest request,
+        Guid depositIntentId,
+        CancellationToken ct = default);
+
     Task<BlaaizApiResult<List<BlaaizWalletData>>> ListWalletsAsync(
         CancellationToken ct = default);
 

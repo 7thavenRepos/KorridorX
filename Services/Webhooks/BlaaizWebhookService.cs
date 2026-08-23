@@ -12,6 +12,7 @@ using KorridorX.Providers.Remittance;
 using KorridorX.Services.Payments;
 using KorridorX.Services.Compliance;
 using KorridorX.Services.EmbeddedFinance;
+using KorridorX.Services.DigitalAssets;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 
@@ -27,6 +28,7 @@ public class BlaaizWebhookService : IBlaaizWebhookService
     private readonly IComplianceScreeningService _screeningService;
     private readonly IEmbeddedInboundCollectionService _embeddedInboundCollections;
     private readonly IEmbeddedPayoutSettlementService _embeddedPayoutSettlement;
+    private readonly IDigitalAssetDepositIntentSettlementService _digitalAssetDepositIntents;
 
     public BlaaizWebhookService(
         AppDbContext db,
@@ -36,7 +38,8 @@ public class BlaaizWebhookService : IBlaaizWebhookService
         IRemittanceProvider provider,
         IComplianceScreeningService screeningService,
         IEmbeddedInboundCollectionService embeddedInboundCollections,
-        IEmbeddedPayoutSettlementService embeddedPayoutSettlement)
+        IEmbeddedPayoutSettlementService embeddedPayoutSettlement,
+        IDigitalAssetDepositIntentSettlementService digitalAssetDepositIntents)
     {
         _db = db;
         _options = options.Value;
@@ -46,6 +49,7 @@ public class BlaaizWebhookService : IBlaaizWebhookService
         _screeningService = screeningService;
         _embeddedInboundCollections = embeddedInboundCollections;
         _embeddedPayoutSettlement = embeddedPayoutSettlement;
+        _digitalAssetDepositIntents = digitalAssetDepositIntents;
     }
 
     public Task<BlaaizWebhookResult> ProcessCollectionWebhookAsync(
@@ -259,6 +263,23 @@ public class BlaaizWebhookService : IBlaaizWebhookService
                 isRefund
                     ? "Refund webhook is missing collection or refund identification."
                     : "Collection webhook is missing transaction identification.");
+        }
+
+        if (!isRefund && !string.IsNullOrWhiteSpace(collectionTransactionId))
+        {
+            var digitalAssetHandled = await _digitalAssetDepositIntents.TryProcessProviderCollectionAsync(
+                "BLAAIZ",
+                collectionTransactionId,
+                collectionReference,
+                ReadOptionalString(data, root, "transaction_status", "status") ?? EventStatus(eventType),
+                ReadOptionalString(data, root, "transaction_currency", "currency", "token"),
+                ReadOptionalDecimal(data, root, "transaction_amount", "amount", "token_amount"),
+                rawPayload,
+                ReadOptionalDateTime(data, root, "updated_at", "date", "timestamp") ?? DateTime.UtcNow,
+                ct);
+
+            if (digitalAssetHandled)
+                return true;
         }
 
         var collection = await _db.Collections

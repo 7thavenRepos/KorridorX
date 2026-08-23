@@ -23,7 +23,10 @@ public sealed class DigitalAssetWithdrawal : AuditableEntity
     public string ProviderCode { get; set; } = "";
     public string AssetCode { get; set; } = "";
     public decimal Amount { get; set; }
+    // NetworkFee is the quoted/configured fee reserved at withdrawal creation.
     public decimal NetworkFee { get; set; }
+    public decimal? ActualNetworkFee { get; set; }
+    public decimal? NetworkFeeVariance { get; set; }
     public decimal TotalDebitAmount { get; set; }
     public DigitalAssetWithdrawalStatus Status { get; set; } = DigitalAssetWithdrawalStatus.Pending;
     public string? FailureReason { get; set; }
