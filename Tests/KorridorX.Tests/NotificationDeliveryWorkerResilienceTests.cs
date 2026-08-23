@@ -211,7 +211,12 @@ public sealed class NotificationDeliveryWorkerResilienceTests
             "stale processing lock",
             stored.ErrorMessage,
             StringComparison.OrdinalIgnoreCase);
-        Assert.Equal(0, provider.CallCount);
+        // The RC integration database is shared. The worker may send
+        // other due notifications after recovering this row. Verify that the
+        // stale exhausted notification itself was never resent.
+        Assert.DoesNotContain(
+            "stale@example.test",
+            provider.Recipients);
     }
 
     private async Task InvokeProcessBatchAsync(
@@ -312,11 +317,14 @@ public sealed class NotificationDeliveryWorkerResilienceTests
 
         public int CallCount { get; private set; }
 
+        public List<string> Recipients { get; } = new();
+
         public Task<NotificationDeliveryResult> SendAsync(
             NotificationMessage notification,
             CancellationToken ct = default)
         {
             CallCount += 1;
+            Recipients.Add(notification.Recipient);
             return Task.FromResult(_send(notification.Recipient));
         }
     }
