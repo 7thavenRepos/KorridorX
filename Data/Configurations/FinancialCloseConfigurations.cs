@@ -88,8 +88,23 @@ public sealed class FinanceCloseRequestConfiguration : IEntityTypeConfiguration<
     public void Configure(EntityTypeBuilder<FinanceCloseRequest> builder)
     {
         builder.HasIndex(x => new { x.AccountingPeriodId, x.Status });
+
+        builder.HasIndex(x => x.AccountingPeriodId)
+            .IsUnique()
+            .HasDatabaseName(
+                "IX_FinanceCloseRequests_AccountingPeriodId_Pending")
+            .HasFilter(
+                "\"Status\" = 1 AND \"IsDeleted\" = false");
+
+        builder.Property(x => x.Status)
+            .IsConcurrencyToken();
+
         builder.Property(x => x.RequestNote).HasMaxLength(2000);
         builder.Property(x => x.ReviewNote).HasMaxLength(2000);
-        builder.HasOne(x => x.AccountingPeriod).WithMany().HasForeignKey(x => x.AccountingPeriodId).OnDelete(DeleteBehavior.Cascade);
+
+        builder.HasOne(x => x.AccountingPeriod)
+            .WithMany()
+            .HasForeignKey(x => x.AccountingPeriodId)
+            .OnDelete(DeleteBehavior.Cascade);
     }
 }

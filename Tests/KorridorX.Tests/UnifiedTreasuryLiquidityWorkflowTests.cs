@@ -366,6 +366,206 @@ public sealed class UnifiedTreasuryLiquidityWorkflowTests
                 x.Severity == TreasuryLiquidityAlertSeverity.Warning);
     }
 
+
+    [DatabaseIntegrationFact]
+    public async Task Concurrent_same_idempotency_key_never_double_posts_internal_liquidity()
+    {
+        await using var setupScope = _fixture.Factory.Services.CreateAsyncScope();
+        var setupDb = setupScope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        var assetCode = await CreateAssetAsync(setupDb, "TLC");
+        var source = await CreateAccountAsync(
+            setupDb,
+            assetCode,
+            FinancialAccountOwnerType.Treasury,
+            FinancialAccountType.Treasury,
+            150m);
+        var destination = await CreateAccountAsync(
+            setupDb,
+            assetCode,
+            FinancialAccountOwnerType.Platform,
+            FinancialAccountType.House,
+            25m);
+
+        var idempotencyKey = $"concurrent-idem-{Guid.NewGuid():N}";
+        var gate = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+
+        async Task<(bool Success, Guid? LedgerId, Exception? Error)> InvokeAsync()
+        {
+            await gate.Task;
+
+            await using var scope = _fixture.Factory.Services.CreateAsyncScope();
+            var service = scope.ServiceProvider.GetRequiredService<ITreasuryService>();
+
+            try
+            {
+                var result = await service.ExecuteInternalLiquidityTransferAsync(
+                    Guid.Empty,
+                    new ExecuteInternalLiquidityTransferRequestDto
+                    {
+                        FromFinancialAccountId = source.Id,
+                        ToFinancialAccountId = destination.Id,
+                        Amount = 40m,
+                        IdempotencyKey = idempotencyKey,
+                        Reason = "Concurrent idempotency race."
+                    });
+
+                return (true, result.LedgerTransactionId, null);
+            }
+            catch (Exception ex)
+            {
+                return (false, null, ex);
+            }
+        }
+
+        var firstTask = InvokeAsync();
+        var secondTask = InvokeAsync();
+
+        gate.SetResult();
+
+        var results = await Task.WhenAll(firstTask, secondTask);
+
+        Assert.Contains(results, x => x.Success);
+
+        await using var verifyScope = _fixture.Factory.Services.CreateAsyncScope();
+        var db = verifyScope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        var sourceAfter = await db.FinancialAccounts
+            .AsNoTracking()
+            .SingleAsync(x => x.Id == source.Id);
+        var destinationAfter = await db.FinancialAccounts
+            .AsNoTracking()
+            .SingleAsync(x => x.Id == destination.Id);
+
+        Assert.Equal(110m, sourceAfter.AvailableBalance);
+        Assert.Equal(110m, sourceAfter.SettledBalance);
+        Assert.Equal(65m, destinationAfter.AvailableBalance);
+        Assert.Equal(65m, destinationAfter.SettledBalance);
+
+        var ledgers = await db.LedgerTransactions
+            .AsNoTracking()
+            .Where(x =>
+                x.IdempotencyScope == "TreasuryInternalLiquidityTransfer" &&
+                x.IdempotencyKey == idempotencyKey)
+            .ToListAsync();
+
+        Assert.Single(ledgers);
+
+        var successfulIds = results
+            .Where(x => x.Success)
+            .Select(x => x.LedgerId)
+            .Distinct()
+            .ToList();
+
+        Assert.Single(successfulIds);
+        Assert.Equal(ledgers[0].Id, successfulIds[0]);
+    }
+
+    [DatabaseIntegrationFact]
+    public async Task Concurrent_competing_transfers_cannot_double_spend_same_treasury_balance()
+    {
+        await using var setupScope = _fixture.Factory.Services.CreateAsyncScope();
+        var setupDb = setupScope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        var assetCode = await CreateAssetAsync(setupDb, "TLD");
+        var source = await CreateAccountAsync(
+            setupDb,
+            assetCode,
+            FinancialAccountOwnerType.Treasury,
+            FinancialAccountType.Treasury,
+            100m);
+        var destinationA = await CreateAccountAsync(
+            setupDb,
+            assetCode,
+            FinancialAccountOwnerType.Platform,
+            FinancialAccountType.House,
+            0m);
+        var destinationB = await CreateAccountAsync(
+            setupDb,
+            assetCode,
+            FinancialAccountOwnerType.Platform,
+            FinancialAccountType.Settlement,
+            0m);
+
+        var keyA = $"double-spend-a-{Guid.NewGuid():N}";
+        var keyB = $"double-spend-b-{Guid.NewGuid():N}";
+        var gate = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+
+        async Task<(bool Success, Exception? Error)> InvokeAsync(
+            Guid destinationId,
+            string key)
+        {
+            await gate.Task;
+
+            await using var scope = _fixture.Factory.Services.CreateAsyncScope();
+            var service = scope.ServiceProvider.GetRequiredService<ITreasuryService>();
+
+            try
+            {
+                await service.ExecuteInternalLiquidityTransferAsync(
+                    Guid.Empty,
+                    new ExecuteInternalLiquidityTransferRequestDto
+                    {
+                        FromFinancialAccountId = source.Id,
+                        ToFinancialAccountId = destinationId,
+                        Amount = 80m,
+                        IdempotencyKey = key,
+                        Reason = "Concurrent double-spend protection test."
+                    });
+
+                return (true, null);
+            }
+            catch (Exception ex)
+            {
+                return (false, ex);
+            }
+        }
+
+        var firstTask = InvokeAsync(destinationA.Id, keyA);
+        var secondTask = InvokeAsync(destinationB.Id, keyB);
+
+        gate.SetResult();
+
+        var results = await Task.WhenAll(firstTask, secondTask);
+
+        Assert.Equal(1, results.Count(x => x.Success));
+
+        await using var verifyScope = _fixture.Factory.Services.CreateAsyncScope();
+        var db = verifyScope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        var sourceAfter = await db.FinancialAccounts
+            .AsNoTracking()
+            .SingleAsync(x => x.Id == source.Id);
+        var destinationAAfter = await db.FinancialAccounts
+            .AsNoTracking()
+            .SingleAsync(x => x.Id == destinationA.Id);
+        var destinationBAfter = await db.FinancialAccounts
+            .AsNoTracking()
+            .SingleAsync(x => x.Id == destinationB.Id);
+
+        Assert.Equal(20m, sourceAfter.AvailableBalance);
+        Assert.Equal(20m, sourceAfter.SettledBalance);
+        Assert.True(sourceAfter.AvailableBalance >= 0m);
+        Assert.True(sourceAfter.SettledBalance >= 0m);
+
+        Assert.Equal(
+            80m,
+            destinationAAfter.AvailableBalance +
+            destinationBAfter.AvailableBalance);
+        Assert.Equal(
+            80m,
+            destinationAAfter.SettledBalance +
+            destinationBAfter.SettledBalance);
+
+        Assert.Equal(
+            1,
+            await db.LedgerTransactions.CountAsync(x =>
+                x.IdempotencyScope == "TreasuryInternalLiquidityTransfer" &&
+                (x.IdempotencyKey == keyA || x.IdempotencyKey == keyB)));
+    }
+
     private static async Task<string> CreateAssetAsync(
         AppDbContext db,
         string prefix)
