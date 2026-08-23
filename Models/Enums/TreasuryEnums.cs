@@ -48,3 +48,26 @@ public enum SettlementStatementImportStatus
     Variance = 3,
     Rejected = 4
 }
+
+public enum TreasuryLiquidityScopeType
+{
+    ProviderWallet = 1,
+    FinancialAccount = 2
+}
+
+public enum TreasuryLiquidityActionType
+{
+    InternalTransfer = 1,
+    ProviderTopUp = 2,
+    ProviderSweep = 3,
+    ProviderSwap = 4,
+    Monitor = 5
+}
+
+public enum TreasuryLiquidityAlertSeverity
+{
+    Info = 1,
+    Warning = 2,
+    Critical = 3
+}
+

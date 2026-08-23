@@ -20,8 +20,12 @@ public sealed class ProviderWalletDto
 
 public sealed class UpsertLiquidityThresholdRequestDto
 {
+    public TreasuryLiquidityScopeType ScopeType { get; set; } =
+        TreasuryLiquidityScopeType.ProviderWallet;
     [Required, MaxLength(50)] public string ProviderCode { get; set; } = "Blaaiz";
-    [Required, MaxLength(10)] public string CurrencyCode { get; set; } = "";
+    [Required, MaxLength(20)] public string CurrencyCode { get; set; } = "";
+    [MaxLength(50)] public string? NetworkCode { get; set; }
+    public FinancialAccountType? FinancialAccountType { get; set; }
     [Range(0, double.MaxValue)] public decimal MinimumBalance { get; set; }
     [Range(0, double.MaxValue)] public decimal TargetBalance { get; set; }
     public decimal? MaximumBalance { get; set; }
@@ -31,8 +35,11 @@ public sealed class UpsertLiquidityThresholdRequestDto
 public sealed class LiquidityThresholdDto
 {
     public Guid Id { get; set; }
+    public TreasuryLiquidityScopeType ScopeType { get; set; }
     public string ProviderCode { get; set; } = "";
     public string CurrencyCode { get; set; } = "";
+    public string? NetworkCode { get; set; }
+    public FinancialAccountType? FinancialAccountType { get; set; }
     public decimal MinimumBalance { get; set; }
     public decimal TargetBalance { get; set; }
     public decimal? MaximumBalance { get; set; }
@@ -42,7 +49,7 @@ public sealed class LiquidityThresholdDto
 public sealed class CreateSettlementBatchRequestDto
 {
     [Required, MaxLength(50)] public string ProviderCode { get; set; } = "Blaaiz";
-    [Required, MaxLength(10)] public string CurrencyCode { get; set; } = "";
+    [Required, MaxLength(20)] public string CurrencyCode { get; set; } = "";
     public DateTime WindowStart { get; set; }
     public DateTime WindowEnd { get; set; }
 }
@@ -97,8 +104,8 @@ public sealed class TreasuryDashboardDto
 
 public sealed class UpsertFxMarkupRuleRequestDto
 {
-    [Required, MaxLength(10)] public string SourceCurrencyCode { get; set; } = "";
-    [Required, MaxLength(10)] public string DestinationCurrencyCode { get; set; } = "";
+    [Required, MaxLength(20)] public string SourceCurrencyCode { get; set; } = "";
+    [Required, MaxLength(20)] public string DestinationCurrencyCode { get; set; } = "";
     [Range(0, 100)] public decimal MarkupPercentage { get; set; }
     public decimal? MinimumCustomerRate { get; set; }
     public decimal? MaximumCustomerRate { get; set; }
@@ -107,8 +114,8 @@ public sealed class UpsertFxMarkupRuleRequestDto
 
 public sealed class CreateManagedExchangeRateRequestDto
 {
-    [Required, MaxLength(10)] public string SourceCurrencyCode { get; set; } = "";
-    [Required, MaxLength(10)] public string DestinationCurrencyCode { get; set; } = "";
+    [Required, MaxLength(20)] public string SourceCurrencyCode { get; set; } = "";
+    [Required, MaxLength(20)] public string DestinationCurrencyCode { get; set; } = "";
     [Range(0.00000001, double.MaxValue)] public decimal ProviderRate { get; set; }
     [MaxLength(50)] public string ProviderCode { get; set; } = "Blaaiz";
     [MaxLength(150)] public string? ProviderRateId { get; set; }
@@ -234,3 +241,94 @@ public sealed class SettlementStatementImportDto
     public string? Note { get; set; }
     public DateTime ImportedAt { get; set; }
 }
+
+public sealed class TreasuryLiquidityPositionDto
+{
+    public TreasuryLiquidityScopeType ScopeType { get; set; }
+    public Guid SourceId { get; set; }
+    public string SourceName { get; set; } = "";
+    public string AssetCode { get; set; } = "";
+    public string? ProviderCode { get; set; }
+    public string? NetworkCode { get; set; }
+    public FinancialAccountType? FinancialAccountType { get; set; }
+    public FinancialAccountStatus? FinancialAccountStatus { get; set; }
+    public decimal SettledBalance { get; set; }
+    public decimal AvailableBalance { get; set; }
+    public decimal HeldBalance { get; set; }
+    public decimal ExternalBalance { get; set; }
+    public decimal PendingNetworkInbound { get; set; }
+    public decimal PendingNetworkOutbound { get; set; }
+    public decimal? MinimumBalance { get; set; }
+    public decimal? TargetBalance { get; set; }
+    public decimal? MaximumBalance { get; set; }
+    public LiquidityPositionStatus LiquidityStatus { get; set; }
+    public DateTime? LastSyncedAt { get; set; }
+    public bool IsStale { get; set; }
+}
+
+public sealed class TreasuryAssetExposureDto
+{
+    public string AssetCode { get; set; } = "";
+    public decimal HouseAvailable { get; set; }
+    public decimal TreasuryAvailable { get; set; }
+    public decimal ProviderClearingAvailable { get; set; }
+    public decimal SettlementAvailable { get; set; }
+    public decimal ExternalProviderBalance { get; set; }
+    public decimal PendingNetworkInbound { get; set; }
+    public decimal PendingNetworkOutbound { get; set; }
+    public decimal ObservedLiquidity { get; set; }
+}
+
+public sealed class TreasuryLiquidityAlertDto
+{
+    public TreasuryLiquidityAlertSeverity Severity { get; set; }
+    public TreasuryLiquidityScopeType ScopeType { get; set; }
+    public Guid SourceId { get; set; }
+    public string AssetCode { get; set; } = "";
+    public string? ProviderCode { get; set; }
+    public string? NetworkCode { get; set; }
+    public LiquidityPositionStatus LiquidityStatus { get; set; }
+    public string Message { get; set; } = "";
+}
+
+public sealed class TreasuryUnifiedRebalanceSuggestionDto
+{
+    public TreasuryLiquidityActionType ActionType { get; set; }
+    public string AssetCode { get; set; } = "";
+    public Guid? FromFinancialAccountId { get; set; }
+    public Guid? ToFinancialAccountId { get; set; }
+    public Guid? ProviderWalletBalanceId { get; set; }
+    public string? ProviderCode { get; set; }
+    public string? NetworkCode { get; set; }
+    public decimal SuggestedAmount { get; set; }
+    public string Reason { get; set; } = "";
+}
+
+public sealed class ExecuteInternalLiquidityTransferRequestDto
+{
+    public Guid FromFinancialAccountId { get; set; }
+    public Guid ToFinancialAccountId { get; set; }
+
+    [Range(0.00000001, double.MaxValue)]
+    public decimal Amount { get; set; }
+
+    [Required, MaxLength(100)]
+    public string IdempotencyKey { get; set; } = "";
+
+    [Required, MaxLength(1000)]
+    public string Reason { get; set; } = "";
+}
+
+public sealed class InternalLiquidityTransferResultDto
+{
+    public Guid LedgerTransactionId { get; set; }
+    public string Reference { get; set; } = "";
+    public string AssetCode { get; set; } = "";
+    public Guid FromFinancialAccountId { get; set; }
+    public Guid ToFinancialAccountId { get; set; }
+    public decimal Amount { get; set; }
+    public decimal SourceAvailableAfter { get; set; }
+    public decimal DestinationAvailableAfter { get; set; }
+    public DateTime PostedAt { get; set; }
+}
+

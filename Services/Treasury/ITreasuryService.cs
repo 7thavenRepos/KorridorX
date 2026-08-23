@@ -7,6 +7,14 @@ public interface ITreasuryService
 {
     Task<IReadOnlyList<ProviderWalletDto>> SyncProviderWalletsAsync(Guid userId, CancellationToken ct = default);
     Task<TreasuryDashboardDto> GetDashboardAsync(CancellationToken ct = default);
+    Task<IReadOnlyList<TreasuryLiquidityPositionDto>> GetLiquidityPositionsAsync(CancellationToken ct = default);
+    Task<IReadOnlyList<TreasuryAssetExposureDto>> GetAssetExposureAsync(CancellationToken ct = default);
+    Task<IReadOnlyList<TreasuryLiquidityAlertDto>> GetLiquidityAlertsAsync(CancellationToken ct = default);
+    Task<IReadOnlyList<TreasuryUnifiedRebalanceSuggestionDto>> GetUnifiedRebalanceSuggestionsAsync(CancellationToken ct = default);
+    Task<InternalLiquidityTransferResultDto> ExecuteInternalLiquidityTransferAsync(
+        Guid userId,
+        ExecuteInternalLiquidityTransferRequestDto request,
+        CancellationToken ct = default);
     Task<PagedResult<ProviderWalletDto>> GetProviderWalletsAsync(string? currencyCode, int page, int pageSize, CancellationToken ct = default);
     Task<LiquidityThresholdDto> UpsertThresholdAsync(Guid userId, UpsertLiquidityThresholdRequestDto request, CancellationToken ct = default);
     Task<PagedResult<LiquidityThresholdDto>> GetThresholdsAsync(int page, int pageSize, CancellationToken ct = default);
