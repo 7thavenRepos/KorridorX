@@ -160,14 +160,25 @@ jobs:
 
           ssh \
             -i "$HOME/.ssh/korridorx_staging" \
+            -o ServerAliveInterval=30 \
+            -o ServerAliveCountMax=20 \
+            -o TCPKeepAlive=yes \
+            -o ConnectTimeout=20 \
             "$STAGING_SSH_USER@$STAGING_SSH_HOST" \
             "mkdir -p /opt/korridorx/artifacts"
 
           scp \
             -i "$HOME/.ssh/korridorx_staging" \
+            -o ServerAliveInterval=30 \
+            -o ServerAliveCountMax=20 \
+            -o TCPKeepAlive=yes \
+            -o ConnectTimeout=20 \
             "$KORRIDORX_MIGRATION_ARTIFACT" \
             "$STAGING_SSH_USER@$STAGING_SSH_HOST:/opt/korridorx/artifacts/migrations.sql.next"
 
+      # Docker/.NET publish can be quiet for several minutes on the staging EC2
+      # host. SSH keepalives prevent an otherwise healthy remote build from being
+      # dropped by an idle network path.
       - name: Deploy exact tested commit
         env:
           STAGING_SSH_HOST: ${{ vars.STAGING_SSH_HOST }}
@@ -178,6 +189,10 @@ jobs:
 
           ssh \
             -i "$HOME/.ssh/korridorx_staging" \
+            -o ServerAliveInterval=30 \
+            -o ServerAliveCountMax=20 \
+            -o TCPKeepAlive=yes \
+            -o ConnectTimeout=20 \
             "$STAGING_SSH_USER@$STAGING_SSH_HOST" \
             "TESTED_COMMIT_SHA='$TESTED_COMMIT_SHA' bash -s" <<'REMOTE'
           set -euo pipefail
