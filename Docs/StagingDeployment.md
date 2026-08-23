@@ -109,7 +109,27 @@ curl -fsS https://api.staging.korridorx.com/health/ready
 
 Rollback restores the previously tagged API image. It does not reverse database migrations. Prefer a forward-fix migration; restore the verified pre-deployment backup only when an incident plan explicitly requires it.
 
-## 9. Updating staging
+## 9. Automatic staging deployment
+
+Successful pushes to `develop` deploy the exact CI-tested commit to the existing
+staging host. The deployment job downloads the reviewed `migrations.sql`
+artifact, copies it to `/opt/korridorx/artifacts/migrations.sql`, checks out the
+exact commit SHA that passed CI, then runs the existing guarded deploy and public
+smoke-test scripts.
+
+Application environment values remain only in the server-owned
+`/opt/korridorx/.env.staging`; the deployment workflow does not create, replace,
+or upload that file.
+
+The GitHub `staging` environment requires these connection-only secrets:
+
+- `STAGING_HOST`
+- `STAGING_USER`
+- `STAGING_SSH_KEY`
+- `STAGING_SSH_PORT` (optional; defaults to `22`)
+
+## 10. Manual staging update / recovery
+
 
 ```bash
 cd /opt/korridorx
