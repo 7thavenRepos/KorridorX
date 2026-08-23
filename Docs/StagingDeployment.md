@@ -34,7 +34,21 @@ Edit `.env.staging` and replace every placeholder. Generate secrets locally on t
 openssl rand -base64 48
 ```
 
-Use separate generated values for `POSTGRES_PASSWORD` and `JWT_KEY`.
+Use separate generated values for `POSTGRES_PASSWORD`, `JWT_KEY`, and
+`MFA_CODE_REPLAY_PEPPER`.
+
+Because Staging is a deployed environment, also configure the existing
+`.env.staging` with:
+
+- `REQUIRE_CONFIRMED_EMAIL=true`;
+- `ACCOUNT_FRONTEND_BASE_URL=https://staging.korridorx.com`;
+- `MFA_ENFORCE_FOR_PRIVILEGED_ROLES=true`;
+- `NOTIFICATION_WORKER_ENABLED=true`;
+- `SMTP_ENABLED=true`, plus a staging/sandbox SMTP host and sender address.
+
+Existing staging identities are not replaced by this update. If a staging
+administrator already exists, keep using that identity and its current MFA
+enrollment.
 
 ## 4. Obtain the migration artifact
 
@@ -70,9 +84,13 @@ sudo systemctl reload nginx
 ```bash
 cd /opt/korridorx
 chmod +x scripts/deploy/*.sh
+./scripts/deploy/staging-preflight.sh
 ./scripts/deploy/staging-deploy.sh
 ./scripts/deploy/staging-smoke-test.sh https://api.staging.korridorx.com
 ```
+
+Swagger is intentionally disabled in Staging by the current hosting security
+policy. The smoke test verifies that both Swagger routes return HTTP 404.
 
 ## 7. Inspect and operate
 
@@ -95,7 +113,7 @@ Rollback restores the previously tagged API image. It does not reverse database 
 
 ```bash
 cd /opt/korridorx
-git pull --ff-only origin master
+git pull --ff-only origin develop
 ```
 
 Download the new successful CI migration artifact, replace `artifacts/migrations.sql`, then run the deploy and smoke-test scripts again.

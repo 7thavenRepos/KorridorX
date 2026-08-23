@@ -38,6 +38,10 @@ services:
       AllowedHosts: ${ALLOWED_HOSTS:?ALLOWED_HOSTS is required}
       Hosting__AllowedOrigins__0: ${ALLOWED_ORIGIN:?ALLOWED_ORIGIN is required}
       Hosting__RequireHttpsRedirection: ${REQUIRE_HTTPS_REDIRECTION:-true}
+      Security__Accounts__RequireConfirmedEmail: ${REQUIRE_CONFIRMED_EMAIL:-true}
+      Security__Accounts__FrontendBaseUrl: ${ACCOUNT_FRONTEND_BASE_URL:?ACCOUNT_FRONTEND_BASE_URL is required}
+      Security__Mfa__EnforceForPrivilegedRoles: ${MFA_ENFORCE_FOR_PRIVILEGED_ROLES:-true}
+      Security__Mfa__CodeReplayPepper: ${MFA_CODE_REPLAY_PEPPER:?MFA_CODE_REPLAY_PEPPER is required}
       Hosting__TrustedProxies__0: ${TRUSTED_PROXY_IP:-172.30.0.1}
       Hosting__ForwardLimit: 1
       Hosting__DataProtectionKeysPath: /var/lib/korridorx/keys
@@ -48,13 +52,15 @@ services:
       ComplianceScreening__IsEnabled: ${COMPLIANCE_SCREENING_ENABLED:-false}
       ComplianceScreening__RequireRecentClearScreeningForPayout: ${COMPLIANCE_SCREENING_REQUIRE_CLEAR_FOR_PAYOUT:-false}
       ComplianceScreening__RescreeningWorkerEnabled: ${COMPLIANCE_RESCREENING_WORKER_ENABLED:-false}
-      NotificationDelivery__WorkerEnabled: ${NOTIFICATION_WORKER_ENABLED:-false}
-      NotificationDelivery__Smtp__IsEnabled: ${SMTP_ENABLED:-false}
-      NotificationDelivery__Smtp__Host: ${SMTP_HOST:-}
+      NotificationDelivery__WorkerEnabled: ${NOTIFICATION_WORKER_ENABLED:?NOTIFICATION_WORKER_ENABLED is required}
+      NotificationDelivery__Smtp__IsEnabled: ${SMTP_ENABLED:?SMTP_ENABLED is required}
+      NotificationDelivery__Smtp__Host: ${SMTP_HOST:?SMTP_HOST is required}
       NotificationDelivery__Smtp__Port: ${SMTP_PORT:-587}
+      NotificationDelivery__Smtp__UseSsl: ${SMTP_USE_SSL:-true}
       NotificationDelivery__Smtp__Username: ${SMTP_USERNAME:-}
       NotificationDelivery__Smtp__Password: ${SMTP_PASSWORD:-}
-      NotificationDelivery__Smtp__FromAddress: ${SMTP_FROM_ADDRESS:-}
+      NotificationDelivery__Smtp__FromAddress: ${SMTP_FROM_ADDRESS:?SMTP_FROM_ADDRESS is required}
+      NotificationDelivery__Smtp__FromName: ${SMTP_FROM_NAME:-KorridorX Staging}
     volumes:
       - korridorx-staging-dataprotection:/var/lib/korridorx/keys
     networks:
