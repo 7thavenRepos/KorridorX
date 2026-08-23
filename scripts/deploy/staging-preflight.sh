@@ -134,16 +134,26 @@ python3 - <<'PY'
 import json
 from pathlib import Path
 
-path = Path("appsettings.Staging.json")
-data = json.loads(path.read_text(encoding="utf-8-sig"))
-swagger = data.get("Hosting", {}).get("SwaggerEnabled")
+staging_path = Path("appsettings.Staging.json")
+production_path = Path("appsettings.Production.json")
 
-if swagger is not False:
+staging = json.loads(staging_path.read_text(encoding="utf-8-sig"))
+production = json.loads(production_path.read_text(encoding="utf-8-sig"))
+
+staging_swagger = staging.get("Hosting", {}).get("SwaggerEnabled")
+production_swagger = production.get("Hosting", {}).get("SwaggerEnabled")
+
+if staging_swagger is not True:
     raise SystemExit(
-        "FAIL: Hosting:SwaggerEnabled must be false in appsettings.Staging.json."
+        "FAIL: Hosting:SwaggerEnabled must be true in appsettings.Staging.json."
     )
 
-print("PASS: Swagger is disabled for Staging")
+if production_swagger is not False:
+    raise SystemExit(
+        "FAIL: Hosting:SwaggerEnabled must be false in appsettings.Production.json."
+    )
+
+print("PASS: Swagger is enabled for Staging and disabled for Production")
 PY
 
 command -v docker >/dev/null 2>&1 || fail "docker is not installed."
