@@ -147,7 +147,54 @@ public sealed class NotificationDeliveryWorker : BackgroundService
         notification.LastUpdatedAt = now;
         await db.SaveChangesAsync(ct);
 
-        var result = await provider.SendAsync(notification, ct);
+        NotificationDeliveryResult result;
+
+        try
+        {
+            result = await provider.SendAsync(notification, ct);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            var failedAt = DateTime.UtcNow;
+
+            notification.LockedAt = null;
+            notification.LockId = null;
+            notification.LastUpdatedAt = failedAt;
+
+            if (notification.AttemptCount >= notification.MaxAttempts)
+            {
+                notification.Status = NotificationStatuses.DeadLetter;
+                notification.DeadLetteredAt = failedAt;
+                notification.ErrorMessage = Truncate(
+                    ex.Message.Length == 0
+                        ? "Notification delivery provider failed."
+                        : ex.Message,
+                    1000);
+                notification.NextAttemptAt = null;
+            }
+            else
+            {
+                notification.Status = NotificationStatuses.Retry;
+                notification.ErrorMessage = Truncate(
+                    ex.Message.Length == 0
+                        ? "Notification delivery provider failed."
+                        : ex.Message,
+                    1000);
+                notification.NextAttemptAt =
+                    NotificationDeliveryPolicy.CalculateNextAttemptAt(
+                        failedAt,
+                        notification.AttemptCount,
+                        _options.RetryBaseMinutes);
+            }
+
+            await db.SaveChangesAsync(ct);
+            return;
+        }
+
         var completedAt = DateTime.UtcNow;
 
         notification.LockedAt = null;
@@ -166,17 +213,22 @@ public sealed class NotificationDeliveryWorker : BackgroundService
         {
             notification.Status = NotificationStatuses.DeadLetter;
             notification.DeadLetteredAt = completedAt;
-            notification.ErrorMessage = Truncate(result.ErrorMessage ?? "Notification delivery failed.", 1000);
+            notification.ErrorMessage = Truncate(
+                result.ErrorMessage ?? "Notification delivery failed.",
+                1000);
             notification.NextAttemptAt = null;
         }
         else
         {
             notification.Status = NotificationStatuses.Retry;
-            notification.ErrorMessage = Truncate(result.ErrorMessage ?? "Notification delivery failed.", 1000);
-            notification.NextAttemptAt = NotificationDeliveryPolicy.CalculateNextAttemptAt(
-                completedAt,
-                notification.AttemptCount,
-                _options.RetryBaseMinutes);
+            notification.ErrorMessage = Truncate(
+                result.ErrorMessage ?? "Notification delivery failed.",
+                1000);
+            notification.NextAttemptAt =
+                NotificationDeliveryPolicy.CalculateNextAttemptAt(
+                    completedAt,
+                    notification.AttemptCount,
+                    _options.RetryBaseMinutes);
         }
 
         await db.SaveChangesAsync(ct);

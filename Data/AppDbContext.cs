@@ -1,13 +1,17 @@
 using KorridorX.Models.Audit;
 using KorridorX.Models.BusinessBeneficiaries;
 using KorridorX.Models.BusinessTransfers;
-using KorridorX.Models.BusinessFunding;
+using KorridorX.Models.FinancialCore;
 using KorridorX.Models.Compliance;
 using KorridorX.Models.Customers;
+using KorridorX.Models.DigitalAssets;
+using KorridorX.Models.EmbeddedFinance;
 using KorridorX.Models.Fx;
 using KorridorX.Models.Finance;
 using KorridorX.Models.Identity;
+using KorridorX.Models.Instant;
 using KorridorX.Models.Lookups;
+using KorridorX.Models.Marketplace;
 using KorridorX.Models.Notifications;
 using KorridorX.Models.Payments;
 using KorridorX.Models.Providers;
@@ -35,6 +39,17 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<Guid
     public DbSet<BusinessProfile> BusinessProfiles => Set<BusinessProfile>();
     public DbSet<BusinessUser> BusinessUsers => Set<BusinessUser>();
 
+    public DbSet<ApiApplication> ApiApplications => Set<ApiApplication>();
+    public DbSet<ApiCredential> ApiCredentials => Set<ApiCredential>();
+    public DbSet<BusinessCustomer> BusinessCustomers => Set<BusinessCustomer>();
+    public DbSet<BusinessPricingPolicy> BusinessPricingPolicies => Set<BusinessPricingPolicy>();
+    public DbSet<CollectionAccount> CollectionAccounts => Set<CollectionAccount>();
+    public DbSet<ProviderAccountMapping> ProviderAccountMappings => Set<ProviderAccountMapping>();
+    public DbSet<EmbeddedApiIdempotencyRecord> EmbeddedApiIdempotencyRecords => Set<EmbeddedApiIdempotencyRecord>();
+    public DbSet<BusinessWebhookEndpoint> BusinessWebhookEndpoints => Set<BusinessWebhookEndpoint>();
+    public DbSet<BusinessWebhookEvent> BusinessWebhookEvents => Set<BusinessWebhookEvent>();
+    public DbSet<BusinessWebhookDelivery> BusinessWebhookDeliveries => Set<BusinessWebhookDelivery>();
+
     public DbSet<Recipient> Recipients => Set<Recipient>();
     public DbSet<RecipientBankAccount> RecipientBankAccounts => Set<RecipientBankAccount>();
     public DbSet<RecipientMobileWallet> RecipientMobileWallets => Set<RecipientMobileWallet>();
@@ -49,10 +64,31 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<Guid
     public DbSet<BusinessPaymentBatch> BusinessPaymentBatches => Set<BusinessPaymentBatch>();
     public DbSet<BusinessPaymentBatchItem> BusinessPaymentBatchItems => Set<BusinessPaymentBatchItem>();
     public DbSet<BusinessApproval> BusinessApprovals => Set<BusinessApproval>();
-    public DbSet<BusinessWallet> BusinessWallets => Set<BusinessWallet>();
-    public DbSet<BusinessLedgerTransaction> BusinessLedgerTransactions => Set<BusinessLedgerTransaction>();
-    public DbSet<BusinessLedgerEntry> BusinessLedgerEntries => Set<BusinessLedgerEntry>();
-    public DbSet<BusinessWalletReservation> BusinessWalletReservations => Set<BusinessWalletReservation>();
+    public DbSet<FinancialAccount> FinancialAccounts => Set<FinancialAccount>();
+    public DbSet<LedgerTransaction> LedgerTransactions => Set<LedgerTransaction>();
+    public DbSet<LedgerPosting> LedgerPostings => Set<LedgerPosting>();
+    public DbSet<FinancialReservation> FinancialReservations => Set<FinancialReservation>();
+
+    public DbSet<DigitalAssetDepositAddress> DigitalAssetDepositAddresses => Set<DigitalAssetDepositAddress>();
+    public DbSet<DigitalAssetDepositIntent> DigitalAssetDepositIntents => Set<DigitalAssetDepositIntent>();
+    public DbSet<DigitalAssetWithdrawalDestination> DigitalAssetWithdrawalDestinations => Set<DigitalAssetWithdrawalDestination>();
+    public DbSet<DigitalAssetNetworkTransaction> DigitalAssetNetworkTransactions => Set<DigitalAssetNetworkTransaction>();
+    public DbSet<DigitalAssetWithdrawal> DigitalAssetWithdrawals => Set<DigitalAssetWithdrawal>();
+    public DbSet<DigitalAssetProviderConfiguration> DigitalAssetProviderConfigurations => Set<DigitalAssetProviderConfiguration>();
+    public DbSet<DigitalAssetWebhookReceipt> DigitalAssetWebhookReceipts => Set<DigitalAssetWebhookReceipt>();
+    public DbSet<DigitalAssetAddressRiskAssessment> DigitalAssetAddressRiskAssessments => Set<DigitalAssetAddressRiskAssessment>();
+    public DbSet<DigitalAssetTravelRuleRecord> DigitalAssetTravelRuleRecords => Set<DigitalAssetTravelRuleRecord>();
+
+    public DbSet<MarketplacePair> MarketplacePairs => Set<MarketplacePair>();
+    public DbSet<TradeOrder> TradeOrders => Set<TradeOrder>();
+    public DbSet<TradeMatch> TradeMatches => Set<TradeMatch>();
+    public DbSet<Trade> Trades => Set<Trade>();
+    public DbSet<BusinessTradingRfq> BusinessTradingRfqs => Set<BusinessTradingRfq>();
+    public DbSet<BusinessTradingRfqQuote> BusinessTradingRfqQuotes => Set<BusinessTradingRfqQuote>();
+
+    public DbSet<InstantPair> InstantPairs => Set<InstantPair>();
+    public DbSet<InstantQuote> InstantQuotes => Set<InstantQuote>();
+    public DbSet<InstantTrade> InstantTrades => Set<InstantTrade>();
 
     public DbSet<Collection> Collections => Set<Collection>();
     public DbSet<CollectionAttempt> CollectionAttempts => Set<CollectionAttempt>();
@@ -86,6 +122,8 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<Guid
     public DbSet<ProviderRequestLog> ProviderRequestLogs => Set<ProviderRequestLog>();
     public DbSet<ProviderTransaction> ProviderTransactions => Set<ProviderTransaction>();
     public DbSet<ProviderBank> ProviderBanks => Set<ProviderBank>();
+    public DbSet<PayoutDestinationProviderMapping> PayoutDestinationProviderMappings =>
+        Set<PayoutDestinationProviderMapping>();
     public DbSet<AccountingAccount> AccountingAccounts => Set<AccountingAccount>();
     public DbSet<AccountingPeriod> AccountingPeriods => Set<AccountingPeriod>();
     public DbSet<JournalEntry> JournalEntries => Set<JournalEntry>();
@@ -117,8 +155,9 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<Guid
     public DbSet<TransferInvestigation> TransferInvestigations => Set<TransferInvestigation>();
     public DbSet<SupportEvidence> SupportEvidence => Set<SupportEvidence>();
     public DbSet<Country> Countries => Set<Country>();
-    public DbSet<Currency> Currencies => Set<Currency>();
-    public DbSet<CountryCurrency> CountryCurrencies => Set<CountryCurrency>();
+    public DbSet<Asset> Assets => Set<Asset>();
+    public DbSet<AssetNetwork> AssetNetworks => Set<AssetNetwork>();
+    public DbSet<CountryAsset> CountryAssets => Set<CountryAsset>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {

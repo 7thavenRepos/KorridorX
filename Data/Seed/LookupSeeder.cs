@@ -1,4 +1,4 @@
-﻿using KorridorX.Models.Enums;
+using KorridorX.Models.Enums;
 using KorridorX.Models.Fx;
 using KorridorX.Models.Lookups;
 using Microsoft.EntityFrameworkCore;
@@ -10,12 +10,12 @@ public static class LookupSeeder
     public static async Task SeedAsync(IServiceProvider services)
     {
         using var scope = services.CreateScope();
-
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
         await SeedCountriesAsync(db);
-        await SeedCurrenciesAsync(db);
-        await SeedCountryCurrenciesAsync(db);
+        await SeedAssetsAsync(db);
+        await SeedAssetNetworksAsync(db);
+        await SeedCountryAssetsAsync(db);
         await SeedFxAsync(db);
     }
 
@@ -25,63 +25,75 @@ public static class LookupSeeder
         {
             new Country { Code = "US", Name = "United States", Iso3Code = "USA", IsSupported = true, IsSendCountry = true, IsReceiveCountry = false },
             new Country { Code = "CA", Name = "Canada", Iso3Code = "CAN", IsSupported = true, IsSendCountry = true, IsReceiveCountry = false },
+            new Country { Code = "GB", Name = "United Kingdom", Iso3Code = "GBR", IsSupported = true, IsSendCountry = true, IsReceiveCountry = true },
             new Country { Code = "NG", Name = "Nigeria", Iso3Code = "NGA", IsSupported = true, IsSendCountry = false, IsReceiveCountry = true }
         };
 
         foreach (var country in countries)
         {
-            var exists = await db.Countries.AnyAsync(x => x.Code == country.Code);
-
-            if (!exists)
-            {
+            if (!await db.Countries.AnyAsync(x => x.Code == country.Code))
                 db.Countries.Add(country);
-            }
         }
 
         await db.SaveChangesAsync();
     }
 
-    private static async Task SeedCurrenciesAsync(AppDbContext db)
+    private static async Task SeedAssetsAsync(AppDbContext db)
     {
-        var currencies = new[]
+        var assets = new[]
         {
-            new Currency { Code = "USD", Name = "US Dollar", Symbol = "$", DecimalPlaces = 2, IsFiat = true, IsStablecoin = false, IsSupported = true },
-            new Currency { Code = "CAD", Name = "Canadian Dollar", Symbol = "$", DecimalPlaces = 2, IsFiat = true, IsStablecoin = false, IsSupported = true },
-            new Currency { Code = "NGN", Name = "Nigerian Naira", Symbol = "₦", DecimalPlaces = 2, IsFiat = true, IsStablecoin = false, IsSupported = true }
+            new Asset { Code = "USD", Name = "US Dollar", Symbol = "$", Type = AssetType.Fiat, DecimalPlaces = 2, IsSupported = true, DepositEnabled = true, WithdrawalEnabled = true, TradingEnabled = true, InstantEnabled = true },
+            new Asset { Code = "CAD", Name = "Canadian Dollar", Symbol = "$", Type = AssetType.Fiat, DecimalPlaces = 2, IsSupported = true, DepositEnabled = true, WithdrawalEnabled = true, TradingEnabled = true, InstantEnabled = true },
+            new Asset { Code = "GBP", Name = "British Pound", Symbol = "£", Type = AssetType.Fiat, DecimalPlaces = 2, IsSupported = true, DepositEnabled = true, WithdrawalEnabled = true, TradingEnabled = true, InstantEnabled = true },
+            new Asset { Code = "EUR", Name = "Euro", Symbol = "€", Type = AssetType.Fiat, DecimalPlaces = 2, IsSupported = true, DepositEnabled = true, WithdrawalEnabled = true, TradingEnabled = true, InstantEnabled = true },
+            new Asset { Code = "NGN", Name = "Nigerian Naira", Symbol = "₦", Type = AssetType.Fiat, DecimalPlaces = 2, IsSupported = true, DepositEnabled = true, WithdrawalEnabled = true, TradingEnabled = true, InstantEnabled = true },
+            new Asset { Code = "USDT", Name = "Tether USD", Symbol = "USDT", Type = AssetType.Crypto, DecimalPlaces = 18, IsStablecoin = true, IsSupported = true, DepositEnabled = false, WithdrawalEnabled = false, TradingEnabled = true, InstantEnabled = true },
+            new Asset { Code = "USDC", Name = "USD Coin", Symbol = "USDC", Type = AssetType.Crypto, DecimalPlaces = 18, IsStablecoin = true, IsSupported = true, DepositEnabled = false, WithdrawalEnabled = false, TradingEnabled = true, InstantEnabled = true }
         };
 
-        foreach (var currency in currencies)
+        foreach (var asset in assets)
         {
-            var exists = await db.Currencies.AnyAsync(x => x.Code == currency.Code);
-
-            if (!exists)
-            {
-                db.Currencies.Add(currency);
-            }
+            if (!await db.Assets.AnyAsync(x => x.Code == asset.Code))
+                db.Assets.Add(asset);
         }
 
         await db.SaveChangesAsync();
     }
 
-    private static async Task SeedCountryCurrenciesAsync(AppDbContext db)
+    private static async Task SeedAssetNetworksAsync(AppDbContext db)
+    {
+        var networks = new[]
+        {
+            new AssetNetwork { AssetCode = "USDT", NetworkCode = "ETHEREUM", Name = "Ethereum", NativeAssetCode = "ETH", RequiredConfirmations = 12, Status = AssetNetworkStatus.Disabled },
+            new AssetNetwork { AssetCode = "USDT", NetworkCode = "TRON", Name = "Tron", NativeAssetCode = "TRX", RequiredConfirmations = 20, Status = AssetNetworkStatus.Disabled },
+            new AssetNetwork { AssetCode = "USDT", NetworkCode = "POLYGON", Name = "Polygon", NativeAssetCode = "POL", RequiredConfirmations = 128, Status = AssetNetworkStatus.Disabled },
+            new AssetNetwork { AssetCode = "USDC", NetworkCode = "ETHEREUM", Name = "Ethereum", NativeAssetCode = "ETH", RequiredConfirmations = 12, Status = AssetNetworkStatus.Disabled },
+            new AssetNetwork { AssetCode = "USDC", NetworkCode = "POLYGON", Name = "Polygon", NativeAssetCode = "POL", RequiredConfirmations = 128, Status = AssetNetworkStatus.Disabled }
+        };
+
+        foreach (var network in networks)
+        {
+            if (!await db.AssetNetworks.AnyAsync(x => x.AssetCode == network.AssetCode && x.NetworkCode == network.NetworkCode))
+                db.AssetNetworks.Add(network);
+        }
+
+        await db.SaveChangesAsync();
+    }
+
+    private static async Task SeedCountryAssetsAsync(AppDbContext db)
     {
         var links = new[]
         {
-            new CountryCurrency { CountryCode = "US", CurrencyCode = "USD", CanSend = true, CanReceive = false, IsDefault = true },
-            new CountryCurrency { CountryCode = "CA", CurrencyCode = "CAD", CanSend = true, CanReceive = false, IsDefault = true },
-            new CountryCurrency { CountryCode = "NG", CurrencyCode = "NGN", CanSend = false, CanReceive = true, IsDefault = true }
+            new CountryAsset { CountryCode = "US", AssetCode = "USD", CanSend = true, CanReceive = true, CanDeposit = true, CanWithdraw = true, CanTrade = true, CanUseInstant = true, IsDefault = true },
+            new CountryAsset { CountryCode = "CA", AssetCode = "CAD", CanSend = true, CanReceive = true, CanDeposit = true, CanWithdraw = true, CanTrade = true, CanUseInstant = true, IsDefault = true },
+            new CountryAsset { CountryCode = "GB", AssetCode = "GBP", CanSend = true, CanReceive = true, CanDeposit = true, CanWithdraw = true, CanTrade = true, CanUseInstant = true, IsDefault = true },
+            new CountryAsset { CountryCode = "NG", AssetCode = "NGN", CanSend = true, CanReceive = true, CanDeposit = true, CanWithdraw = true, CanTrade = true, CanUseInstant = true, IsDefault = true }
         };
 
         foreach (var link in links)
         {
-            var exists = await db.CountryCurrencies.AnyAsync(x =>
-                x.CountryCode == link.CountryCode &&
-                x.CurrencyCode == link.CurrencyCode);
-
-            if (!exists)
-            {
-                db.CountryCurrencies.Add(link);
-            }
+            if (!await db.CountryAssets.AnyAsync(x => x.CountryCode == link.CountryCode && x.AssetCode == link.AssetCode))
+                db.CountryAssets.Add(link);
         }
 
         await db.SaveChangesAsync();
@@ -90,92 +102,28 @@ public static class LookupSeeder
     private static async Task SeedFxAsync(AppDbContext db)
     {
         var now = DateTime.UtcNow;
-
         var rates = new[]
         {
-            new ExchangeRate
-            {
-                SourceCurrencyCode = "USD",
-                DestinationCurrencyCode = "NGN",
-                ProviderRate = 1500m,
-                CustomerRate = 1470m,
-                MarkupRate = 30m,
-                ProviderCode = "Blaaiz",
-                EffectiveFrom = now,
-                IsActive = true
-            },
-            new ExchangeRate
-            {
-                SourceCurrencyCode = "CAD",
-                DestinationCurrencyCode = "NGN",
-                ProviderRate = 1100m,
-                CustomerRate = 1075m,
-                MarkupRate = 25m,
-                ProviderCode = "Blaaiz",
-                EffectiveFrom = now,
-                IsActive = true
-            }
+            new ExchangeRate { SourceCurrencyCode = "USD", DestinationCurrencyCode = "NGN", ProviderRate = 1500m, CustomerRate = 1470m, MarkupRate = 30m, ProviderCode = "Blaaiz", EffectiveFrom = now, IsActive = true },
+            new ExchangeRate { SourceCurrencyCode = "CAD", DestinationCurrencyCode = "NGN", ProviderRate = 1100m, CustomerRate = 1075m, MarkupRate = 25m, ProviderCode = "Blaaiz", EffectiveFrom = now, IsActive = true }
         };
 
         foreach (var rate in rates)
         {
-            var exists = await db.ExchangeRates.AnyAsync(x =>
-                x.SourceCurrencyCode == rate.SourceCurrencyCode &&
-                x.DestinationCurrencyCode == rate.DestinationCurrencyCode &&
-                x.IsActive);
-
-            if (!exists)
-            {
+            if (!await db.ExchangeRates.AnyAsync(x => x.SourceCurrencyCode == rate.SourceCurrencyCode && x.DestinationCurrencyCode == rate.DestinationCurrencyCode && x.IsActive))
                 db.ExchangeRates.Add(rate);
-            }
         }
 
         var fees = new[]
         {
-            new TransferFee
-            {
-                SourceCountryCode = "US",
-                DestinationCountryCode = "NG",
-                SourceCurrencyCode = "USD",
-                DestinationCurrencyCode = "NGN",
-                TransferType = TransferType.ConsumerToConsumer,
-                MinAmount = 1m,
-                MaxAmount = 10000m,
-                FixedFee = 2m,
-                PercentageFee = 1.5m,
-                FeeCurrencyCode = "USD",
-                IsActive = true
-            },
-            new TransferFee
-            {
-                SourceCountryCode = "CA",
-                DestinationCountryCode = "NG",
-                SourceCurrencyCode = "CAD",
-                DestinationCurrencyCode = "NGN",
-                TransferType = TransferType.ConsumerToConsumer,
-                MinAmount = 1m,
-                MaxAmount = 10000m,
-                FixedFee = 2m,
-                PercentageFee = 1.5m,
-                FeeCurrencyCode = "CAD",
-                IsActive = true
-            }
+            new TransferFee { SourceCountryCode = "US", DestinationCountryCode = "NG", SourceCurrencyCode = "USD", DestinationCurrencyCode = "NGN", TransferType = TransferType.ConsumerToConsumer, MinAmount = 1m, MaxAmount = 10000m, FixedFee = 2m, PercentageFee = 1.5m, FeeCurrencyCode = "USD", IsActive = true },
+            new TransferFee { SourceCountryCode = "CA", DestinationCountryCode = "NG", SourceCurrencyCode = "CAD", DestinationCurrencyCode = "NGN", TransferType = TransferType.ConsumerToConsumer, MinAmount = 1m, MaxAmount = 10000m, FixedFee = 2m, PercentageFee = 1.5m, FeeCurrencyCode = "CAD", IsActive = true }
         };
 
         foreach (var fee in fees)
         {
-            var exists = await db.TransferFees.AnyAsync(x =>
-                x.SourceCountryCode == fee.SourceCountryCode &&
-                x.DestinationCountryCode == fee.DestinationCountryCode &&
-                x.SourceCurrencyCode == fee.SourceCurrencyCode &&
-                x.DestinationCurrencyCode == fee.DestinationCurrencyCode &&
-                x.TransferType == fee.TransferType &&
-                x.IsActive);
-
-            if (!exists)
-            {
+            if (!await db.TransferFees.AnyAsync(x => x.SourceCountryCode == fee.SourceCountryCode && x.DestinationCountryCode == fee.DestinationCountryCode && x.SourceCurrencyCode == fee.SourceCurrencyCode && x.DestinationCurrencyCode == fee.DestinationCurrencyCode && x.TransferType == fee.TransferType && x.IsActive))
                 db.TransferFees.Add(fee);
-            }
         }
 
         await db.SaveChangesAsync();

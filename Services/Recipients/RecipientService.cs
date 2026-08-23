@@ -45,7 +45,7 @@ public class RecipientService : IRecipientService
 
         if (!string.IsNullOrWhiteSpace(countryCode))
         {
-            var normalizedCountryCode = NormalizeCode(countryCode);
+            var normalizedCountryCode = NormalizeCountryCode(countryCode);
             query = query.Where(x => x.CountryCode == normalizedCountryCode);
         }
 
@@ -98,7 +98,7 @@ public class RecipientService : IRecipientService
         ValidateRecipient(request.FirstName, request.LastName, request.CountryCode, request.Email);
 
         var customerProfileId = await GetCustomerProfileIdAsync(userId, ct);
-        var normalizedCountryCode = NormalizeCode(request.CountryCode);
+        var normalizedCountryCode = NormalizeCountryCode(request.CountryCode);
 
         await EnsureCountryExistsAsync(normalizedCountryCode, ct);
 
@@ -141,7 +141,7 @@ public class RecipientService : IRecipientService
             throw new InvalidOperationException("Recipient not found.");
         }
 
-        var normalizedCountryCode = NormalizeCode(request.CountryCode);
+        var normalizedCountryCode = NormalizeCountryCode(request.CountryCode);
         await EnsureCountryExistsAsync(normalizedCountryCode, ct);
 
         recipient.FirstName = request.FirstName.Trim();
@@ -218,8 +218,8 @@ public class RecipientService : IRecipientService
             throw new InvalidOperationException("Recipient not found.");
         }
 
-        var countryCode = NormalizeCode(request.CountryCode);
-        var currencyCode = NormalizeCode(request.CurrencyCode);
+        var countryCode = NormalizeCountryCode(request.CountryCode);
+        var currencyCode = NormalizeAssetCode(request.CurrencyCode);
 
         await EnsureCountryAndCurrencyAreLinkedAsync(countryCode, currencyCode, ct);
         var providerBank = await ResolveProviderBankAsync(request.ProviderBankId, countryCode, ct);
@@ -274,8 +274,8 @@ public class RecipientService : IRecipientService
             throw new InvalidOperationException("Bank account not found.");
         }
 
-        var countryCode = NormalizeCode(request.CountryCode);
-        var currencyCode = NormalizeCode(request.CurrencyCode);
+        var countryCode = NormalizeCountryCode(request.CountryCode);
+        var currencyCode = NormalizeAssetCode(request.CurrencyCode);
 
         await EnsureCountryAndCurrencyAreLinkedAsync(countryCode, currencyCode, ct);
         var providerBank = await ResolveProviderBankAsync(request.ProviderBankId, countryCode, ct);
@@ -352,8 +352,8 @@ public class RecipientService : IRecipientService
             throw new InvalidOperationException("Recipient not found.");
         }
 
-        var countryCode = NormalizeCode(request.CountryCode);
-        var currencyCode = NormalizeCode(request.CurrencyCode);
+        var countryCode = NormalizeCountryCode(request.CountryCode);
+        var currencyCode = NormalizeAssetCode(request.CurrencyCode);
 
         await EnsureCountryAndCurrencyAreLinkedAsync(countryCode, currencyCode, ct);
         await EnsureMobileWalletDoesNotExistAsync(recipientId, request.ProviderName, request.WalletNumber, ct);
@@ -400,8 +400,8 @@ public class RecipientService : IRecipientService
             throw new InvalidOperationException("Mobile wallet not found.");
         }
 
-        var countryCode = NormalizeCode(request.CountryCode);
-        var currencyCode = NormalizeCode(request.CurrencyCode);
+        var countryCode = NormalizeCountryCode(request.CountryCode);
+        var currencyCode = NormalizeAssetCode(request.CurrencyCode);
 
         await EnsureCountryAndCurrencyAreLinkedAsync(countryCode, currencyCode, ct);
         await EnsureMobileWalletDoesNotExistAsync(recipientId, request.ProviderName, request.WalletNumber, ct, mobileWalletId);
@@ -490,15 +490,15 @@ public class RecipientService : IRecipientService
 
     private async Task EnsureCountryAndCurrencyAreLinkedAsync(string countryCode, string currencyCode, CancellationToken ct)
     {
-        var exists = await _db.CountryCurrencies
+        var exists = await _db.CountryAssets
             .AsNoTracking()
             .AnyAsync(x =>
                 x.CountryCode == countryCode &&
-                x.CurrencyCode == currencyCode &&
+                x.AssetCode == currencyCode &&
                 x.CanReceive &&
                 x.Country.IsSupported &&
                 x.Country.IsReceiveCountry &&
-                x.Currency.IsSupported,
+                x.Asset.IsSupported,
                 ct);
 
         if (!exists)
@@ -678,7 +678,29 @@ public class RecipientService : IRecipientService
         if (string.IsNullOrWhiteSpace(accountName)) throw new InvalidOperationException("Account name is required.");
     }
 
-    private static string NormalizeCode(string value) => value.Trim().ToUpperInvariant();
+    private static string NormalizeCountryCode(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            throw new InvalidOperationException("Country code is required.");
+
+        var code = value.Trim().ToUpperInvariant();
+        if (code.Length > 10)
+            throw new InvalidOperationException("Country code cannot exceed 10 characters.");
+
+        return code;
+    }
+
+    private static string NormalizeAssetCode(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            throw new InvalidOperationException("Asset code is required.");
+
+        var code = value.Trim().ToUpperInvariant();
+        if (code.Length > 20)
+            throw new InvalidOperationException("Asset code cannot exceed 20 characters.");
+
+        return code;
+    }
 
     private static string? Clean(string? value)
     {

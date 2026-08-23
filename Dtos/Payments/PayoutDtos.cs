@@ -5,9 +5,15 @@ namespace KorridorX.Dtos.Payments;
 public record PayoutDto
 (
     Guid Id,
-    Guid TransferId,
-    string TransferReference,
-    TransferStatus TransferStatus,
+    Guid? TransferId,
+    PaymentOperationPurpose Purpose,
+    Guid? FinancialAccountId,
+    string? RelatedEntityType,
+    Guid? RelatedEntityId,
+    string? ContextEntityType,
+    Guid? ContextEntityId,
+    string? TransferReference,
+    TransferStatus? TransferStatus,
     string Reference,
     string CurrencyCode,
     decimal Amount,

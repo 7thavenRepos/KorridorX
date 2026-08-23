@@ -4,6 +4,20 @@ namespace KorridorX.Providers.Remittance.Blaaiz;
 
 public interface IBlaaizApiClient
 {
+    Task<BlaaizApiResult<BlaaizCryptoWalletListResponse>> ListCryptoWalletsAsync(
+        CancellationToken ct = default);
+
+    Task<BlaaizApiResult<BlaaizCryptoPayoutResponse>> InitiateCryptoPayoutAsync(
+        BlaaizCryptoPayoutRequest request,
+        string idempotencyKey,
+        Guid payoutId,
+        CancellationToken ct = default);
+
+    Task<BlaaizApiResult<BlaaizCryptoCollectionResponse>> InitiateCryptoCollectionAsync(
+        BlaaizCryptoCollectionRequest request,
+        Guid depositIntentId,
+        CancellationToken ct = default);
+
     Task<BlaaizApiResult<List<BlaaizWalletData>>> ListWalletsAsync(
         CancellationToken ct = default);
 
@@ -107,6 +121,17 @@ public interface IBlaaizApiClient
         Guid businessProfileId,
         CancellationToken ct = default);
 
+    Task<BlaaizApiResult<BlaaizVirtualBankAccountEnvelope>> CreateVirtualBankAccountAsync(
+        BlaaizVirtualBankAccountRequest request,
+        Guid? businessCustomerId = null,
+        CancellationToken ct = default);
+
+    Task<BlaaizApiResult<BlaaizVirtualBankAccountEnvelope>> GetVirtualBankAccountsAsync(
+        string walletId,
+        string customerId,
+        Guid? businessCustomerId = null,
+        CancellationToken ct = default);
+
     Task<BlaaizApiResult<BlaaizCardCollectionResponse>> InitiateCardCollectionAsync(
         BlaaizCardCollectionRequest request,
         Guid transferId,
@@ -121,7 +146,7 @@ public interface IBlaaizApiClient
 
     Task<BlaaizApiResult<BlaaizPayoutResponse>> InitiatePayoutAsync(
         BlaaizPayoutRequest request,
-        Guid transferId,
+        Guid? transferId,
         Guid payoutId,
         CancellationToken ct = default);
 

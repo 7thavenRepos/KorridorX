@@ -7,7 +7,7 @@ public record BusinessWalletDto(
     Guid Id,
     Guid BusinessProfileId,
     string CurrencyCode,
-    BusinessWalletStatus Status,
+    FinancialAccountStatus Status,
     decimal SettledBalance,
     decimal AvailableBalance,
     decimal HeldBalance,
@@ -16,8 +16,8 @@ public record BusinessWalletDto(
 
 public record BusinessLedgerEntryDto(
     Guid Id,
-    BusinessLedgerAccountType AccountType,
-    BusinessLedgerEntrySide Side,
+    LedgerBalanceBucket AccountType,
+    LedgerPostingSide Side,
     decimal Amount,
     decimal? AccountBalanceAfter);
 
@@ -25,8 +25,8 @@ public record BusinessLedgerTransactionDto(
     Guid Id,
     string Reference,
     string CurrencyCode,
-    BusinessLedgerTransactionType Type,
-    BusinessLedgerTransactionStatus Status,
+    LedgerTransactionType Type,
+    LedgerTransactionStatus Status,
     decimal Amount,
     string Description,
     Guid? TransferId,
@@ -53,7 +53,7 @@ public record BusinessTransferFundingDto(
     string CurrencyCode,
     decimal Amount,
     Guid? BusinessWalletId,
-    BusinessWalletReservationStatus? ReservationStatus,
+    FinancialReservationStatus? ReservationStatus,
     CollectionDetailsDto? Collection);
 
 public record CreateBusinessExternalCollectionRequestDto(PaymentMethod PaymentMethod);

@@ -1,4 +1,4 @@
-﻿using KorridorX.Data;
+using KorridorX.Data;
 using KorridorX.Dtos.Fx;
 using KorridorX.Models.Fx;
 using Microsoft.EntityFrameworkCore;
@@ -30,10 +30,10 @@ public class TransferQuoteService : ITransferQuoteService
             throw new InvalidOperationException("Source amount must be greater than zero.");
         }
 
-        var sourceCountryCode = NormalizeCode(request.SourceCountryCode);
-        var destinationCountryCode = NormalizeCode(request.DestinationCountryCode);
-        var sourceCurrencyCode = NormalizeCode(request.SourceCurrencyCode);
-        var destinationCurrencyCode = NormalizeCode(request.DestinationCurrencyCode);
+        var sourceCountryCode = NormalizeCountryCode(request.SourceCountryCode);
+        var destinationCountryCode = NormalizeCountryCode(request.DestinationCountryCode);
+        var sourceCurrencyCode = NormalizeAssetCode(request.SourceCurrencyCode);
+        var destinationCurrencyCode = NormalizeAssetCode(request.DestinationCurrencyCode);
 
         var customerProfile = await _db.CustomerProfiles
             .AsNoTracking()
@@ -149,15 +149,15 @@ public class TransferQuoteService : ITransferQuoteService
         string currencyCode,
         CancellationToken ct)
     {
-        var exists = await _db.CountryCurrencies
+        var exists = await _db.CountryAssets
             .AsNoTracking()
             .AnyAsync(x =>
                 x.CountryCode == countryCode &&
-                x.CurrencyCode == currencyCode &&
+                x.AssetCode == currencyCode &&
                 x.CanSend &&
                 x.Country.IsSupported &&
                 x.Country.IsSendCountry &&
-                x.Currency.IsSupported,
+                x.Asset.IsSupported,
                 ct);
 
         if (!exists)
@@ -171,15 +171,15 @@ public class TransferQuoteService : ITransferQuoteService
         string currencyCode,
         CancellationToken ct)
     {
-        var exists = await _db.CountryCurrencies
+        var exists = await _db.CountryAssets
             .AsNoTracking()
             .AnyAsync(x =>
                 x.CountryCode == countryCode &&
-                x.CurrencyCode == currencyCode &&
+                x.AssetCode == currencyCode &&
                 x.CanReceive &&
                 x.Country.IsSupported &&
                 x.Country.IsReceiveCountry &&
-                x.Currency.IsSupported,
+                x.Asset.IsSupported,
                 ct);
 
         if (!exists)
@@ -195,6 +195,8 @@ public class TransferQuoteService : ITransferQuoteService
             Id = quote.Id,
             CustomerProfileId = quote.CustomerProfileId,
             BusinessProfileId = quote.BusinessProfileId,
+            BusinessCustomerId = quote.BusinessCustomerId,
+            SourceFinancialAccountId = quote.SourceFinancialAccountId,
             SourceCountryCode = quote.SourceCountryCode,
             DestinationCountryCode = quote.DestinationCountryCode,
             SourceCurrencyCode = quote.SourceCurrencyCode,
@@ -216,18 +218,26 @@ public class TransferQuoteService : ITransferQuoteService
         };
     }
 
-    private static string NormalizeCode(string value)
+    private static string NormalizeCountryCode(string value)
     {
         if (string.IsNullOrWhiteSpace(value))
-        {
-            throw new InvalidOperationException("Country and currency codes are required.");
-        }
+            throw new InvalidOperationException("Country code is required.");
 
         var code = value.Trim().ToUpperInvariant();
         if (code.Length > 10)
-        {
-            throw new InvalidOperationException("Country and currency codes cannot exceed 10 characters.");
-        }
+            throw new InvalidOperationException("Country code cannot exceed 10 characters.");
+
+        return code;
+    }
+
+    private static string NormalizeAssetCode(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            throw new InvalidOperationException("Asset code is required.");
+
+        var code = value.Trim().ToUpperInvariant();
+        if (code.Length > 20)
+            throw new InvalidOperationException("Asset code cannot exceed 20 characters.");
 
         return code;
     }

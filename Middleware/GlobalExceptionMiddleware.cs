@@ -33,6 +33,14 @@ public class GlobalExceptionMiddleware
                 "FORBIDDEN",
                 ex.Message);
         }
+        catch (UnauthorizedApiException ex)
+        {
+            await WriteErrorAsync(
+                context,
+                HttpStatusCode.Unauthorized,
+                ex.Code,
+                ex.Message);
+        }
         catch (UnauthorizedAccessException ex)
         {
             await WriteErrorAsync(

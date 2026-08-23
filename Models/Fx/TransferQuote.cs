@@ -12,6 +12,12 @@ public class TransferQuote : AuditableEntity
     public Guid? BusinessProfileId { get; set; }
     public BusinessProfile? BusinessProfile { get; set; }
 
+    public Guid? BusinessCustomerId { get; set; }
+    public KorridorX.Models.EmbeddedFinance.BusinessCustomer? BusinessCustomer { get; set; }
+
+    public Guid? SourceFinancialAccountId { get; set; }
+    public KorridorX.Models.FinancialCore.FinancialAccount? SourceFinancialAccount { get; set; }
+
     public string SourceCountryCode { get; set; } = "";
     public string DestinationCountryCode { get; set; } = "";
     public string SourceCurrencyCode { get; set; } = "";

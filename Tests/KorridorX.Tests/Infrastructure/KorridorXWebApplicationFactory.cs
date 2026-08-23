@@ -15,8 +15,11 @@ public sealed class KorridorXWebApplicationFactory : WebApplicationFactory<Progr
 
         builder.ConfigureAppConfiguration((_, configuration) =>
         {
+            var unavailableDatabasePassword =
+                nameof(KorridorXWebApplicationFactory);
+
             var databaseConnection = DatabaseIntegrationTestEnvironment.ConnectionString
-                ?? "Host=127.0.0.1;Port=1;Database=korridorx_tests;Username=test;Password=test;Timeout=1;Command Timeout=1";
+                ?? $"Host=127.0.0.1;Port=1;Database=korridorx_tests;Username=test;Password={unavailableDatabasePassword};Timeout=1;Command Timeout=1";
 
             configuration.AddInMemoryCollection(new Dictionary<string, string?>
             {

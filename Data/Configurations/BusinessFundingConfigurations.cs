@@ -1,121 +1,117 @@
-using KorridorX.Models.BusinessFunding;
+using KorridorX.Models.Enums;
+using KorridorX.Models.FinancialCore;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
 namespace KorridorX.Data.Configurations;
 
-public class BusinessWalletConfiguration : IEntityTypeConfiguration<BusinessWallet>
+public class FinancialAccountConfiguration : IEntityTypeConfiguration<FinancialAccount>
 {
-    public void Configure(EntityTypeBuilder<BusinessWallet> builder)
+    public void Configure(EntityTypeBuilder<FinancialAccount> builder)
     {
-        builder.HasIndex(x => new { x.BusinessProfileId, x.CurrencyCode }).IsUnique();
+        builder.HasIndex(x => new { x.OwnerType, x.OwnerId, x.AssetCode, x.AccountType }).IsUnique();
+        builder.HasIndex(x => x.AccountCode).IsUnique();
+        builder.HasIndex(x => new { x.OwnerType, x.OwnerId });
         builder.HasIndex(x => x.Status);
-        builder.Property(x => x.CurrencyCode).HasMaxLength(10);
+        builder.Property(x => x.AccountCode).HasMaxLength(80);
+        builder.Property(x => x.AssetCode).HasMaxLength(20);
         builder.Property(x => x.Status).IsConcurrencyToken();
-        builder.Property(x => x.SettledBalance).HasPrecision(18, 2).IsConcurrencyToken();
-        builder.Property(x => x.AvailableBalance).HasPrecision(18, 2).IsConcurrencyToken();
-        builder.Property(x => x.HeldBalance).HasPrecision(18, 2).IsConcurrencyToken();
+        builder.Property(x => x.SettledBalance).HasPrecision(36, 18).IsConcurrencyToken();
+        builder.Property(x => x.AvailableBalance).HasPrecision(36, 18).IsConcurrencyToken();
+        builder.Property(x => x.HeldBalance).HasPrecision(36, 18).IsConcurrencyToken();
 
-        builder.HasOne(x => x.BusinessProfile)
+        builder.HasOne(x => x.Asset)
             .WithMany()
-            .HasForeignKey(x => x.BusinessProfileId)
+            .HasForeignKey(x => x.AssetCode)
+            .HasPrincipalKey(x => x.Code)
             .OnDelete(DeleteBehavior.Restrict);
     }
 }
 
-public class BusinessLedgerTransactionConfiguration : IEntityTypeConfiguration<BusinessLedgerTransaction>
+public class LedgerTransactionConfiguration : IEntityTypeConfiguration<LedgerTransaction>
 {
-    public void Configure(EntityTypeBuilder<BusinessLedgerTransaction> builder)
+    public void Configure(EntityTypeBuilder<LedgerTransaction> builder)
     {
         builder.HasIndex(x => x.Reference).IsUnique();
-        builder.HasIndex(x => x.BusinessProfileId);
-        builder.HasIndex(x => x.TransferId);
-        builder.HasIndex(x => x.BusinessPaymentBatchId);
-        builder.HasIndex(x => x.CollectionId);
         builder.HasIndex(x => x.PostedAt);
-        builder.HasIndex(x => new { x.BusinessProfileId, x.IdempotencyKey })
+        builder.HasIndex(x => new { x.RelatedEntityType, x.RelatedEntityId });
+        builder.HasIndex(x => new { x.ContextEntityType, x.ContextEntityId });
+        builder.HasIndex(x => new { x.IdempotencyScope, x.IdempotencyKey })
             .IsUnique()
             .HasFilter("\"IdempotencyKey\" IS NOT NULL");
         builder.HasIndex(x => x.ReversalOfTransactionId).IsUnique();
         builder.HasIndex(x => x.ReversedByTransactionId).IsUnique();
         builder.Property(x => x.Reference).HasMaxLength(60);
-        builder.Property(x => x.CurrencyCode).HasMaxLength(10);
+        builder.Property(x => x.AssetCode).HasMaxLength(20);
         builder.Property(x => x.Description).HasMaxLength(1000);
+        builder.Property(x => x.IdempotencyScope).HasMaxLength(200);
         builder.Property(x => x.IdempotencyKey).HasMaxLength(200);
         builder.Property(x => x.IdempotencyRequestHash).HasMaxLength(128);
+        builder.Property(x => x.RelatedEntityType).HasMaxLength(100);
+        builder.Property(x => x.ContextEntityType).HasMaxLength(100);
         builder.Property(x => x.ReversalReason).HasMaxLength(1000);
-        builder.Property(x => x.Amount).HasPrecision(18, 2);
+        builder.Property(x => x.Amount).HasPrecision(36, 18);
         builder.Property(x => x.Status).IsConcurrencyToken();
 
-        builder.HasOne(x => x.BusinessProfile)
+        builder.HasOne(x => x.Asset)
             .WithMany()
-            .HasForeignKey(x => x.BusinessProfileId)
+            .HasForeignKey(x => x.AssetCode)
+            .HasPrincipalKey(x => x.Code)
             .OnDelete(DeleteBehavior.Restrict);
 
-        builder.HasOne(x => x.Transfer)
-            .WithMany()
-            .HasForeignKey(x => x.TransferId)
+        builder.HasOne(x => x.ReversalOfTransaction)
+            .WithOne()
+            .HasForeignKey<LedgerTransaction>(x => x.ReversalOfTransactionId)
             .OnDelete(DeleteBehavior.Restrict);
 
-        builder.HasOne(x => x.BusinessPaymentBatch)
-            .WithMany()
-            .HasForeignKey(x => x.BusinessPaymentBatchId)
-            .OnDelete(DeleteBehavior.Restrict);
-
-        builder.HasOne(x => x.Collection)
-            .WithMany()
-            .HasForeignKey(x => x.CollectionId)
+        builder.HasOne(x => x.ReversedByTransaction)
+            .WithOne()
+            .HasForeignKey<LedgerTransaction>(x => x.ReversedByTransactionId)
             .OnDelete(DeleteBehavior.Restrict);
     }
 }
 
-public class BusinessLedgerEntryConfiguration : IEntityTypeConfiguration<BusinessLedgerEntry>
+public class LedgerPostingConfiguration : IEntityTypeConfiguration<LedgerPosting>
 {
-    public void Configure(EntityTypeBuilder<BusinessLedgerEntry> builder)
+    public void Configure(EntityTypeBuilder<LedgerPosting> builder)
     {
-        builder.HasIndex(x => x.BusinessLedgerTransactionId);
-        builder.HasIndex(x => x.BusinessWalletId);
-        builder.Property(x => x.Amount).HasPrecision(18, 2);
-        builder.Property(x => x.AccountBalanceAfter).HasPrecision(18, 2);
+        builder.HasIndex(x => x.LedgerTransactionId);
+        builder.HasIndex(x => x.FinancialAccountId);
+        builder.Property(x => x.Amount).HasPrecision(36, 18);
+        builder.Property(x => x.AccountBalanceAfter).HasPrecision(36, 18);
 
-        builder.HasOne(x => x.BusinessLedgerTransaction)
-            .WithMany(x => x.Entries)
-            .HasForeignKey(x => x.BusinessLedgerTransactionId)
+        builder.HasOne(x => x.LedgerTransaction)
+            .WithMany(x => x.Postings)
+            .HasForeignKey(x => x.LedgerTransactionId)
             .OnDelete(DeleteBehavior.Cascade);
 
-        builder.HasOne(x => x.BusinessWallet)
-            .WithMany(x => x.LedgerEntries)
-            .HasForeignKey(x => x.BusinessWalletId)
+        builder.HasOne(x => x.FinancialAccount)
+            .WithMany(x => x.LedgerPostings)
+            .HasForeignKey(x => x.FinancialAccountId)
             .OnDelete(DeleteBehavior.Restrict);
     }
 }
 
-public class BusinessWalletReservationConfiguration : IEntityTypeConfiguration<BusinessWalletReservation>
+public class FinancialReservationConfiguration : IEntityTypeConfiguration<FinancialReservation>
 {
-    public void Configure(EntityTypeBuilder<BusinessWalletReservation> builder)
+    public void Configure(EntityTypeBuilder<FinancialReservation> builder)
     {
         builder.HasIndex(x => x.Reference).IsUnique();
-        builder.HasIndex(x => x.TransferId).IsUnique();
-        builder.HasIndex(x => x.BusinessWalletId);
+        builder.HasIndex(x => new { x.RelatedEntityType, x.RelatedEntityId });
+        builder.HasIndex(x => x.FinancialAccountId);
         builder.HasIndex(x => x.Status);
         builder.Property(x => x.Reference).HasMaxLength(60);
-        builder.Property(x => x.Amount).HasPrecision(18, 2);
+        builder.Property(x => x.RelatedEntityType).HasMaxLength(100);
+        builder.Property(x => x.ContextEntityType).HasMaxLength(100);
+        builder.Property(x => x.Amount).HasPrecision(36, 18);
+        builder.Property(x => x.CapturedAmount).HasPrecision(36, 18);
+        builder.Property(x => x.ReleasedAmount).HasPrecision(36, 18);
         builder.Property(x => x.ReleaseReason).HasMaxLength(1000);
         builder.Property(x => x.Status).IsConcurrencyToken();
 
-        builder.HasOne(x => x.BusinessWallet)
+        builder.HasOne(x => x.FinancialAccount)
             .WithMany(x => x.Reservations)
-            .HasForeignKey(x => x.BusinessWalletId)
-            .OnDelete(DeleteBehavior.Restrict);
-
-        builder.HasOne(x => x.Transfer)
-            .WithMany()
-            .HasForeignKey(x => x.TransferId)
-            .OnDelete(DeleteBehavior.Restrict);
-
-        builder.HasOne(x => x.BusinessPaymentBatch)
-            .WithMany()
-            .HasForeignKey(x => x.BusinessPaymentBatchId)
+            .HasForeignKey(x => x.FinancialAccountId)
             .OnDelete(DeleteBehavior.Restrict);
     }
 }

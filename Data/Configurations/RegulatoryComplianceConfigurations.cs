@@ -23,7 +23,7 @@ public sealed class RegulatoryReportConfiguration : IEntityTypeConfiguration<Reg
         builder.Property(x => x.FilingReference).HasMaxLength(200);
         builder.Property(x => x.Narrative).HasMaxLength(12000);
         builder.Property(x => x.SuspicionReason).HasMaxLength(4000);
-        builder.Property(x => x.TotalAmount).HasPrecision(18, 2);
+        builder.Property(x => x.TotalAmount).HasPrecision(36, 18);
         builder.Property(x => x.CurrencyCode).HasMaxLength(10);
         builder.Property(x => x.RejectionReason).HasMaxLength(4000);
         builder.Property(x => x.Status).IsConcurrencyToken();

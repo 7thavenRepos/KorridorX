@@ -213,6 +213,24 @@ public class BankDirectoryService : IBankDirectoryService
             account.LastUpdatedAt = now;
             account.LastUpdatedByUserId = userId;
 
+            var mapping = await GetOrCreateProviderMappingAsync(
+                PayoutDestinationType.RecipientBankAccount,
+                account.Id,
+                _provider.ProviderCode,
+                userId,
+                ct);
+
+            mapping.ProviderBankId = bank.ProviderBankId;
+            mapping.ProviderVerifiedAccountName = result.AccountName;
+            mapping.ProviderVerificationReference = result.ProviderRequestLogId.ToString();
+            mapping.IsVerified = true;
+            mapping.VerificationAttemptedAt = account.VerificationAttemptedAt;
+            mapping.VerifiedAt = now;
+            mapping.LastVerificationError = null;
+            mapping.IsActive = true;
+            mapping.LastUpdatedAt = now;
+            mapping.LastUpdatedByUserId = userId;
+
             await _db.SaveChangesAsync(ct);
 
             return new RecipientBankVerificationDto(
@@ -237,9 +255,61 @@ public class BankDirectoryService : IBankDirectoryService
             account.LastVerificationError = Truncate(ex.Message, 1000);
             account.LastUpdatedAt = DateTime.UtcNow;
             account.LastUpdatedByUserId = userId;
+
+            var mapping = await GetOrCreateProviderMappingAsync(
+                PayoutDestinationType.RecipientBankAccount,
+                account.Id,
+                _provider.ProviderCode,
+                userId,
+                CancellationToken.None);
+
+            mapping.ProviderBankId = account.ProviderBankId;
+            mapping.IsVerified = false;
+            mapping.VerificationAttemptedAt = account.VerificationAttemptedAt;
+            mapping.VerifiedAt = null;
+            mapping.ProviderVerifiedAccountName = null;
+            mapping.ProviderVerificationReference = null;
+            mapping.LastVerificationError = account.LastVerificationError;
+            mapping.IsActive = true;
+            mapping.LastUpdatedAt = DateTime.UtcNow;
+            mapping.LastUpdatedByUserId = userId;
+
             await _db.SaveChangesAsync(CancellationToken.None);
             throw;
         }
+    }
+
+    private async Task<PayoutDestinationProviderMapping> GetOrCreateProviderMappingAsync(
+        PayoutDestinationType destinationType,
+        Guid destinationId,
+        ProviderCode providerCode,
+        Guid userId,
+        CancellationToken ct)
+    {
+        var mapping = await _db.PayoutDestinationProviderMappings
+            .FirstOrDefaultAsync(x =>
+                x.DestinationType == destinationType &&
+                x.DestinationId == destinationId &&
+                x.ProviderCode == providerCode &&
+                !x.IsDeleted,
+                ct);
+
+        if (mapping is not null)
+        {
+            return mapping;
+        }
+
+        mapping = new PayoutDestinationProviderMapping
+        {
+            DestinationType = destinationType,
+            DestinationId = destinationId,
+            ProviderCode = providerCode,
+            IsActive = true,
+            CreatedByUserId = userId
+        };
+
+        _db.PayoutDestinationProviderMappings.Add(mapping);
+        return mapping;
     }
 
     private static string? NormalizeOptionalCode(string? value) =>

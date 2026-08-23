@@ -1,4 +1,4 @@
-﻿using KorridorX.Models.Recipients;
+using KorridorX.Models.Recipients;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -35,7 +35,7 @@ public class RecipientBankAccountConfiguration : IEntityTypeConfiguration<Recipi
         builder.HasIndex(x => new { x.CountryCode, x.CurrencyCode });
 
         builder.Property(x => x.CountryCode).HasMaxLength(10);
-        builder.Property(x => x.CurrencyCode).HasMaxLength(10);
+        builder.Property(x => x.CurrencyCode).HasMaxLength(20);
         builder.Property(x => x.BankName).HasMaxLength(150);
         builder.Property(x => x.BankCode).HasMaxLength(100);
         builder.Property(x => x.BranchCode).HasMaxLength(100);
@@ -67,7 +67,7 @@ public class RecipientMobileWalletConfiguration : IEntityTypeConfiguration<Recip
         builder.HasIndex(x => new { x.CountryCode, x.CurrencyCode });
 
         builder.Property(x => x.CountryCode).HasMaxLength(10);
-        builder.Property(x => x.CurrencyCode).HasMaxLength(10);
+        builder.Property(x => x.CurrencyCode).HasMaxLength(20);
         builder.Property(x => x.ProviderName).HasMaxLength(150);
         builder.Property(x => x.WalletNumber).HasMaxLength(100);
         builder.Property(x => x.AccountName).HasMaxLength(200);

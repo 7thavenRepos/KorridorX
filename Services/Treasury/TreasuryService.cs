@@ -17,7 +17,7 @@ using Microsoft.Extensions.Options;
 
 namespace KorridorX.Services.Treasury;
 
-public sealed class TreasuryService : ITreasuryService
+public sealed partial class TreasuryService : ITreasuryService
 {
     private readonly AppDbContext _db;
     private readonly IBlaaizApiClient _blaaiz;
@@ -105,7 +105,7 @@ public sealed class TreasuryService : ITreasuryService
         var thresholds = await GetThresholdMapAsync(ct);
         return localWallets
             .OrderBy(x => x.CurrencyCode)
-            .Select(x => ToWalletDto(x, thresholds.GetValueOrDefault(Key(x.ProviderCode, x.CurrencyCode))))
+            .Select(x => ToWalletDto(x, thresholds.GetValueOrDefault(ProviderThresholdKey(x.ProviderCode, x.CurrencyCode, x.NetworkCode))))
             .ToList();
     }
 
@@ -119,7 +119,7 @@ public sealed class TreasuryService : ITreasuryService
             .ToListAsync(ct);
         var thresholds = await GetThresholdMapAsync(ct);
         var walletDtos = wallets
-            .Select(x => ToWalletDto(x, thresholds.GetValueOrDefault(Key(x.ProviderCode, x.CurrencyCode))))
+            .Select(x => ToWalletDto(x, thresholds.GetValueOrDefault(ProviderThresholdKey(x.ProviderCode, x.CurrencyCode, x.NetworkCode))))
             .ToList();
 
         return new TreasuryDashboardDto
@@ -159,7 +159,7 @@ public sealed class TreasuryService : ITreasuryService
         return new PagedResult<ProviderWalletDto>
         {
             Meta = paged.Meta,
-            Items = paged.Items.Select(x => ToWalletDto(x, thresholds.GetValueOrDefault(Key(x.ProviderCode, x.CurrencyCode)))).ToList()
+            Items = paged.Items.Select(x => ToWalletDto(x, thresholds.GetValueOrDefault(ProviderThresholdKey(x.ProviderCode, x.CurrencyCode, x.NetworkCode)))).ToList()
         };
     }
 
@@ -168,16 +168,44 @@ public sealed class TreasuryService : ITreasuryService
         UpsertLiquidityThresholdRequestDto request,
         CancellationToken ct = default)
     {
-        var providerCode = Clean(request.ProviderCode, 50);
+        var scopeType = request.ScopeType;
+        var providerCode = scopeType == TreasuryLiquidityScopeType.FinancialAccount
+            ? "INTERNAL"
+            : Clean(request.ProviderCode, 50);
         var currencyCode = NormalizeCode(request.CurrencyCode);
+        var networkCode = CleanNullable(request.NetworkCode, 50)?.ToUpperInvariant();
+
+        if (scopeType == TreasuryLiquidityScopeType.FinancialAccount)
+        {
+            if (!request.FinancialAccountType.HasValue ||
+                request.FinancialAccountType.Value is not (
+                    FinancialAccountType.House or
+                    FinancialAccountType.Treasury or
+                    FinancialAccountType.ProviderClearing or
+                    FinancialAccountType.Settlement))
+            {
+                throw new InvalidOperationException(
+                    "Financial-account liquidity thresholds require House, Treasury, ProviderClearing, or Settlement account type.");
+            }
+
+            networkCode = null;
+        }
+        else
+        {
+            request.FinancialAccountType = null;
+        }
+
         if (request.TargetBalance < request.MinimumBalance)
             throw new InvalidOperationException("Target balance cannot be below the minimum balance.");
         if (request.MaximumBalance.HasValue && request.MaximumBalance.Value < request.TargetBalance)
             throw new InvalidOperationException("Maximum balance cannot be below the target balance.");
 
         var existing = await _db.LiquidityThresholds.FirstOrDefaultAsync(x =>
+            x.ScopeType == scopeType &&
             x.ProviderCode == providerCode &&
             x.CurrencyCode == currencyCode &&
+            x.NetworkCode == networkCode &&
+            x.FinancialAccountType == request.FinancialAccountType &&
             x.IsActive &&
             !x.IsDeleted,
             ct);
@@ -186,8 +214,11 @@ public sealed class TreasuryService : ITreasuryService
         {
             existing = new LiquidityThreshold
             {
+                ScopeType = scopeType,
                 ProviderCode = providerCode,
                 CurrencyCode = currencyCode,
+                NetworkCode = networkCode,
+                FinancialAccountType = request.FinancialAccountType,
                 CreatedByUserId = userId
             };
             _db.LiquidityThresholds.Add(existing);
@@ -360,12 +391,12 @@ public sealed class TreasuryService : ITreasuryService
         var thresholds = await GetThresholdMapAsync(ct);
 
         var sources = wallets
-            .Select(x => new { Wallet = x, Threshold = thresholds.GetValueOrDefault(Key(x.ProviderCode, x.CurrencyCode)) })
+            .Select(x => new { Wallet = x, Threshold = thresholds.GetValueOrDefault(ProviderThresholdKey(x.ProviderCode, x.CurrencyCode, x.NetworkCode)) })
             .Where(x => x.Threshold is not null && x.Wallet.Balance > x.Threshold.TargetBalance)
             .ToList();
 
         var destinations = wallets
-            .Select(x => new { Wallet = x, Threshold = thresholds.GetValueOrDefault(Key(x.ProviderCode, x.CurrencyCode)) })
+            .Select(x => new { Wallet = x, Threshold = thresholds.GetValueOrDefault(ProviderThresholdKey(x.ProviderCode, x.CurrencyCode, x.NetworkCode)) })
             .Where(x => x.Threshold is not null && x.Wallet.Balance < x.Threshold.TargetBalance)
             .ToList();
 
@@ -724,7 +755,10 @@ public sealed class TreasuryService : ITreasuryService
             .OrderByDescending(x => x.CreatedAt)
             .ToListAsync(ct);
         return thresholds
-            .GroupBy(x => Key(x.ProviderCode, x.CurrencyCode), StringComparer.OrdinalIgnoreCase)
+            .Where(x => x.ScopeType == TreasuryLiquidityScopeType.ProviderWallet)
+            .GroupBy(
+                x => ProviderThresholdKey(x.ProviderCode, x.CurrencyCode, x.NetworkCode),
+                StringComparer.OrdinalIgnoreCase)
             .ToDictionary(x => x.Key, x => x.First(), StringComparer.OrdinalIgnoreCase);
     }
 
@@ -754,9 +788,16 @@ public sealed class TreasuryService : ITreasuryService
 
     private static LiquidityThresholdDto ToThresholdDto(LiquidityThreshold x) => new()
     {
-        Id = x.Id, ProviderCode = x.ProviderCode, CurrencyCode = x.CurrencyCode,
-        MinimumBalance = x.MinimumBalance, TargetBalance = x.TargetBalance,
-        MaximumBalance = x.MaximumBalance, IsActive = x.IsActive
+        Id = x.Id,
+        ScopeType = x.ScopeType,
+        ProviderCode = x.ProviderCode,
+        CurrencyCode = x.CurrencyCode,
+        NetworkCode = x.NetworkCode,
+        FinancialAccountType = x.FinancialAccountType,
+        MinimumBalance = x.MinimumBalance,
+        TargetBalance = x.TargetBalance,
+        MaximumBalance = x.MaximumBalance,
+        IsActive = x.IsActive
     };
 
     private static SettlementBatchDto ToSettlementDto(SettlementBatch x) => new()
@@ -787,8 +828,12 @@ public sealed class TreasuryService : ITreasuryService
             ? provider
             : throw new InvalidOperationException($"Unsupported provider '{value}'.");
 
-    private static string Key(string provider, string currency) => $"{provider.Trim().ToUpperInvariant()}|{currency.Trim().ToUpperInvariant()}";
-    private static string NormalizeCode(string value) => Clean(value, 10).ToUpperInvariant();
+    private static string Key(string provider, string currency) =>
+        ProviderThresholdKey(provider, currency, null);
+
+    private static string ProviderThresholdKey(string provider, string assetCode, string? networkCode) =>
+        $"{provider.Trim().ToUpperInvariant()}|{assetCode.Trim().ToUpperInvariant()}|{(networkCode ?? "").Trim().ToUpperInvariant()}";
+    private static string NormalizeCode(string value) => Clean(value, 20).ToUpperInvariant();
     private static string Clean(string value, int max) => string.IsNullOrWhiteSpace(value) ? throw new InvalidOperationException("A required value was not supplied.") : value.Trim()[..Math.Min(value.Trim().Length, max)];
     private static string? CleanNullable(string? value, int max) => string.IsNullOrWhiteSpace(value) ? null : value.Trim()[..Math.Min(value.Trim().Length, max)];
     private static TreasuryRebalanceDto ToRebalanceDto(TreasuryRebalanceRequest x) => new()

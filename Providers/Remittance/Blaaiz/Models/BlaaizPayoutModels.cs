@@ -107,6 +107,18 @@ public sealed class BlaaizPayoutRequest
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? ZipCode { get; set; }
 
+    [JsonPropertyName("wallet_address")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? WalletAddress { get; set; }
+
+    [JsonPropertyName("wallet_token")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? WalletToken { get; set; }
+
+    [JsonPropertyName("wallet_network")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? WalletNetwork { get; set; }
+
     [JsonPropertyName("note")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? Note { get; set; }

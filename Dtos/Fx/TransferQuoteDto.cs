@@ -7,6 +7,8 @@ public class TransferQuoteDto
     public Guid Id { get; set; }
     public Guid? CustomerProfileId { get; set; }
     public Guid? BusinessProfileId { get; set; }
+    public Guid? BusinessCustomerId { get; set; }
+    public Guid? SourceFinancialAccountId { get; set; }
 
     public string SourceCountryCode { get; set; } = "";
     public string DestinationCountryCode { get; set; } = "";

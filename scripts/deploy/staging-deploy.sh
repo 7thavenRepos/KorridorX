@@ -34,6 +34,9 @@ if [[ ! -f "$migration_file" ]]; then
   exit 1
 fi
 
+echo "Running staging configuration preflight..."
+bash "$script_dir/staging-preflight.sh"
+
 if grep -Eq 'replace-with|example\.com' "$env_file"; then
   echo "$env_file still contains placeholder values." >&2
   exit 1

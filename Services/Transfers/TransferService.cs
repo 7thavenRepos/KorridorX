@@ -3,6 +3,7 @@ using KorridorX.Dtos.Transfers;
 using KorridorX.Extensions;
 using KorridorX.Infrastructure;
 using KorridorX.Models.Enums;
+using KorridorX.Models.Providers;
 using KorridorX.Models.Transfers;
 using KorridorX.Services.References;
 using KorridorX.Services.Compliance;
@@ -119,8 +120,9 @@ public class TransferService : ITransferService
 
         if (request.RecipientBankAccountId is not null)
         {
-            var bankAccountExists = await _db.RecipientBankAccounts
-                .AnyAsync(x =>
+            var bankAccount = await _db.RecipientBankAccounts
+                .AsNoTracking()
+                .FirstOrDefaultAsync(x =>
                     x.Id == request.RecipientBankAccountId.Value &&
                     x.RecipientId == recipient.Id &&
                     x.CountryCode == recipient.CountryCode &&
@@ -129,9 +131,20 @@ public class TransferService : ITransferService
                     !x.IsDeleted,
                     ct);
 
-            if (!bankAccountExists)
+            if (bankAccount is null)
             {
                 throw new InvalidOperationException("Recipient bank account is not valid for this transfer.");
+            }
+
+            if (!await IsBankDestinationVerifiedForProviderAsync(
+                    PayoutDestinationType.RecipientBankAccount,
+                    bankAccount.Id,
+                    quote.ProviderCode,
+                    bankAccount.IsVerified,
+                    ct))
+            {
+                throw new InvalidOperationException(
+                    "Recipient bank account is not verified for the selected payout provider.");
             }
         }
 
@@ -215,8 +228,37 @@ public class TransferService : ITransferService
         await _screeningService.ScreenTransferAsync(transfer, userId, ct);
         await _transactionMonitoringService.MonitorAsync(transfer, userId, ct);
 
-        await _db.SaveChangesAsync(ct);
-        await tx.CommitAsync(ct);
+        try
+        {
+            await _db.SaveChangesAsync(ct);
+            await tx.CommitAsync(ct);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            await tx.RollbackAsync(ct);
+            throw new InvalidOperationException(
+                "The transfer quote was consumed while this transfer was being created. Please create a new quote.");
+        }
+        catch (DbUpdateException)
+        {
+            await tx.RollbackAsync(ct);
+            _db.ChangeTracker.Clear();
+
+            var quoteAlreadyConsumed = await _db.Transfers
+                .AsNoTracking()
+                .AnyAsync(x =>
+                    x.TransferQuoteId == quote.Id &&
+                    !x.IsDeleted,
+                    ct);
+
+            if (quoteAlreadyConsumed)
+            {
+                throw new InvalidOperationException(
+                    "The transfer quote has already been used to create a transfer. Please create a new quote.");
+            }
+
+            throw;
+        }
 
         return await GetTransferByIdAsync(userId, transfer.Id, ct);
     }
@@ -469,4 +511,32 @@ public class TransferService : ITransferService
             timelineEvent.OccurredAt
         );
     }
+
+
+    private async Task<bool> IsBankDestinationVerifiedForProviderAsync(
+        PayoutDestinationType destinationType,
+        Guid destinationId,
+        string providerCode,
+        bool legacyIsVerified,
+        CancellationToken ct)
+    {
+        if (!Enum.TryParse<ProviderCode>(providerCode, true, out var parsedProviderCode))
+        {
+            return legacyIsVerified;
+        }
+
+        var mapping = await _db.PayoutDestinationProviderMappings
+            .AsNoTracking()
+            .FirstOrDefaultAsync(x =>
+                x.DestinationType == destinationType &&
+                x.DestinationId == destinationId &&
+                x.ProviderCode == parsedProviderCode &&
+                !x.IsDeleted,
+                ct);
+
+        return mapping is null
+            ? legacyIsVerified
+            : mapping.IsActive && mapping.IsVerified;
+    }
+
 }

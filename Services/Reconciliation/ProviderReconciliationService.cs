@@ -65,14 +65,29 @@ public class ProviderReconciliationService : IProviderReconciliationService
                     updated++;
                 }
             }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                throw;
+            }
             catch (ProviderIntegrationException)
             {
                 failed++;
+
+                // Reconciliation may have mutated tracked provider/payment rows
+                // before a later validation or provider-status transition failed.
+                // Discard those uncommitted changes before recording only the
+                // failed reconciliation timestamp.
+                _db.ChangeTracker.Clear();
                 await TouchAsync(id, ct);
             }
             catch
             {
                 failed++;
+
+                // Keep a failed item isolated from the rest of the batch. Without
+                // clearing the tracker, TouchAsync could persist partially applied
+                // provider values from the failed reconciliation attempt.
+                _db.ChangeTracker.Clear();
                 await TouchAsync(id, ct);
             }
         }

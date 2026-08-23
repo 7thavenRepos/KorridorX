@@ -2,6 +2,7 @@ using KorridorX.Configuration;
 using KorridorX.Data;
 using KorridorX.Dtos.Audit;
 using KorridorX.Dtos.Auth;
+using KorridorX.Exceptions;
 using KorridorX.Models.Customers;
 using KorridorX.Models.Enums;
 using KorridorX.Models.Identity;
@@ -167,15 +168,15 @@ public class AuthService : IAuthService
         var user = await _userManager.FindByEmailAsync(email);
 
         if (user is null)
-            throw new UnauthorizedAccessException("Invalid email or password.");
+            throw new UnauthorizedApiException("Invalid email or password.", "INVALID_CREDENTIALS");
 
         if (user.Status != UserStatus.Active)
-            throw new UnauthorizedAccessException("Account is not active.");
+            throw new UnauthorizedApiException("Account is not active.", "ACCOUNT_INACTIVE");
 
         if (await _userManager.IsLockedOutAsync(user))
         {
             await RecordLoginAsync(user.Id, request, ipAddress, userAgent, false, "Account locked", ct);
-            throw new UnauthorizedAccessException("The account is temporarily locked because of repeated failed login attempts.");
+            throw new UnauthorizedApiException("The account is temporarily locked because of repeated failed login attempts.", "ACCOUNT_LOCKED");
         }
 
         var validPassword = await _userManager.CheckPasswordAsync(user, request.Password);
@@ -183,13 +184,13 @@ public class AuthService : IAuthService
         {
             await _userManager.AccessFailedAsync(user);
             await RecordLoginAsync(user.Id, request, ipAddress, userAgent, false, "Invalid password", ct);
-            throw new UnauthorizedAccessException("Invalid email or password.");
+            throw new UnauthorizedApiException("Invalid email or password.", "INVALID_CREDENTIALS");
         }
 
         if (_accountOptions.RequireConfirmedEmail && !await _userManager.IsEmailConfirmedAsync(user))
         {
             await RecordLoginAsync(user.Id, request, ipAddress, userAgent, false, "Email not confirmed", ct);
-            throw new UnauthorizedAccessException("Email confirmation is required before sign-in.");
+            throw new UnauthorizedApiException("Email confirmation is required before sign-in.", "EMAIL_CONFIRMATION_REQUIRED");
         }
 
         var roles = await _userManager.GetRolesAsync(user);
@@ -495,9 +496,9 @@ public class AuthService : IAuthService
 
         var user = existing.User;
         if (user.Status != UserStatus.Active)
-            throw new UnauthorizedAccessException("Account is not active.");
+            throw new UnauthorizedApiException("Account is not active.", "ACCOUNT_INACTIVE");
         if (_accountOptions.RequireConfirmedEmail && !await _userManager.IsEmailConfirmedAsync(user))
-            throw new UnauthorizedAccessException("Email confirmation is required before sign-in.");
+            throw new UnauthorizedApiException("Email confirmation is required before sign-in.", "EMAIL_CONFIRMATION_REQUIRED");
 
         var roles = await _userManager.GetRolesAsync(user);
         var mfaRequired =

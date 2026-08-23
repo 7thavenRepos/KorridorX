@@ -33,5 +33,6 @@ public enum PaymentMethod
     Wire = 5,
     Sepa = 6,
     MobileMoney = 7,
-    VirtualAccount = 8
+    VirtualAccount = 8,
+    DigitalAsset = 9
 }

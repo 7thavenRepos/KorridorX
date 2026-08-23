@@ -67,7 +67,7 @@ public class BusinessProfileConfiguration : IEntityTypeConfiguration<BusinessPro
         builder.Property(x => x.ContactPhone).HasMaxLength(50);
         builder.Property(x => x.BlaaizBusinessCustomerId).HasMaxLength(150);
         builder.Property(x => x.KybRejectionReason).HasMaxLength(2000);
-        builder.Property(x => x.TransferApprovalThreshold).HasPrecision(18, 2);
+        builder.Property(x => x.TransferApprovalThreshold).HasPrecision(36, 18);
 
         builder.HasOne(x => x.OwnerUser)
             .WithMany()

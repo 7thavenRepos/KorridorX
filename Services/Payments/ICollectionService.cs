@@ -1,5 +1,6 @@
 using KorridorX.Dtos.Payments;
 using KorridorX.Infrastructure;
+using KorridorX.Models.Enums;
 
 namespace KorridorX.Services.Payments;
 
@@ -20,6 +21,25 @@ public interface ICollectionService
         Guid userId,
         Guid collectionId,
         InitiateCollectionRequestDto request,
+        CancellationToken ct = default);
+
+    Task<CollectionDetailsDto> CreateBusinessRemittanceCollectionAsync(
+        Guid businessProfileId,
+        Guid actorUserId,
+        Guid transferId,
+        PaymentMethod paymentMethod,
+        CancellationToken ct = default);
+
+    Task<CollectionDetailsDto> InitiateBusinessRemittanceCollectionAsync(
+        Guid businessProfileId,
+        Guid actorUserId,
+        Guid collectionId,
+        InitiateCollectionRequestDto request,
+        CancellationToken ct = default);
+
+    Task<CollectionDetailsDto?> GetBusinessTransferCollectionAsync(
+        Guid businessProfileId,
+        Guid transferId,
         CancellationToken ct = default);
 
     Task<CollectionDetailsDto> GetCollectionByIdAsync(

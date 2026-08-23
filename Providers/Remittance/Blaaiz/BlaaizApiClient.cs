@@ -32,6 +32,87 @@ public class BlaaizApiClient : IBlaaizApiClient
         _auditService = auditService;
     }
 
+    public Task<BlaaizApiResult<BlaaizCryptoWalletListResponse>> ListCryptoWalletsAsync(
+        CancellationToken ct = default)
+    {
+        return SendAsync<object, BlaaizCryptoWalletListResponse>(
+            HttpMethod.Get,
+            "/api/external/crypto/wallets",
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            ct);
+    }
+
+    public Task<BlaaizApiResult<BlaaizCryptoPayoutResponse>> InitiateCryptoPayoutAsync(
+        BlaaizCryptoPayoutRequest request,
+        string idempotencyKey,
+        Guid payoutId,
+        CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(idempotencyKey))
+            throw new InvalidOperationException("Blaaiz crypto payout idempotency key is required.");
+
+        var cleanKey = idempotencyKey.Trim();
+        if (cleanKey.Length > 255)
+            throw new InvalidOperationException("Blaaiz crypto payout idempotency key cannot exceed 255 characters.");
+
+        var auditBody = JsonSerializer.Serialize(new
+        {
+            customer_id = request.CustomerId,
+            wallet_id = request.WalletId,
+            amount = request.Amount,
+            address = MaskSensitive(request.Address),
+            network = request.Network,
+            token = request.Token
+        }, SerializerOptions);
+
+        return SendAsync<BlaaizCryptoPayoutRequest, BlaaizCryptoPayoutResponse>(
+            HttpMethod.Post,
+            "/api/external/crypto/payouts",
+            request,
+            auditBody,
+            null,
+            null,
+            payoutId,
+            null,
+            ct,
+            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["Idempotency-Key"] = cleanKey
+            });
+    }
+
+    public Task<BlaaizApiResult<BlaaizCryptoCollectionResponse>> InitiateCryptoCollectionAsync(
+        BlaaizCryptoCollectionRequest request,
+        Guid depositIntentId,
+        CancellationToken ct = default)
+    {
+        var auditBody = JsonSerializer.Serialize(new
+        {
+            depositIntentId,
+            amount = request.Amount,
+            wallet_id = request.WalletId,
+            network = request.Network,
+            token = request.Token,
+            customer_id = request.CustomerId
+        }, SerializerOptions);
+
+        return SendAsync<BlaaizCryptoCollectionRequest, BlaaizCryptoCollectionResponse>(
+            HttpMethod.Post,
+            "/api/external/collection/crypto",
+            request,
+            auditBody,
+            null,
+            null,
+            null,
+            null,
+            ct);
+    }
+
     public Task<BlaaizApiResult<List<BlaaizWalletData>>> ListWalletsAsync(
         CancellationToken ct = default)
     {
@@ -487,6 +568,63 @@ public class BlaaizApiClient : IBlaaizApiClient
             ct);
     }
 
+    public Task<BlaaizApiResult<BlaaizVirtualBankAccountEnvelope>> CreateVirtualBankAccountAsync(
+        BlaaizVirtualBankAccountRequest request,
+        Guid? businessCustomerId = null,
+        CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(request.WalletId))
+            throw new InvalidOperationException("Blaaiz wallet ID is required.");
+
+        if (string.IsNullOrWhiteSpace(request.CustomerId))
+            throw new InvalidOperationException("Blaaiz customer ID is required.");
+
+        return SendAsync<BlaaizVirtualBankAccountRequest, BlaaizVirtualBankAccountEnvelope>(
+            HttpMethod.Post,
+            "/api/external/virtual-bank-account",
+            request,
+            JsonSerializer.Serialize(new
+            {
+                wallet_id = request.WalletId,
+                customer_id = request.CustomerId,
+                businessCustomerId
+            }),
+            null,
+            null,
+            null,
+            null,
+            ct);
+    }
+
+    public Task<BlaaizApiResult<BlaaizVirtualBankAccountEnvelope>> GetVirtualBankAccountsAsync(
+        string walletId,
+        string customerId,
+        Guid? businessCustomerId = null,
+        CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(walletId))
+            throw new InvalidOperationException("Blaaiz wallet ID is required.");
+
+        if (string.IsNullOrWhiteSpace(customerId))
+            throw new InvalidOperationException("Blaaiz customer ID is required.");
+
+        var endpoint =
+            "/api/external/virtual-bank-account" +
+            $"?wallet_id={Uri.EscapeDataString(walletId.Trim())}" +
+            $"&customer_id={Uri.EscapeDataString(customerId.Trim())}";
+
+        return SendAsync<object, BlaaizVirtualBankAccountEnvelope>(
+            HttpMethod.Get,
+            endpoint,
+            null,
+            JsonSerializer.Serialize(new { walletId, customerId, businessCustomerId }),
+            null,
+            null,
+            null,
+            null,
+            ct);
+    }
+
     public Task<BlaaizApiResult<BlaaizCardCollectionResponse>> InitiateCardCollectionAsync(
         BlaaizCardCollectionRequest request,
         Guid transferId,
@@ -541,7 +679,7 @@ public class BlaaizApiClient : IBlaaizApiClient
 
     public Task<BlaaizApiResult<BlaaizPayoutResponse>> InitiatePayoutAsync(
         BlaaizPayoutRequest request,
-        Guid transferId,
+        Guid? transferId,
         Guid payoutId,
         CancellationToken ct = default)
     {
@@ -568,6 +706,9 @@ public class BlaaizApiClient : IBlaaizApiClient
             sort_code = MaskSensitive(request.SortCode ?? ""),
             iban = MaskSensitive(request.Iban ?? ""),
             country = request.Country,
+            wallet_address = MaskSensitive(request.WalletAddress ?? ""),
+            wallet_token = request.WalletToken,
+            wallet_network = request.WalletNetwork,
             note = request.Note
         }, SerializerOptions);
 
@@ -682,7 +823,8 @@ public class BlaaizApiClient : IBlaaizApiClient
         Guid? relatedCollectionId,
         Guid? relatedPayoutId,
         Func<string, string>? responseSanitizer,
-        CancellationToken ct)
+        CancellationToken ct,
+        IReadOnlyDictionary<string, string>? additionalHeaders = null)
     {
         var token = await _tokenService.GetAccessTokenAsync(ct);
 
@@ -693,7 +835,10 @@ public class BlaaizApiClient : IBlaaizApiClient
             JsonSerializer.Serialize(new
             {
                 authorization = "Bearer ***REDACTED***",
-                contentType = requestBody is null ? null : "application/json"
+                contentType = requestBody is null ? null : "application/json",
+                idempotencyKey = additionalHeaders?.ContainsKey("Idempotency-Key") == true
+                    ? "***PRESENT***"
+                    : null
             }),
             auditRequestBody,
             relatedTransferId,
@@ -708,6 +853,17 @@ public class BlaaizApiClient : IBlaaizApiClient
             using var request = new HttpRequestMessage(method, endpoint);
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
             request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+
+            if (additionalHeaders is not null)
+            {
+                foreach (var header in additionalHeaders)
+                {
+                    if (header.Key.Equals("Authorization", StringComparison.OrdinalIgnoreCase))
+                        throw new InvalidOperationException("Authorization header overrides are not allowed.");
+
+                    request.Headers.TryAddWithoutValidation(header.Key, header.Value);
+                }
+            }
 
             if (requestBody is not null)
             {

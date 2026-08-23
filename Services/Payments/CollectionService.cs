@@ -85,7 +85,7 @@ public class CollectionService : ICollectionService
 
         var existingCollection = await _db.Collections
             .Include(x => x.Transfer)
-            .ThenInclude(x => x.CustomerProfile)
+            .ThenInclude(x => x!.CustomerProfile)
             .Include(x => x.Attempts)
             .FirstOrDefaultAsync(x =>
                 x.TransferId == transfer.Id &&
@@ -126,6 +126,9 @@ public class CollectionService : ICollectionService
         {
             TransferId = transfer.Id,
             Transfer = transfer,
+            Purpose = PaymentOperationPurpose.Remittance,
+            RelatedEntityType = nameof(Transfer),
+            RelatedEntityId = transfer.Id,
             Reference = reference,
             CurrencyCode = transfer.SourceCurrencyCode,
             Amount = transfer.TotalPayableAmount,
@@ -184,16 +187,19 @@ public class CollectionService : ICollectionService
     {
         var collection = await _db.Collections
             .Include(x => x.Transfer)
-            .ThenInclude(x => x.CustomerProfile)
+            .ThenInclude(x => x!.CustomerProfile)
             .ThenInclude(x => x!.User)
             .Include(x => x.Attempts)
             .FirstOrDefaultAsync(x =>
                 x.Id == collectionId &&
+                x.Purpose == PaymentOperationPurpose.Remittance &&
+                x.TransferId != null &&
+                x.Transfer != null &&
                 x.Transfer.CustomerProfile != null &&
                 x.Transfer.CustomerProfile.UserId == userId &&
                 !x.IsDeleted &&
                 !x.Transfer.IsDeleted &&
-                !x.Transfer.CustomerProfile!.IsDeleted,
+                !x.Transfer.CustomerProfile.IsDeleted,
                 ct);
 
         if (collection is null)
@@ -208,6 +214,9 @@ public class CollectionService : ICollectionService
             return ToDetailsDto(collection);
         }
 
+        var transfer = collection.Transfer
+            ?? throw new InvalidOperationException("Remittance collection is missing its transfer.");
+
         if (collection.Status is not CollectionStatus.Pending and
             not CollectionStatus.Failed and
             not CollectionStatus.Expired)
@@ -216,10 +225,10 @@ public class CollectionService : ICollectionService
                 $"Collection cannot be initiated while its status is '{collection.Status}'.");
         }
 
-        if (collection.Transfer.Status != TransferStatus.PendingPayment)
+        if (transfer.Status != TransferStatus.PendingPayment)
         {
             throw new InvalidOperationException(
-                $"Collection cannot be initiated while the transfer status is '{collection.Transfer.Status}'.");
+                $"Collection cannot be initiated while the transfer status is '{transfer.Status}'.");
         }
 
         if (collection.PaymentMethod is not PaymentMethod.Card and not PaymentMethod.Interac)
@@ -228,7 +237,7 @@ public class CollectionService : ICollectionService
                 $"Live provider initiation is not yet supported for '{collection.PaymentMethod}'.");
         }
 
-        var profile = collection.Transfer.CustomerProfile
+        var profile = transfer.CustomerProfile
             ?? throw new InvalidOperationException("Individual customer profile not found for this collection.");
 
         var complianceGate = await _complianceGateService.EnsureCanInitiateMoneyMovementAsync(
@@ -261,7 +270,7 @@ public class CollectionService : ICollectionService
             collectionId = collection.Id,
             collectionReference = collection.Reference,
             transferId = collection.TransferId,
-            transferReference = collection.Transfer.Reference,
+            transferReference = transfer.Reference,
             amount = collection.Amount,
             currencyCode = collection.CurrencyCode,
             paymentMethod = collection.PaymentMethod.ToString(),
@@ -294,7 +303,7 @@ public class CollectionService : ICollectionService
         {
             var providerResult = await _remittanceProvider.InitiateCollectionAsync(
                 new RemittanceCollectionRequest(
-                    collection.TransferId,
+                    collection.TransferId ?? throw new InvalidOperationException("Remittance collection is missing its transfer."),
                     collection.Id,
                     collection.PaymentMethod,
                     collection.Amount,
@@ -314,7 +323,7 @@ public class CollectionService : ICollectionService
                 CollectionStatus.Initiated,
                 new CollectionStatusTransitionContext(
                     Source: "Provider",
-                    Reason: "Collection was initiated with Blaaiz.",
+                    Reason: $"Collection was initiated with {_remittanceProvider.ProviderName}.",
                     ChangedByUserId: userId,
                     ProviderCollectionId: providerResult.ProviderTransactionId,
                     ProviderReference: providerResult.ProviderReference,
@@ -369,6 +378,330 @@ public class CollectionService : ICollectionService
         }
     }
 
+    public async Task<CollectionDetailsDto> CreateBusinessRemittanceCollectionAsync(
+        Guid businessProfileId,
+        Guid actorUserId,
+        Guid transferId,
+        PaymentMethod paymentMethod,
+        CancellationToken ct = default)
+    {
+        await using var tx = await _db.Database.BeginTransactionAsync(ct);
+
+        var transfer = await _db.Transfers
+            .Include(x => x.BusinessProfile)
+            .FirstOrDefaultAsync(x =>
+                x.Id == transferId &&
+                x.BusinessProfileId == businessProfileId &&
+                !x.IsDeleted,
+                ct)
+            ?? throw new InvalidOperationException("Business transfer not found.");
+
+        if (transfer.BusinessFundingSource != BusinessFundingSource.ExternalCollection)
+        {
+            throw new InvalidOperationException(
+                "External collection is only available for transfers configured for external funding.");
+        }
+
+        if (transfer.Status != TransferStatus.PendingPayment)
+        {
+            throw new InvalidOperationException(
+                $"A collection cannot be created while the transfer status is '{transfer.Status}'.");
+        }
+
+        var existing = await _db.Collections
+            .Include(x => x.Transfer)
+            .Include(x => x.Attempts)
+            .FirstOrDefaultAsync(x => x.TransferId == transfer.Id && !x.IsDeleted, ct);
+
+        if (existing is not null)
+        {
+            if (existing.PaymentMethod != paymentMethod)
+            {
+                throw new InvalidOperationException(
+                    $"A collection already exists for this transfer using '{GetPaymentMethodDisplayName(existing.PaymentMethod)}'.");
+            }
+
+            await tx.CommitAsync(ct);
+            return ToDetailsDto(existing);
+        }
+
+        if (!_paymentMethodPolicy.IsSupported(
+                transfer.SourceCountryCode,
+                transfer.SourceCurrencyCode,
+                paymentMethod))
+        {
+            throw new InvalidOperationException(
+                $"Payment method '{GetPaymentMethodDisplayName(paymentMethod)}' is not supported for {transfer.SourceCountryCode}/{transfer.SourceCurrencyCode}.");
+        }
+
+        var now = DateTime.UtcNow;
+        var collection = new Collection
+        {
+            TransferId = transfer.Id,
+            Transfer = transfer,
+            Purpose = PaymentOperationPurpose.Remittance,
+            RelatedEntityType = nameof(Transfer),
+            RelatedEntityId = transfer.Id,
+            Reference = await GenerateUniqueCollectionReferenceAsync(ct),
+            CurrencyCode = transfer.SourceCurrencyCode,
+            Amount = transfer.TotalPayableAmount,
+            PaymentMethod = paymentMethod,
+            Status = CollectionStatus.Pending,
+            ProviderCode = transfer.ProviderCode,
+            CreatedByUserId = actorUserId
+        };
+
+        collection.Attempts.Add(new CollectionAttempt
+        {
+            CollectionId = collection.Id,
+            Collection = collection,
+            Status = ProviderRequestStatus.Pending,
+            RequestPayloadJson = JsonSerializer.Serialize(new
+            {
+                businessProfileId,
+                transferId = transfer.Id,
+                transferReference = transfer.Reference,
+                collectionReference = collection.Reference,
+                amount = collection.Amount,
+                currencyCode = collection.CurrencyCode,
+                paymentMethod = paymentMethod.ToString()
+            }),
+            AttemptedAt = now
+        });
+
+        _db.Collections.Add(collection);
+        _db.TransferTimelineEvents.Add(new TransferTimelineEvent
+        {
+            TransferId = transfer.Id,
+            EventType = "COLLECTION_CREATED",
+            Title = "Business funding method selected",
+            Description = $"{GetPaymentMethodDisplayName(paymentMethod)} was selected to fund this business transfer.",
+            MetadataJson = JsonSerializer.Serialize(new
+            {
+                businessProfileId,
+                collectionId = collection.Id,
+                collectionReference = collection.Reference,
+                paymentMethod = paymentMethod.ToString()
+            }),
+            OccurredAt = now
+        });
+
+        await _db.SaveChangesAsync(ct);
+        await tx.CommitAsync(ct);
+        return ToDetailsDto(collection);
+    }
+
+    public async Task<CollectionDetailsDto> InitiateBusinessRemittanceCollectionAsync(
+        Guid businessProfileId,
+        Guid actorUserId,
+        Guid collectionId,
+        InitiateCollectionRequestDto request,
+        CancellationToken ct = default)
+    {
+        var collection = await _db.Collections
+            .Include(x => x.Transfer)
+            .ThenInclude(x => x!.BusinessProfile)
+            .ThenInclude(x => x!.OwnerUser)
+            .Include(x => x.Attempts)
+            .FirstOrDefaultAsync(x =>
+                x.Id == collectionId &&
+                x.Purpose == PaymentOperationPurpose.Remittance &&
+                x.TransferId != null &&
+                x.Transfer != null &&
+                x.Transfer.BusinessProfileId == businessProfileId &&
+                !x.IsDeleted &&
+                !x.Transfer.IsDeleted,
+                ct)
+            ?? throw new InvalidOperationException("Business collection not found.");
+
+        var transfer = collection.Transfer
+            ?? throw new InvalidOperationException("Business remittance collection is missing its transfer.");
+
+        if (transfer.BusinessFundingSource != BusinessFundingSource.ExternalCollection)
+        {
+            throw new InvalidOperationException(
+                "External collection is only available for transfers configured for external funding.");
+        }
+
+        if (collection.Status is CollectionStatus.Initiated or CollectionStatus.Processing or CollectionStatus.Successful)
+        {
+            return ToDetailsDto(collection);
+        }
+
+        if (collection.Status is not CollectionStatus.Pending and not CollectionStatus.Failed and not CollectionStatus.Expired)
+        {
+            throw new InvalidOperationException(
+                $"Collection cannot be initiated while its status is '{collection.Status}'.");
+        }
+
+        if (transfer.Status != TransferStatus.PendingPayment)
+        {
+            throw new InvalidOperationException(
+                $"Collection cannot be initiated while the transfer status is '{transfer.Status}'.");
+        }
+
+        if (collection.PaymentMethod is not PaymentMethod.Card and not PaymentMethod.Interac)
+        {
+            throw new InvalidOperationException(
+                $"Live provider initiation is not yet supported for '{collection.PaymentMethod}'.");
+        }
+
+        var business = transfer.BusinessProfile
+            ?? throw new InvalidOperationException("Business profile is missing from the transfer.");
+
+        var compliance = await _complianceGateService.EnsureBusinessCanInitiateMoneyMovementAsync(
+            business.Id,
+            _remittanceProvider.ProviderCode,
+            ct);
+
+        var email = request.PayerEmail ?? business.ContactEmail ?? business.OwnerUser?.Email;
+        if (string.IsNullOrWhiteSpace(email))
+        {
+            throw new InvalidOperationException("A business payer email is required.");
+        }
+
+        var customerName = string.IsNullOrWhiteSpace(request.CustomerName)
+            ? business.BusinessName
+            : request.CustomerName.Trim();
+        var walletId = ResolveCollectionWalletId(collection.CurrencyCode);
+        var cardRequest = request.Card;
+        var card = cardRequest is null
+            ? null
+            : new RemittanceCardDetails(
+                cardRequest.CardHolderName,
+                cardRequest.CardNumber,
+                cardRequest.Expiry,
+                cardRequest.Cvc);
+
+        var sanitizedRequestPayload = JsonSerializer.Serialize(new
+        {
+            businessProfileId = business.Id,
+            collectionId = collection.Id,
+            collectionReference = collection.Reference,
+            transferId = collection.TransferId,
+            transferReference = transfer.Reference,
+            amount = collection.Amount,
+            currencyCode = collection.CurrencyCode,
+            paymentMethod = collection.PaymentMethod.ToString(),
+            payerEmail = email,
+            customerName,
+            redirectUrl = request.RedirectUrl,
+            interacExpiryHours = request.InteracExpiryHours,
+            card = card is null ? null : new
+            {
+                cardHolderName = card.CardHolderName,
+                cardNumber = MaskCardNumber(card.CardNumber),
+                expiry = card.Expiry,
+                cvc = "***REDACTED***"
+            }
+        });
+
+        var attempt = new CollectionAttempt
+        {
+            CollectionId = collection.Id,
+            Collection = collection,
+            Status = ProviderRequestStatus.Pending,
+            RequestPayloadJson = sanitizedRequestPayload,
+            AttemptedAt = DateTime.UtcNow
+        };
+
+        collection.Attempts.Add(attempt);
+        await _db.SaveChangesAsync(ct);
+
+        try
+        {
+            var providerResult = await _remittanceProvider.InitiateCollectionAsync(
+                new RemittanceCollectionRequest(
+                    collection.TransferId ?? throw new InvalidOperationException("Business remittance collection is missing its transfer."),
+                    collection.Id,
+                    collection.PaymentMethod,
+                    collection.Amount,
+                    collection.CurrencyCode,
+                    compliance.ProviderCustomerId,
+                    email,
+                    customerName,
+                    business.ContactPhone,
+                    walletId,
+                    request.RedirectUrl,
+                    card,
+                    request.InteracExpiryHours),
+                ct);
+
+            _collectionStatusService.ApplyTransition(
+                collection,
+                CollectionStatus.Initiated,
+                new CollectionStatusTransitionContext(
+                    Source: "BusinessProvider",
+                    Reason: "Business collection was initiated with the remittance provider.",
+                    ChangedByUserId: actorUserId,
+                    ProviderCollectionId: providerResult.ProviderTransactionId,
+                    ProviderReference: providerResult.ProviderReference,
+                    CheckoutUrl: providerResult.CheckoutUrl,
+                    ProviderExpiresAt: providerResult.ExpiresAt,
+                    ProviderRequestId: providerResult.ProviderRequestLogId.ToString(),
+                    ProviderResponseId: providerResult.ProviderTransactionId,
+                    RequestPayloadJson: sanitizedRequestPayload,
+                    ResponsePayloadJson: providerResult.RawResponseJson,
+                    MetadataJson: JsonSerializer.Serialize(new
+                    {
+                        businessProfileId = business.Id,
+                        provider = _remittanceProvider.ProviderName,
+                        providerStatus = providerResult.ProviderStatus,
+                        providerExpiresAt = providerResult.ExpiresAt
+                    })),
+                attempt);
+
+            await UpsertProviderTransactionAsync(collection, providerResult, ct);
+            await _db.SaveChangesAsync(ct);
+            return ToDetailsDto(collection);
+        }
+        catch (InvalidOperationException ex)
+        {
+            attempt.Status = ProviderRequestStatus.Failed;
+            attempt.ErrorMessage = ex.Message.Length <= 1000 ? ex.Message : ex.Message[..1000];
+            attempt.LastUpdatedAt = DateTime.UtcNow;
+            await _db.SaveChangesAsync(ct);
+            throw;
+        }
+        catch (ProviderIntegrationException ex)
+        {
+            _collectionStatusService.ApplyTransition(
+                collection,
+                CollectionStatus.Failed,
+                new CollectionStatusTransitionContext(
+                    Source: "BusinessProvider",
+                    Reason: ex.Message,
+                    ChangedByUserId: actorUserId,
+                    ProviderRequestId: ex.RequestLogId?.ToString(),
+                    RequestPayloadJson: sanitizedRequestPayload,
+                    ResponsePayloadJson: ex.ProviderResponse),
+                attempt);
+            await _db.SaveChangesAsync(ct);
+            throw;
+        }
+    }
+
+    public async Task<CollectionDetailsDto?> GetBusinessTransferCollectionAsync(
+        Guid businessProfileId,
+        Guid transferId,
+        CancellationToken ct = default)
+    {
+        var collection = await _db.Collections
+            .AsNoTracking()
+            .Include(x => x.Transfer)
+            .Include(x => x.Attempts)
+            .FirstOrDefaultAsync(x =>
+                x.Purpose == PaymentOperationPurpose.Remittance &&
+                x.TransferId == transferId &&
+                x.Transfer != null &&
+                x.Transfer.BusinessProfileId == businessProfileId &&
+                !x.IsDeleted &&
+                !x.Transfer.IsDeleted,
+                ct);
+
+        return collection is null ? null : ToDetailsDto(collection);
+    }
+
     public async Task<CollectionDetailsDto> GetCollectionByIdAsync(
         Guid userId,
         Guid collectionId,
@@ -410,6 +743,9 @@ public class CollectionService : ICollectionService
         return await _db.Collections
             .AsNoTracking()
             .Where(x =>
+                x.Purpose == PaymentOperationPurpose.Remittance &&
+                x.TransferId != null &&
+                x.Transfer != null &&
                 x.Transfer.CustomerProfileId != null &&
                 x.Transfer.CustomerProfile!.UserId == userId &&
                 !x.IsDeleted &&
@@ -420,10 +756,16 @@ public class CollectionService : ICollectionService
             {
                 Id = x.Id,
                 TransferId = x.TransferId,
-                TransferReference = x.Transfer.Reference,
-                TransferStatus = x.Transfer.Status,
+                Purpose = x.Purpose,
+                FinancialAccountId = x.FinancialAccountId,
+                RelatedEntityType = x.RelatedEntityType,
+                RelatedEntityId = x.RelatedEntityId,
+                ContextEntityType = x.ContextEntityType,
+                ContextEntityId = x.ContextEntityId,
+                TransferReference = x.Transfer != null ? x.Transfer.Reference : null,
+                TransferStatus = x.Transfer != null ? x.Transfer.Status : null,
                 Reference = x.Reference,
-                SourceCountryCode = x.Transfer.SourceCountryCode,
+                SourceCountryCode = x.Transfer != null ? x.Transfer.SourceCountryCode : null,
                 CurrencyCode = x.CurrencyCode,
                 Amount = x.Amount,
                 PaymentMethod = x.PaymentMethod,
@@ -489,9 +831,12 @@ public class CollectionService : ICollectionService
         return _db.Collections
             .AsNoTracking()
             .Include(x => x.Transfer)
-            .ThenInclude(x => x.CustomerProfile)
+            .ThenInclude(x => x!.CustomerProfile)
             .Include(x => x.Attempts)
             .Where(x =>
+                x.Purpose == PaymentOperationPurpose.Remittance &&
+                x.TransferId != null &&
+                x.Transfer != null &&
                 x.Transfer.CustomerProfileId != null &&
                 x.Transfer.CustomerProfile!.UserId == userId &&
                 !x.IsDeleted &&
@@ -590,10 +935,16 @@ public class CollectionService : ICollectionService
         {
             Id = collection.Id,
             TransferId = collection.TransferId,
-            TransferReference = collection.Transfer.Reference,
-            TransferStatus = collection.Transfer.Status,
+            Purpose = collection.Purpose,
+            FinancialAccountId = collection.FinancialAccountId,
+            RelatedEntityType = collection.RelatedEntityType,
+            RelatedEntityId = collection.RelatedEntityId,
+            ContextEntityType = collection.ContextEntityType,
+            ContextEntityId = collection.ContextEntityId,
+            TransferReference = collection.Transfer?.Reference,
+            TransferStatus = collection.Transfer?.Status,
             Reference = collection.Reference,
-            SourceCountryCode = collection.Transfer.SourceCountryCode,
+            SourceCountryCode = collection.Transfer?.SourceCountryCode,
             CurrencyCode = collection.CurrencyCode,
             Amount = collection.Amount,
             PaymentMethod = collection.PaymentMethod,

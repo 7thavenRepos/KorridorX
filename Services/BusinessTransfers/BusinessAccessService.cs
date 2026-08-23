@@ -220,7 +220,8 @@ public class BusinessAccessService : IBusinessAccessService
                 BusinessPermission.ManageBatches |
                 BusinessPermission.ViewReports |
                 BusinessPermission.ViewWallets |
-                BusinessPermission.ManageFunding,
+                BusinessPermission.ManageFunding |
+                BusinessPermission.ViewEmbeddedFinance,
             BusinessUserRole.Compliance =>
                 BusinessPermission.ViewBeneficiaries |
                 BusinessPermission.ViewTransfers |

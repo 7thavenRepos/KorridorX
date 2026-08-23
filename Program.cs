@@ -7,6 +7,7 @@ using KorridorX.HealthChecks;
 using KorridorX.Middleware;
 using KorridorX.Models.Enums;
 using KorridorX.Models.Identity;
+using KorridorX.Providers.DigitalAssets;
 using KorridorX.Providers.Remittance;
 using KorridorX.Providers.Remittance.Blaaiz;
 using KorridorX.Providers.Screening;
@@ -16,10 +17,15 @@ using KorridorX.Services.BusinessContext;
 using KorridorX.Services.BusinessBeneficiaries;
 using KorridorX.Services.BusinessTransfers;
 using KorridorX.Services.BusinessFunding;
+using KorridorX.Services.FinancialCore;
+using KorridorX.Services.Instant;
+using KorridorX.Services.Marketplace;
 using KorridorX.Services.Notifications;
 using KorridorX.Services.Operations;
 using KorridorX.Services.Compliance;
 using KorridorX.Services.Customers;
+using KorridorX.Services.DigitalAssets;
+using KorridorX.Services.EmbeddedFinance;
 using KorridorX.Services.Finance;
 using KorridorX.Services.Fx;
 using KorridorX.Services.Payments;
@@ -293,6 +299,49 @@ builder.Services.AddScoped<IBusinessTransferService, BusinessTransferService>();
 builder.Services.AddScoped<IBusinessPaymentBatchService, BusinessPaymentBatchService>();
 builder.Services.AddScoped<IBusinessReportExportService, BusinessReportExportService>();
 builder.Services.AddScoped<IBusinessFundingService, BusinessFundingService>();
+builder.Services.AddScoped<IFinancialReservationService, FinancialReservationService>();
+builder.Services.Configure<DigitalAssetComplianceOptions>(
+    builder.Configuration.GetSection("DigitalAssets:Compliance"));
+builder.Services.AddScoped<IDigitalAssetProvider, BlaaizDigitalAssetProvider>();
+builder.Services.AddScoped<IDigitalAssetProviderRegistry, DigitalAssetProviderRegistry>();
+builder.Services.AddScoped<IDigitalAssetComplianceGate, DigitalAssetComplianceGate>();
+builder.Services.AddScoped<IEmbeddedDigitalAssetService, DigitalAssetService>();
+builder.Services.AddScoped<IDigitalAssetSettlementService, DigitalAssetService>();
+builder.Services.AddScoped<IDigitalAssetDepositIntentSettlementService, DigitalAssetService>();
+builder.Services.AddScoped<IDigitalAssetReconciliationService, DigitalAssetReconciliationService>();
+builder.Services.AddScoped<IDigitalAssetProviderOperationsService, DigitalAssetProviderOperationsService>();
+builder.Services.AddScoped<IDigitalAssetProviderWebhookService, DigitalAssetProviderWebhookService>();
+builder.Services.AddScoped<IMarketplaceSettlementService, MarketplaceSettlementService>();
+builder.Services.AddScoped<IMarketplaceOperationsService, MarketplaceOperationsService>();
+builder.Services.AddScoped<IMarketplaceMatchingEngine, MarketplaceMatchingEngine>();
+builder.Services.AddScoped<IMarketplaceOrderService, MarketplaceOrderService>();
+builder.Services.AddScoped<IBusinessTradingRfqService, BusinessTradingRfqService>();
+builder.Services.AddScoped<IBusinessPricingService, BusinessPricingService>();
+builder.Services.AddScoped<IInstantTradingService, InstantTradingService>();
+builder.Services.AddScoped<IEmbeddedFinanceManagementService, EmbeddedFinanceManagementService>();
+builder.Services.AddScoped<IEmbeddedFinanceCustomerService, EmbeddedFinanceCustomerService>();
+builder.Services.AddScoped<IEmbeddedFinanceCredentialAuthenticator, EmbeddedFinanceCredentialAuthenticator>();
+builder.Services.AddScoped<IEmbeddedFinanceContextAccessor, HttpEmbeddedFinanceContextAccessor>();
+builder.Services.AddScoped<ICollectionAccountProvisioningService, CollectionAccountProvisioningService>();
+builder.Services.AddScoped<IEmbeddedInboundCollectionService, EmbeddedInboundCollectionService>();
+builder.Services.AddScoped<IEmbeddedFinancePayoutService, EmbeddedFinancePayoutService>();
+builder.Services.AddScoped<IEmbeddedFinanceTransferService, EmbeddedFinanceTransferService>();
+builder.Services.AddScoped<IEmbeddedTradingService, EmbeddedTradingService>();
+builder.Services.AddScoped<IEmbeddedPayoutSettlementService, EmbeddedPayoutSettlementService>();
+builder.Services.AddScoped<ICollectionAccountProvisioner, BlaaizCollectionAccountProvisioner>();
+builder.Services.AddScoped<IEmbeddedWebhookUrlSecurityValidator, EmbeddedWebhookUrlSecurityValidator>();
+builder.Services.AddScoped<IEmbeddedWebhookManagementService, EmbeddedWebhookManagementService>();
+builder.Services.AddScoped<IEmbeddedWebhookOutboxStager, EmbeddedWebhookOutboxStager>();
+builder.Services.AddScoped<IEmbeddedWebhookPublisher, EmbeddedWebhookPublisher>();
+builder.Services.AddScoped<IEmbeddedWebhookSender, EmbeddedWebhookSender>();
+builder.Services.AddHttpClient(EmbeddedWebhookSender.HttpClientName, client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(15);
+})
+.ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
+{
+    AllowAutoRedirect = false
+});
 builder.Services.AddScoped<INotificationQueueService, NotificationQueueService>();
 builder.Services.AddScoped<INotificationOperationsService, NotificationOperationsService>();
 builder.Services.AddScoped<INotificationDeliveryProvider, SmtpNotificationDeliveryProvider>();
@@ -332,6 +381,7 @@ builder.Services.AddScoped<IProviderReconciliationService, ProviderReconciliatio
 builder.Services.AddHostedService<PayoutDispatchWorker>();
 builder.Services.AddHostedService<BlaaizReconciliationWorker>();
 builder.Services.AddHostedService<NotificationDeliveryWorker>();
+builder.Services.AddHostedService<EmbeddedWebhookDeliveryWorker>();
 builder.Services.AddHostedService<ComplianceRescreeningWorker>();
 builder.Services.AddHostedService<DataRetentionWorker>();
 builder.Services.AddHostedService<SupportSlaWorker>();
@@ -523,6 +573,7 @@ if (runtimeHostingOptions.RequireHttpsRedirection)
     app.UseHttpsRedirection();
 
 app.UseAuthentication();
+app.UseMiddleware<EmbeddedFinanceApiKeyMiddleware>();
 app.UseRateLimiter();
 app.UseAuthorization();
 

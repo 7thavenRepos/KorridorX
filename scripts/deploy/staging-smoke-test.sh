@@ -36,8 +36,27 @@ check_endpoint() {
 
 check_endpoint "/health/live"
 check_endpoint "/health/ready"
-check_endpoint "/swagger/index.html"
-check_endpoint "/swagger/v1/swagger.json"
+
+check_not_found() {
+  local path="$1"
+  local status
+  status="$(curl --silent --show-error \
+    --output /dev/null \
+    --write-out '%{http_code}' \
+    --connect-timeout 10 \
+    --max-time 30 \
+    "$base_url$path")"
+
+  if [[ "$status" != "404" ]]; then
+    echo "$path expected HTTP 404 in Staging but returned $status" >&2
+    exit 1
+  fi
+
+  echo "PASS $path is not exposed in Staging (HTTP 404)"
+}
+
+check_not_found "/swagger/index.html"
+check_not_found "/swagger/v1/swagger.json"
 
 unauthorized_status="$(curl --silent --show-error \
   --output /dev/null \

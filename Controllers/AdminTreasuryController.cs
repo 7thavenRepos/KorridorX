@@ -19,6 +19,38 @@ public sealed class AdminTreasuryController : ControllerBase
     public async Task<IActionResult> Dashboard(CancellationToken ct) =>
         Ok(ApiResponses.Ok(await _service.GetDashboardAsync(ct), "Treasury dashboard retrieved successfully."));
 
+    [HttpGet("liquidity/positions")]
+    public async Task<IActionResult> LiquidityPositions(CancellationToken ct) =>
+        Ok(ApiResponses.Ok(
+            await _service.GetLiquidityPositionsAsync(ct),
+            "Unified treasury liquidity positions retrieved successfully."));
+
+    [HttpGet("liquidity/exposure")]
+    public async Task<IActionResult> AssetExposure(CancellationToken ct) =>
+        Ok(ApiResponses.Ok(
+            await _service.GetAssetExposureAsync(ct),
+            "Treasury asset exposure retrieved successfully."));
+
+    [HttpGet("liquidity/alerts")]
+    public async Task<IActionResult> LiquidityAlerts(CancellationToken ct) =>
+        Ok(ApiResponses.Ok(
+            await _service.GetLiquidityAlertsAsync(ct),
+            "Treasury liquidity alerts retrieved successfully."));
+
+    [HttpGet("liquidity/rebalancing-suggestions")]
+    public async Task<IActionResult> UnifiedRebalanceSuggestions(CancellationToken ct) =>
+        Ok(ApiResponses.Ok(
+            await _service.GetUnifiedRebalanceSuggestionsAsync(ct),
+            "Unified treasury rebalancing suggestions retrieved successfully."));
+
+    [HttpPost("liquidity/internal-transfer")]
+    public async Task<IActionResult> InternalLiquidityTransfer(
+        [FromBody] ExecuteInternalLiquidityTransferRequestDto request,
+        CancellationToken ct) =>
+        Ok(ApiResponses.Ok(
+            await _service.ExecuteInternalLiquidityTransferAsync(GetUserId(), request, ct),
+            "Internal treasury liquidity transfer completed successfully."));
+
     [HttpPost("provider-wallets/sync")]
     public async Task<IActionResult> SyncProviderWallets(CancellationToken ct) =>
         Ok(ApiResponses.Ok(await _service.SyncProviderWalletsAsync(GetUserId(), ct), "Provider wallets synchronized successfully."));

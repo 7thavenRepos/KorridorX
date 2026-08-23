@@ -30,7 +30,7 @@ public interface IBusinessFundingService
     Task<BusinessWalletDto> SetWalletStatusAsync(
         Guid adminUserId,
         Guid walletId,
-        BusinessWalletStatus status,
+        FinancialAccountStatus status,
         string reason,
         CancellationToken ct = default);
 
@@ -73,6 +73,12 @@ public interface IBusinessFundingService
         Guid businessProfileId,
         string currencyCode,
         decimal amount,
+        CancellationToken ct = default);
+
+    Task PrepareApprovedTransferFundingAsync(
+        Transfer transfer,
+        Guid? actionedByUserId,
+        string source,
         CancellationToken ct = default);
 
     Task ReserveTransferAsync(

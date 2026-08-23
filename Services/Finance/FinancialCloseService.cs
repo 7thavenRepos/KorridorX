@@ -13,12 +13,14 @@ using KorridorX.Models.Providers;
 using KorridorX.Services.Audit;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
+using Npgsql;
 
 namespace KorridorX.Services.Finance;
 
 public sealed class FinancialCloseService : IFinancialCloseService
 {
     private const decimal InvoiceVarianceTolerance = 0.01m;
+    private const string PendingCloseRequestUniqueIndex = "IX_FinanceCloseRequests_AccountingPeriodId_Pending";
     private const string SettlementClearingCode = "1100";
     private const string ProviderFeeExpenseCode = "5000";
     private const string ProviderFeeAdjustmentGainCode = "4030";
@@ -252,22 +254,150 @@ public sealed class FinancialCloseService : IFinancialCloseService
 
     public async Task<FinanceCloseRequestDto> SubmitCloseRequestAsync(Guid userId, Guid periodId, CreateFinanceCloseRequest request, CancellationToken ct = default)
     {
-        var period = await GetPeriodAsync(periodId, ct); if (period.Status == AccountingPeriodStatus.Closed) throw new InvalidOperationException("Accounting period is already closed.");
-        await _accounting.SyncAsync(period.StartsAt, period.EndsAt, ct); var checklist = await GetCloseChecklistAsync(periodId, ct); var incomplete = checklist.Where(x => x.IsRequired && !x.IsCompleted).Select(x => x.Label).ToList(); if (incomplete.Count > 0) throw new InvalidOperationException("Finance close checklist is incomplete: " + string.Join(", ", incomplete));
-        if (await _db.FinanceCloseRequests.AnyAsync(x => x.AccountingPeriodId == periodId && x.Status == FinanceCloseRequestStatus.PendingApproval && !x.IsDeleted, ct)) throw new InvalidOperationException("A finance close request is already pending approval.");
-        var entity = new FinanceCloseRequest { AccountingPeriodId = periodId, RequestedByUserId = userId, RequestedAt = DateTime.UtcNow, RequestNote = request.Note?.Trim(), CreatedByUserId = userId };
-        _db.FinanceCloseRequests.Add(entity); _audit.Stage(new AuditRecordRequest("FINANCE_CLOSE_REQUESTED", "Finance", nameof(FinanceCloseRequest), entity.Id.ToString(), NewValues: new { period.Name, entity.RequestNote }, UserId: userId)); await _db.SaveChangesAsync(ct); return MapCloseRequest(entity, period.Name);
+        var period = await GetPeriodAsync(periodId, ct);
+        if (period.Status == AccountingPeriodStatus.Closed)
+            throw new InvalidOperationException("Accounting period is already closed.");
+
+        await _accounting.SyncAsync(period.StartsAt, period.EndsAt, ct);
+
+        var checklist = await GetCloseChecklistAsync(periodId, ct);
+        var incomplete = checklist
+            .Where(x => x.IsRequired && !x.IsCompleted)
+            .Select(x => x.Label)
+            .ToList();
+
+        if (incomplete.Count > 0)
+            throw new InvalidOperationException(
+                "Finance close checklist is incomplete: " +
+                string.Join(", ", incomplete));
+
+        if (await _db.FinanceCloseRequests.AnyAsync(
+                x => x.AccountingPeriodId == periodId &&
+                     x.Status == FinanceCloseRequestStatus.PendingApproval &&
+                     !x.IsDeleted,
+                ct))
+        {
+            throw new InvalidOperationException(
+                "A finance close request is already pending approval.");
+        }
+
+        var entity = new FinanceCloseRequest
+        {
+            AccountingPeriodId = periodId,
+            RequestedByUserId = userId,
+            RequestedAt = DateTime.UtcNow,
+            RequestNote = request.Note?.Trim(),
+            CreatedByUserId = userId
+        };
+
+        _db.FinanceCloseRequests.Add(entity);
+
+        _audit.Stage(
+            new AuditRecordRequest(
+                "FINANCE_CLOSE_REQUESTED",
+                "Finance",
+                nameof(FinanceCloseRequest),
+                entity.Id.ToString(),
+                NewValues: new { period.Name, entity.RequestNote },
+                UserId: userId));
+
+        try
+        {
+            await _db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException ex) when (IsPendingCloseUniqueViolation(ex))
+        {
+            throw new InvalidOperationException(
+                "A finance close request is already pending approval.",
+                ex);
+        }
+
+        return MapCloseRequest(entity, period.Name);
     }
 
     public async Task<FinanceCloseRequestDto> ReviewCloseRequestAsync(Guid userId, Guid closeRequestId, ReviewFinanceCloseRequest request, CancellationToken ct = default)
     {
-        var entity = await _db.FinanceCloseRequests.Include(x => x.AccountingPeriod).FirstOrDefaultAsync(x => x.Id == closeRequestId && !x.IsDeleted, ct) ?? throw new InvalidOperationException("Finance close request not found.");
-        if (entity.Status != FinanceCloseRequestStatus.PendingApproval) throw new InvalidOperationException("Finance close request is no longer pending approval.");
-        if (request.Approve && entity.RequestedByUserId == userId) throw new InvalidOperationException("The user who requested period close cannot approve it.");
-        entity.ReviewedByUserId = userId; entity.ReviewedAt = DateTime.UtcNow; entity.ReviewNote = request.Note.Trim(); entity.LastUpdatedAt = DateTime.UtcNow; entity.LastUpdatedByUserId = userId;
-        if (!request.Approve) entity.Status = FinanceCloseRequestStatus.Rejected;
-        else { entity.Status = FinanceCloseRequestStatus.Approved; await _accounting.ClosePeriodAsync(userId, entity.AccountingPeriodId, new CloseAccountingPeriodRequest { Note = $"Approved finance close request {entity.Id}: {request.Note}" }, ct); entity.Status = FinanceCloseRequestStatus.Executed; entity.ExecutedAt = DateTime.UtcNow; }
-        _audit.Stage(new AuditRecordRequest(request.Approve ? "FINANCE_CLOSE_APPROVED" : "FINANCE_CLOSE_REJECTED", "Finance", nameof(FinanceCloseRequest), entity.Id.ToString(), NewValues: new { entity.Status, entity.ReviewNote, entity.ExecutedAt }, UserId: userId)); await _db.SaveChangesAsync(ct); return MapCloseRequest(entity, entity.AccountingPeriod.Name);
+        await using var transaction =
+            await _db.Database.BeginTransactionAsync(ct);
+
+        try
+        {
+            var entity = await _db.FinanceCloseRequests
+                .Include(x => x.AccountingPeriod)
+                .FirstOrDefaultAsync(
+                    x => x.Id == closeRequestId && !x.IsDeleted,
+                    ct)
+                ?? throw new InvalidOperationException(
+                    "Finance close request not found.");
+
+            if (entity.Status != FinanceCloseRequestStatus.PendingApproval)
+                throw new InvalidOperationException(
+                    "Finance close request is no longer pending approval.");
+
+            if (request.Approve && entity.RequestedByUserId == userId)
+                throw new InvalidOperationException(
+                    "The user who requested period close cannot approve it.");
+
+            entity.ReviewedByUserId = userId;
+            entity.ReviewedAt = DateTime.UtcNow;
+            entity.ReviewNote = request.Note.Trim();
+            entity.LastUpdatedAt = DateTime.UtcNow;
+            entity.LastUpdatedByUserId = userId;
+
+            if (!request.Approve)
+            {
+                entity.Status = FinanceCloseRequestStatus.Rejected;
+            }
+            else
+            {
+                entity.Status = FinanceCloseRequestStatus.Approved;
+
+                await _accounting.ClosePeriodAsync(
+                    userId,
+                    entity.AccountingPeriodId,
+                    new CloseAccountingPeriodRequest
+                    {
+                        Note =
+                            $"Approved finance close request {entity.Id}: " +
+                            request.Note
+                    },
+                    ct);
+
+                entity.Status = FinanceCloseRequestStatus.Executed;
+                entity.ExecutedAt = DateTime.UtcNow;
+            }
+
+            _audit.Stage(
+                new AuditRecordRequest(
+                    request.Approve
+                        ? "FINANCE_CLOSE_APPROVED"
+                        : "FINANCE_CLOSE_REJECTED",
+                    "Finance",
+                    nameof(FinanceCloseRequest),
+                    entity.Id.ToString(),
+                    NewValues: new
+                    {
+                        entity.Status,
+                        entity.ReviewNote,
+                        entity.ExecutedAt
+                    },
+                    UserId: userId));
+
+            await _db.SaveChangesAsync(ct);
+            await transaction.CommitAsync(ct);
+
+            return MapCloseRequest(
+                entity,
+                entity.AccountingPeriod.Name);
+        }
+        catch (DbUpdateConcurrencyException ex)
+        {
+            await transaction.RollbackAsync(ct);
+
+            throw new InvalidOperationException(
+                "Finance close request is no longer pending approval.",
+                ex);
+        }
     }
 
     public async Task<FinanceMonthlyClosePackDto> GetMonthlyClosePackAsync(Guid periodId, string? baseCurrencyCode = null, CancellationToken ct = default)
@@ -311,6 +441,14 @@ public sealed class FinancialCloseService : IFinancialCloseService
         var settlementVariance = await _db.SettlementBatches.AnyAsync(x => !x.IsDeleted && x.WindowEnd > period.StartsAt && x.WindowStart < period.EndsAt && x.Status == SettlementBatchStatus.Variance, ct);
         foreach (var item in items) { var complete = item.Code switch { "ACCOUNTING_SYNC" => true, "TRIAL_BALANCE" => balanced, "PROVIDER_INVOICES" => !pendingInvoices, "SETTLEMENT_VARIANCES" => !settlementVariance, _ => item.IsCompleted }; if (item.IsCompleted != complete) { item.IsCompleted = complete; item.CompletedAt = complete ? now : null; item.CompletedByUserId = null; item.Note = complete ? "System check passed." : "System check requires attention."; item.LastUpdatedAt = now; } }
     }
+
+    private static bool IsPendingCloseUniqueViolation(DbUpdateException ex) =>
+        ex.InnerException is PostgresException postgres &&
+        postgres.SqlState == PostgresErrorCodes.UniqueViolation &&
+        string.Equals(
+            postgres.ConstraintName,
+            PendingCloseRequestUniqueIndex,
+            StringComparison.Ordinal);
 
     private async Task<AccountingPeriod> GetPeriodAsync(Guid periodId, CancellationToken ct) => await _db.AccountingPeriods.FirstOrDefaultAsync(x => x.Id == periodId && !x.IsDeleted, ct) ?? throw new InvalidOperationException("Accounting period not found.");
     private async Task<Dictionary<string, decimal>> ResolveRatesAsync(IEnumerable<string> currencies, string baseCode, FinanceTranslationRateType type, DateTime at, CancellationToken ct)

@@ -52,8 +52,8 @@ public sealed class JournalLineConfiguration : IEntityTypeConfiguration<JournalL
     {
         builder.HasIndex(x => x.JournalEntryId);
         builder.HasIndex(x => x.AccountingAccountId);
-        builder.Property(x => x.DebitAmount).HasPrecision(18, 2);
-        builder.Property(x => x.CreditAmount).HasPrecision(18, 2);
+        builder.Property(x => x.DebitAmount).HasPrecision(36, 18);
+        builder.Property(x => x.CreditAmount).HasPrecision(36, 18);
         builder.Property(x => x.Narrative).HasMaxLength(1000);
         builder.HasOne(x => x.JournalEntry).WithMany(x => x.Lines).HasForeignKey(x => x.JournalEntryId).OnDelete(DeleteBehavior.Cascade);
         builder.HasOne(x => x.AccountingAccount).WithMany().HasForeignKey(x => x.AccountingAccountId).OnDelete(DeleteBehavior.Restrict);

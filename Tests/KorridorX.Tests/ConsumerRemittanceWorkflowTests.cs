@@ -1,10 +1,14 @@
 using System.Net;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.EntityFrameworkCore;
+using KorridorX.Data;
 using KorridorX.Dtos.Auth;
 using KorridorX.Dtos.Fx;
 using KorridorX.Dtos.Recipients;
 using KorridorX.Dtos.Transfers;
 using KorridorX.Infrastructure;
 using KorridorX.Models.Enums;
+using KorridorX.Models.Providers;
 using KorridorX.Tests.Infrastructure;
 
 namespace KorridorX.Tests;
@@ -36,6 +40,16 @@ public sealed class ConsumerRemittanceWorkflowTests
                 "US",
                 UserType.Consumer));
         client.UseBearerToken(authentication.AccessToken);
+
+        await using (var scope = _fixture.Factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var profile = await db.CustomerProfiles
+                .SingleAsync(x => x.UserId == registration.UserId);
+            profile.KycStatus = KycStatus.Approved;
+            profile.KycApprovedAt = DateTime.UtcNow;
+            await db.SaveChangesAsync();
+        }
 
         var meResponse = await client.GetAsync("/api/auth/me");
         Assert.Equal(HttpStatusCode.OK, meResponse.StatusCode);
@@ -81,6 +95,54 @@ public sealed class ConsumerRemittanceWorkflowTests
         var bankEnvelope = await bankResponse.ReadApiResponseAsync<RecipientBankAccountDto>();
         var bankAccount = Assert.IsType<RecipientBankAccountDto>(bankEnvelope.Data);
 
+        await using (var scope = _fixture.Factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+            var mapping = await db.PayoutDestinationProviderMappings
+                .FirstOrDefaultAsync(x =>
+                    x.DestinationType == PayoutDestinationType.RecipientBankAccount &&
+                    x.DestinationId == bankAccount.Id &&
+                    x.ProviderCode == ProviderCode.Blaaiz &&
+                    !x.IsDeleted);
+
+            if (mapping is null)
+            {
+                mapping = new PayoutDestinationProviderMapping
+                {
+                    DestinationType = PayoutDestinationType.RecipientBankAccount,
+                    DestinationId = bankAccount.Id,
+                    ProviderCode = ProviderCode.Blaaiz,
+                    ProviderBankId = "999",
+                    ProviderPartyId = $"test-party-{Guid.NewGuid():N}",
+                    ProviderDestinationId = $"test-destination-{Guid.NewGuid():N}",
+                    IsVerified = true,
+                    VerificationAttemptedAt = DateTime.UtcNow,
+                    VerifiedAt = DateTime.UtcNow,
+                    ProviderVerifiedAccountName = bankAccount.AccountName,
+                    ProviderVerificationReference = $"test-verification-{Guid.NewGuid():N}",
+                    IsActive = true
+                };
+
+                db.PayoutDestinationProviderMappings.Add(mapping);
+            }
+            else
+            {
+                mapping.ProviderBankId ??= "999";
+                mapping.ProviderPartyId ??= $"test-party-{Guid.NewGuid():N}";
+                mapping.ProviderDestinationId ??= $"test-destination-{Guid.NewGuid():N}";
+                mapping.IsVerified = true;
+                mapping.VerificationAttemptedAt ??= DateTime.UtcNow;
+                mapping.VerifiedAt ??= DateTime.UtcNow;
+                mapping.ProviderVerifiedAccountName ??= bankAccount.AccountName;
+                mapping.ProviderVerificationReference ??= $"test-verification-{Guid.NewGuid():N}";
+                mapping.LastVerificationError = null;
+                mapping.IsActive = true;
+            }
+
+            await db.SaveChangesAsync();
+        }
+
         var quoteResponse = await client.PostJsonAsync(
             "/api/transfer-quotes",
             new CreateTransferQuoteRequestDto
@@ -109,6 +171,7 @@ public sealed class ConsumerRemittanceWorkflowTests
             "Release candidate end-to-end test");
 
         var transferResponse = await client.PostJsonAsync("/api/transfers", transferRequest);
+        await transferResponse.EnsureSuccessWithBodyAsync();
         Assert.Equal(HttpStatusCode.OK, transferResponse.StatusCode);
         var transferEnvelope = await transferResponse.ReadApiResponseAsync<TransferDetailsDto>();
         var transferDetails = Assert.IsType<TransferDetailsDto>(transferEnvelope.Data);

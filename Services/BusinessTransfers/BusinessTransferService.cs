@@ -7,6 +7,7 @@ using KorridorX.Models.BusinessBeneficiaries;
 using KorridorX.Models.BusinessTransfers;
 using KorridorX.Models.Enums;
 using KorridorX.Models.Fx;
+using KorridorX.Models.Providers;
 using KorridorX.Models.Transfers;
 using KorridorX.Services.References;
 using KorridorX.Services.BusinessFunding;
@@ -75,10 +76,10 @@ public class BusinessTransferService : IBusinessTransferService
             throw new InvalidOperationException("Source amount must be greater than zero.");
         }
 
-        var sourceCountry = NormalizeCode(request.SourceCountryCode);
-        var destinationCountry = NormalizeCode(request.DestinationCountryCode);
-        var sourceCurrency = NormalizeCode(request.SourceCurrencyCode);
-        var destinationCurrency = NormalizeCode(request.DestinationCurrencyCode);
+        var sourceCountry = NormalizeCountryCode(request.SourceCountryCode);
+        var destinationCountry = NormalizeCountryCode(request.DestinationCountryCode);
+        var sourceCurrency = NormalizeAssetCode(request.SourceCurrencyCode);
+        var destinationCurrency = NormalizeAssetCode(request.DestinationCurrencyCode);
 
         var business = await _db.BusinessProfiles
             .AsNoTracking()
@@ -201,7 +202,7 @@ public class BusinessTransferService : IBusinessTransferService
                 !x.IsDeleted)
             : null;
 
-        ValidateDestination(beneficiary.CountryCode, quote, bankAccount, mobileWallet);
+        await ValidateDestinationAsync(beneficiary.CountryCode, quote, bankAccount, mobileWallet, ct);
 
         var approvalRequired = RequiresApproval(access, quote.TotalPayableAmount);
         if (approvalRequired)
@@ -285,28 +286,47 @@ public class BusinessTransferService : IBusinessTransferService
                 transfer.Id,
                 ct);
         }
-        else if (transfer.BusinessFundingSource == BusinessFundingSource.BusinessWallet)
+        else
         {
-            await _fundingService.ReserveTransferAsync(
+            await _fundingService.PrepareApprovedTransferFundingAsync(
                 transfer,
                 userId,
                 "BusinessTransfer",
-                null,
-                ct);
-        }
-        else
-        {
-            await _notifications.QueueBusinessAsync(
-                access.BusinessProfileId,
-                "Business transfer awaiting funding",
-                $"Transfer {transfer.Reference} is approved and waiting for external funding.",
-                "Transfer",
-                transfer.Id,
                 ct);
         }
 
-        await _db.SaveChangesAsync(ct);
-        await tx.CommitAsync(ct);
+        try
+        {
+            await _db.SaveChangesAsync(ct);
+            await tx.CommitAsync(ct);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            await tx.RollbackAsync(ct);
+            throw new InvalidOperationException(
+                "The business transfer quote was consumed while this transfer was being created. Please create a new quote.");
+        }
+        catch (DbUpdateException)
+        {
+            await tx.RollbackAsync(ct);
+            _db.ChangeTracker.Clear();
+
+            var quoteAlreadyConsumed = await _db.Transfers
+                .AsNoTracking()
+                .AnyAsync(x =>
+                    x.TransferQuoteId == quote.Id &&
+                    !x.IsDeleted,
+                    ct);
+
+            if (quoteAlreadyConsumed)
+            {
+                throw new InvalidOperationException(
+                    "The business transfer quote has already been used to create a transfer. Please create a new quote.");
+            }
+
+            throw;
+        }
+
         return await GetTransferAsync(userId, transfer.Id, ct);
     }
 
@@ -434,22 +454,16 @@ public class BusinessTransferService : IBusinessTransferService
                     Title: "Transfer approved",
                     Description: "The transfer has been approved and is waiting for funding confirmation."));
 
-            if (transfer.BusinessFundingSource == BusinessFundingSource.BusinessWallet)
-            {
-                await _fundingService.ReserveTransferAsync(
-                    transfer,
-                    userId,
-                    "BusinessApproval",
-                    null,
-                    ct);
-            }
+            await _fundingService.PrepareApprovedTransferFundingAsync(
+                transfer,
+                userId,
+                "BusinessApproval",
+                ct);
 
             await _notifications.QueueBusinessAsync(
                 access.BusinessProfileId,
                 "Business transfer approved",
-                transfer.BusinessFundingSource == BusinessFundingSource.BusinessWallet
-                    ? $"Transfer {transfer.Reference} was approved and funded from the business wallet."
-                    : $"Transfer {transfer.Reference} was approved and is waiting for external funding.",
+                $"Transfer {transfer.Reference} completed its required approval workflow.",
                 "Transfer",
                 transfer.Id,
                 ct);
@@ -673,11 +687,11 @@ public class BusinessTransferService : IBusinessTransferService
 
     private async Task EnsureCorridorAsync(string countryCode, string currencyCode, bool sending, CancellationToken ct)
     {
-        var exists = await _db.CountryCurrencies.AsNoTracking().AnyAsync(x =>
+        var exists = await _db.CountryAssets.AsNoTracking().AnyAsync(x =>
             x.CountryCode == countryCode &&
-            x.CurrencyCode == currencyCode &&
+            x.AssetCode == currencyCode &&
             x.Country.IsSupported &&
-            x.Currency.IsSupported &&
+            x.Asset.IsSupported &&
             (sending
                 ? x.CanSend && x.Country.IsSendCountry
                 : x.CanReceive && x.Country.IsReceiveCountry),
@@ -754,11 +768,12 @@ public class BusinessTransferService : IBusinessTransferService
             throw new InvalidOperationException("Select exactly one beneficiary bank account or mobile wallet.");
     }
 
-    private static void ValidateDestination(
+    private async Task ValidateDestinationAsync(
         string beneficiaryCountry,
         TransferQuote quote,
         BusinessBeneficiaryBankAccount? bankAccount,
-        BusinessBeneficiaryMobileWallet? mobileWallet)
+        BusinessBeneficiaryMobileWallet? mobileWallet,
+        CancellationToken ct)
     {
         if (!string.Equals(beneficiaryCountry, quote.DestinationCountryCode, StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException("The beneficiary country does not match the quote destination country.");
@@ -768,8 +783,17 @@ public class BusinessTransferService : IBusinessTransferService
             if (!string.Equals(bankAccount.CountryCode, quote.DestinationCountryCode, StringComparison.OrdinalIgnoreCase) ||
                 !string.Equals(bankAccount.CurrencyCode, quote.DestinationCurrencyCode, StringComparison.OrdinalIgnoreCase))
                 throw new InvalidOperationException("The bank account does not match the quote destination corridor.");
-            if (!bankAccount.IsVerified)
-                throw new InvalidOperationException("The beneficiary bank account must be verified before transfer creation.");
+
+            if (!await IsBankDestinationVerifiedForProviderAsync(
+                    PayoutDestinationType.BusinessBeneficiaryBankAccount,
+                    bankAccount.Id,
+                    quote.ProviderCode,
+                    bankAccount.IsVerified,
+                    ct))
+            {
+                throw new InvalidOperationException(
+                    "The beneficiary bank account must be verified for the selected payout provider before transfer creation.");
+            }
         }
 
         if (mobileWallet is not null)
@@ -780,6 +804,32 @@ public class BusinessTransferService : IBusinessTransferService
             if (!mobileWallet.IsVerified)
                 throw new InvalidOperationException("The beneficiary mobile wallet must be verified before transfer creation.");
         }
+    }
+
+    private async Task<bool> IsBankDestinationVerifiedForProviderAsync(
+        PayoutDestinationType destinationType,
+        Guid destinationId,
+        string providerCode,
+        bool legacyIsVerified,
+        CancellationToken ct)
+    {
+        if (!Enum.TryParse<ProviderCode>(providerCode, true, out var parsedProviderCode))
+        {
+            return legacyIsVerified;
+        }
+
+        var mapping = await _db.PayoutDestinationProviderMappings
+            .AsNoTracking()
+            .FirstOrDefaultAsync(x =>
+                x.DestinationType == destinationType &&
+                x.DestinationId == destinationId &&
+                x.ProviderCode == parsedProviderCode &&
+                !x.IsDeleted,
+                ct);
+
+        return mapping is null
+            ? legacyIsVerified
+            : mapping.IsActive && mapping.IsVerified;
     }
 
     private async Task<string> GenerateUniqueReferenceAsync(CancellationToken ct)
@@ -797,6 +847,8 @@ public class BusinessTransferService : IBusinessTransferService
         Id = quote.Id,
         CustomerProfileId = quote.CustomerProfileId,
         BusinessProfileId = quote.BusinessProfileId,
+        BusinessCustomerId = quote.BusinessCustomerId,
+        SourceFinancialAccountId = quote.SourceFinancialAccountId,
         SourceCountryCode = quote.SourceCountryCode,
         DestinationCountryCode = quote.DestinationCountryCode,
         SourceCurrencyCode = quote.SourceCurrencyCode,
@@ -817,14 +869,26 @@ public class BusinessTransferService : IBusinessTransferService
         CreatedAt = quote.CreatedAt
     };
 
-    private static string NormalizeCode(string value)
+    private static string NormalizeCountryCode(string value)
     {
         if (string.IsNullOrWhiteSpace(value))
-            throw new InvalidOperationException("Country and currency codes are required.");
+            throw new InvalidOperationException("Country code is required.");
 
         var code = value.Trim().ToUpperInvariant();
         if (code.Length > 10)
-            throw new InvalidOperationException("Country and currency codes cannot exceed 10 characters.");
+            throw new InvalidOperationException("Country code cannot exceed 10 characters.");
+
+        return code;
+    }
+
+    private static string NormalizeAssetCode(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            throw new InvalidOperationException("Asset code is required.");
+
+        var code = value.Trim().ToUpperInvariant();
+        if (code.Length > 20)
+            throw new InvalidOperationException("Asset code cannot exceed 20 characters.");
 
         return code;
     }

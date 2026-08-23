@@ -82,7 +82,7 @@ public class PayoutService : IPayoutService
 
         var payout = await _db.Payouts
             .Include(x => x.Transfer)
-            .ThenInclude(x => x.CustomerProfile)
+            .ThenInclude(x => x!.CustomerProfile)
             .Include(x => x.Attempts)
             .FirstOrDefaultAsync(x => x.TransferId == transferId && !x.IsDeleted, ct);
 
@@ -106,10 +106,10 @@ public class PayoutService : IPayoutService
         _transferRiskService.EnsureCanProceedToPayout(transfer);
         await _screeningService.EnsureTransferCanProceedToPayoutAsync(transfer, ct);
 
-        var destination = ResolveDestination(transfer);
+        var destination = await ResolveDestinationAsync(transfer, changedByUserId, ct);
         if (destination.IsMobileWallet)
         {
-            throw new InvalidOperationException("Blaaiz mobile-wallet payouts are not yet enabled.");
+            throw new InvalidOperationException($"Mobile-wallet payouts are not yet enabled for {_remittanceProvider.ProviderName}.");
         }
 
         var paymentMethod = ResolvePayoutMethod(transfer.DestinationCurrencyCode);
@@ -134,6 +134,21 @@ public class PayoutService : IPayoutService
                     ?? throw new InvalidOperationException("Transfer customer profile is missing."),
                 _remittanceProvider.ProviderCode,
                 ct);
+
+        var payoutProviderCustomerId = compliance.ProviderCustomerId;
+        if (transfer.BusinessCustomerId.HasValue)
+        {
+            payoutProviderCustomerId = await _db.ProviderCustomers
+                .AsNoTracking()
+                .Where(x =>
+                    x.ProviderCode == _remittanceProvider.ProviderCode &&
+                    x.BusinessCustomerId == transfer.BusinessCustomerId.Value &&
+                    !x.IsDeleted)
+                .Select(x => x.ProviderCustomerId)
+                .SingleOrDefaultAsync(ct)
+                ?? throw new InvalidOperationException(
+                    "Embedded business customer has not completed provider onboarding for transfers.");
+        }
 
         var walletId = ResolvePayoutWalletId(transfer.SourceCurrencyCode);
 
@@ -174,6 +189,8 @@ public class PayoutService : IPayoutService
                 destination.Email,
                 bankName = destination.BankName,
                 providerBankId = destination.ProviderBankId,
+                providerPartyId = destination.ProviderPartyId,
+                providerDestinationId = destination.ProviderDestinationId,
                 accountNumber = MaskSensitive(destination.AccountNumber)
             }
         });
@@ -200,7 +217,7 @@ public class PayoutService : IPayoutService
                     transfer.DestinationAmount,
                     transfer.SourceCurrencyCode,
                     transfer.DestinationCurrencyCode,
-                    compliance.ProviderCustomerId,
+                    payoutProviderCustomerId,
                     walletId,
                     destination.FirstName,
                     destination.LastName,
@@ -232,7 +249,9 @@ public class PayoutService : IPayoutService
                 payoutStatus,
                 new PayoutStatusTransitionContext(
                     Source: source,
-                    Reason: payoutStatus == PayoutStatus.Failed ? "Blaaiz rejected the payout." : "Payout submitted to Blaaiz.",
+                    Reason: payoutStatus == PayoutStatus.Failed
+                        ? $"{_remittanceProvider.ProviderName} rejected the payout."
+                        : $"Payout submitted to {_remittanceProvider.ProviderName}.",
                     ChangedByUserId: changedByUserId,
                     ProviderPayoutId: result.ProviderTransactionId,
                     ProviderReference: result.ProviderReference,
@@ -303,26 +322,29 @@ public class PayoutService : IPayoutService
             throw new InvalidOperationException("Only a failed payout can be retried.");
         }
 
-        if (payout.Transfer.Status != TransferStatus.RefundPending)
+        var transfer = payout.Transfer
+            ?? throw new InvalidOperationException("Remittance payout is missing its transfer.");
+
+        if (transfer.Status != TransferStatus.RefundPending)
         {
             throw new InvalidOperationException(
-                $"Payout retry requires the transfer to be in RefundPending, but it is '{payout.Transfer.Status}'.");
+                $"Payout retry requires the transfer to be in RefundPending, but it is '{transfer.Status}'.");
         }
 
-        if (payout.Transfer.IsOperationalHold)
+        if (transfer.IsOperationalHold)
         {
             throw new InvalidOperationException(
-                $"Payout retry is blocked by an operational hold: {payout.Transfer.OperationalHoldReason ?? "support review required"}.");
+                $"Payout retry is blocked by an operational hold: {transfer.OperationalHoldReason ?? "support review required"}.");
         }
 
         await _businessFundingService.ReactivateTransferReservationAsync(
-            payout.Transfer,
+            transfer,
             changedByUserId,
             "AdminRetry",
             ct);
 
         _transferStatusService.ApplyTransition(
-            payout.Transfer,
+            transfer,
             TransferStatus.Processing,
             new TransferStatusTransitionContext(
                 Source: "Admin",
@@ -338,13 +360,13 @@ public class PayoutService : IPayoutService
         payout.FailedAt = null;
         payout.LastUpdatedAt = DateTime.UtcNow;
         payout.LastUpdatedByUserId = changedByUserId;
-        payout.Transfer.ProviderTransferId = null;
-        payout.Transfer.ProviderReference = null;
+        transfer.ProviderTransferId = null;
+        transfer.ProviderReference = null;
 
         await _db.SaveChangesAsync(ct);
 
         return await DispatchForTransferAsync(
-            payout.TransferId,
+            payout.TransferId ?? throw new InvalidOperationException("Remittance payout is missing its transfer."),
             "AdminRetry",
             changedByUserId,
             ct);
@@ -425,11 +447,14 @@ public class PayoutService : IPayoutService
             .AsNoTracking()
             .Include(x => x.Transfer)
             .Where(x =>
+                x.Purpose == PaymentOperationPurpose.Remittance &&
+                x.TransferId != null &&
+                x.Transfer != null &&
                 x.Transfer.CustomerProfileId != null &&
                 x.Transfer.CustomerProfile!.UserId == userId &&
                 !x.IsDeleted &&
                 !x.Transfer.IsDeleted &&
-                !x.Transfer.CustomerProfile.IsDeleted)
+                !x.Transfer.CustomerProfile!.IsDeleted)
             .OrderByDescending(x => x.CreatedAt)
             .PaginateAsync(page, pageSize, ct);
 
@@ -444,14 +469,17 @@ public class PayoutService : IPayoutService
         _db.Payouts
             .AsNoTracking()
             .Include(x => x.Transfer)
-            .ThenInclude(x => x.CustomerProfile)
+            .ThenInclude(x => x!.CustomerProfile)
             .Include(x => x.Attempts)
             .Where(x =>
+                x.Purpose == PaymentOperationPurpose.Remittance &&
+                x.TransferId != null &&
+                x.Transfer != null &&
                 x.Transfer.CustomerProfileId != null &&
                 x.Transfer.CustomerProfile!.UserId == userId &&
                 !x.IsDeleted &&
                 !x.Transfer.IsDeleted &&
-                !x.Transfer.CustomerProfile.IsDeleted);
+                !x.Transfer.CustomerProfile!.IsDeleted);
 
     private async Task UpsertProviderTransactionAsync(
         Payout payout,
@@ -513,7 +541,7 @@ public class PayoutService : IPayoutService
     {
         if (!_payoutWalletIds.TryGetValue(currencyCode, out var walletId) || string.IsNullOrWhiteSpace(walletId))
         {
-            throw new InvalidOperationException($"No Blaaiz payout wallet is configured for {currencyCode}.");
+            throw new InvalidOperationException($"No payout wallet is configured for {currencyCode} on {_remittanceProvider.ProviderName}.");
         }
 
         return walletId.Trim();
@@ -528,12 +556,16 @@ public class PayoutService : IPayoutService
                 $"Automatic payout is not yet configured for {destinationCurrencyCode}.")
         };
 
-    private static PayoutDestination ResolveDestination(Transfer transfer)
+    private async Task<PayoutDestination> ResolveDestinationAsync(
+        Transfer transfer,
+        Guid? changedByUserId,
+        CancellationToken ct)
     {
         if (transfer.BusinessProfileId.HasValue)
         {
             var beneficiary = transfer.BusinessBeneficiary
                 ?? throw new InvalidOperationException("Business transfer beneficiary is missing.");
+
             var names = SplitName(beneficiary.Name);
             var firstName = string.IsNullOrWhiteSpace(beneficiary.ContactFirstName)
                 ? names.FirstName
@@ -541,8 +573,26 @@ public class PayoutService : IPayoutService
             var lastName = string.IsNullOrWhiteSpace(beneficiary.ContactLastName)
                 ? names.LastName
                 : beneficiary.ContactLastName.Trim();
+
             var account = transfer.BusinessBeneficiaryBankAccount;
             var wallet = transfer.BusinessBeneficiaryMobileWallet;
+
+            var providerView = account is null
+                ? null
+                : await ResolveBankProviderViewAsync(
+                    PayoutDestinationType.BusinessBeneficiaryBankAccount,
+                    account.Id,
+                    account.ProviderBankId,
+                    account.ProviderBeneficiaryId,
+                    account.ProviderBankAccountId,
+                    account.IsVerified,
+                    account.ProviderVerifiedAccountName,
+                    account.ProviderVerificationReference,
+                    account.VerificationAttemptedAt,
+                    account.VerifiedAt,
+                    account.LastVerificationError,
+                    changedByUserId,
+                    ct);
 
             return new PayoutDestination(
                 firstName,
@@ -550,8 +600,8 @@ public class PayoutService : IPayoutService
                 beneficiary.Email,
                 beneficiary.PhoneNumber,
                 account?.BankName,
-                account?.ProviderBankId,
-                account?.ProviderVerifiedAccountName,
+                providerView?.ProviderBankId ?? account?.ProviderBankId,
+                providerView?.ProviderVerifiedAccountName ?? account?.ProviderVerifiedAccountName,
                 account?.AccountName,
                 account?.AccountNumber,
                 account?.RoutingNumber,
@@ -560,13 +610,35 @@ public class PayoutService : IPayoutService
                 account?.SwiftBic,
                 account?.IsActive ?? false,
                 account?.IsDeleted ?? false,
-                account?.IsVerified ?? false,
-                wallet is not null);
+                providerView is not null
+                ? providerView.IsActive && providerView.IsVerified
+                : account?.IsVerified ?? false,
+                wallet is not null,
+                providerView?.ProviderPartyId ?? account?.ProviderBeneficiaryId,
+                providerView?.ProviderDestinationId ?? account?.ProviderBankAccountId);
         }
 
         var recipient = transfer.Recipient
             ?? throw new InvalidOperationException("Transfer recipient is missing.");
+
         var recipientAccount = transfer.RecipientBankAccount;
+
+        var recipientProviderView = recipientAccount is null
+            ? null
+            : await ResolveBankProviderViewAsync(
+                PayoutDestinationType.RecipientBankAccount,
+                recipientAccount.Id,
+                recipientAccount.ProviderBankId,
+                recipientAccount.ProviderRecipientId,
+                recipientAccount.ProviderBankAccountId,
+                recipientAccount.IsVerified,
+                recipientAccount.ProviderVerifiedAccountName,
+                recipientAccount.ProviderVerificationReference,
+                recipientAccount.VerificationAttemptedAt,
+                recipientAccount.VerifiedAt,
+                recipientAccount.LastVerificationError,
+                changedByUserId,
+                ct);
 
         return new PayoutDestination(
             recipient.FirstName,
@@ -574,8 +646,8 @@ public class PayoutService : IPayoutService
             recipient.Email,
             recipient.PhoneNumber,
             recipientAccount?.BankName,
-            recipientAccount?.ProviderBankId,
-            recipientAccount?.ProviderVerifiedAccountName,
+            recipientProviderView?.ProviderBankId ?? recipientAccount?.ProviderBankId,
+            recipientProviderView?.ProviderVerifiedAccountName ?? recipientAccount?.ProviderVerifiedAccountName,
             recipientAccount?.AccountName,
             recipientAccount?.AccountNumber,
             recipientAccount?.RoutingNumber,
@@ -584,8 +656,108 @@ public class PayoutService : IPayoutService
             recipientAccount?.SwiftBic,
             recipientAccount?.IsActive ?? false,
             recipientAccount?.IsDeleted ?? false,
-            recipientAccount?.IsVerified ?? false,
-            transfer.RecipientMobileWallet is not null);
+            recipientProviderView is not null
+                ? recipientProviderView.IsActive && recipientProviderView.IsVerified
+                : recipientAccount?.IsVerified ?? false,
+            transfer.RecipientMobileWallet is not null,
+            recipientProviderView?.ProviderPartyId ?? recipientAccount?.ProviderRecipientId,
+            recipientProviderView?.ProviderDestinationId ?? recipientAccount?.ProviderBankAccountId);
+    }
+
+    private async Task<PayoutDestinationProviderMapping?> ResolveBankProviderViewAsync(
+        PayoutDestinationType destinationType,
+        Guid destinationId,
+        string? legacyProviderBankId,
+        string? legacyProviderPartyId,
+        string? legacyProviderDestinationId,
+        bool legacyIsVerified,
+        string? legacyVerifiedAccountName,
+        string? legacyVerificationReference,
+        DateTime? legacyVerificationAttemptedAt,
+        DateTime? legacyVerifiedAt,
+        string? legacyVerificationError,
+        Guid? changedByUserId,
+        CancellationToken ct)
+    {
+        var providerCode = _remittanceProvider.ProviderCode;
+
+        var mapping = await _db.PayoutDestinationProviderMappings
+            .FirstOrDefaultAsync(x =>
+                x.DestinationType == destinationType &&
+                x.DestinationId == destinationId &&
+                x.ProviderCode == providerCode &&
+                !x.IsDeleted,
+                ct);
+
+        var hasLegacyProviderState =
+            !string.IsNullOrWhiteSpace(legacyProviderBankId) ||
+            !string.IsNullOrWhiteSpace(legacyProviderPartyId) ||
+            !string.IsNullOrWhiteSpace(legacyProviderDestinationId) ||
+            legacyIsVerified ||
+            !string.IsNullOrWhiteSpace(legacyVerifiedAccountName) ||
+            !string.IsNullOrWhiteSpace(legacyVerificationReference);
+
+        if (mapping is null)
+        {
+            if (!hasLegacyProviderState)
+            {
+                return null;
+            }
+
+            mapping = new PayoutDestinationProviderMapping
+            {
+                DestinationType = destinationType,
+                DestinationId = destinationId,
+                ProviderCode = providerCode,
+                ProviderBankId = legacyProviderBankId,
+                ProviderPartyId = legacyProviderPartyId,
+                ProviderDestinationId = legacyProviderDestinationId,
+                IsVerified = legacyIsVerified,
+                VerificationAttemptedAt = legacyVerificationAttemptedAt,
+                VerifiedAt = legacyVerifiedAt,
+                ProviderVerifiedAccountName = legacyVerifiedAccountName,
+                ProviderVerificationReference = legacyVerificationReference,
+                LastVerificationError = legacyVerificationError,
+                IsActive = true,
+                CreatedByUserId = changedByUserId
+            };
+
+            _db.PayoutDestinationProviderMappings.Add(mapping);
+            await _db.SaveChangesAsync(ct);
+            return mapping;
+        }
+
+        var changed = false;
+
+        if (string.IsNullOrWhiteSpace(mapping.ProviderBankId) &&
+            !string.IsNullOrWhiteSpace(legacyProviderBankId))
+        {
+            mapping.ProviderBankId = legacyProviderBankId;
+            changed = true;
+        }
+
+        if (string.IsNullOrWhiteSpace(mapping.ProviderPartyId) &&
+            !string.IsNullOrWhiteSpace(legacyProviderPartyId))
+        {
+            mapping.ProviderPartyId = legacyProviderPartyId;
+            changed = true;
+        }
+
+        if (string.IsNullOrWhiteSpace(mapping.ProviderDestinationId) &&
+            !string.IsNullOrWhiteSpace(legacyProviderDestinationId))
+        {
+            mapping.ProviderDestinationId = legacyProviderDestinationId;
+            changed = true;
+        }
+
+        if (changed)
+        {
+            mapping.LastUpdatedAt = DateTime.UtcNow;
+            mapping.LastUpdatedByUserId = changedByUserId;
+            await _db.SaveChangesAsync(ct);
+        }
+
+        return mapping;
     }
 
     private static void ValidateDestination(
@@ -650,7 +822,9 @@ public class PayoutService : IPayoutService
         bool BankAccountIsActive,
         bool BankAccountIsDeleted,
         bool BankAccountIsVerified,
-        bool IsMobileWallet);
+        bool IsMobileWallet,
+        string? ProviderPartyId,
+        string? ProviderDestinationId);
 
     private static PayoutStatus MapProviderPayoutStatus(string status) =>
         status.Trim().ToUpperInvariant() switch
@@ -683,8 +857,14 @@ public class PayoutService : IPayoutService
         new(
             payout.Id,
             payout.TransferId,
-            payout.Transfer.Reference,
-            payout.Transfer.Status,
+            payout.Purpose,
+            payout.FinancialAccountId,
+            payout.RelatedEntityType,
+            payout.RelatedEntityId,
+            payout.ContextEntityType,
+            payout.ContextEntityId,
+            payout.Transfer?.Reference,
+            payout.Transfer?.Status,
             payout.Reference,
             payout.CurrencyCode,
             payout.Amount,
