@@ -121,12 +121,21 @@ Application environment values remain only in the server-owned
 `/opt/korridorx/.env.staging`; the deployment workflow does not create, replace,
 or upload that file.
 
-The GitHub `staging` environment requires these connection-only secrets:
+The existing GitHub `staging` environment configuration is reused directly.
 
-- `STAGING_HOST`
-- `STAGING_USER`
-- `STAGING_SSH_KEY`
-- `STAGING_SSH_PORT` (optional; defaults to `22`)
+Environment secrets:
+
+- `STAGING_SSH_PRIVATE_KEY`
+- `STAGING_SSH_KNOWN_HOSTS`
+
+Environment variables:
+
+- `STAGING_SSH_HOST`
+- `STAGING_SSH_USER`
+
+`STAGING_HOST` may remain configured for other staging automation, but the SSH
+deployment job uses `STAGING_SSH_HOST`.
+
 
 ## 10. Manual staging update / recovery
 

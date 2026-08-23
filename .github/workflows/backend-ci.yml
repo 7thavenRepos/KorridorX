@@ -116,22 +116,17 @@ jobs:
 
       - name: Validate staging deployment inputs
         env:
-          STAGING_HOST: ${{ secrets.STAGING_HOST }}
-          STAGING_USER: ${{ secrets.STAGING_USER }}
-          STAGING_SSH_KEY: ${{ secrets.STAGING_SSH_KEY }}
-          STAGING_SSH_PORT: ${{ secrets.STAGING_SSH_PORT }}
+          STAGING_SSH_HOST: ${{ vars.STAGING_SSH_HOST }}
+          STAGING_SSH_USER: ${{ vars.STAGING_SSH_USER }}
+          STAGING_SSH_PRIVATE_KEY: ${{ secrets.STAGING_SSH_PRIVATE_KEY }}
+          STAGING_SSH_KNOWN_HOSTS: ${{ secrets.STAGING_SSH_KNOWN_HOSTS }}
         run: |
           set -euo pipefail
 
-          : "${STAGING_HOST:?GitHub staging secret STAGING_HOST is required}"
-          : "${STAGING_USER:?GitHub staging secret STAGING_USER is required}"
-          : "${STAGING_SSH_KEY:?GitHub staging secret STAGING_SSH_KEY is required}"
-
-          if [[ -z "${STAGING_SSH_PORT:-}" ]]; then
-            echo "STAGING_SSH_PORT=22" >> "$GITHUB_ENV"
-          else
-            echo "STAGING_SSH_PORT=$STAGING_SSH_PORT" >> "$GITHUB_ENV"
-          fi
+          : "${STAGING_SSH_HOST:?GitHub staging variable STAGING_SSH_HOST is required}"
+          : "${STAGING_SSH_USER:?GitHub staging variable STAGING_SSH_USER is required}"
+          : "${STAGING_SSH_PRIVATE_KEY:?GitHub staging secret STAGING_SSH_PRIVATE_KEY is required}"
+          : "${STAGING_SSH_KNOWN_HOSTS:?GitHub staging secret STAGING_SSH_KNOWN_HOSTS is required}"
 
           migration_file="$(find release-artifact -type f -name migrations.sql -print -quit)"
           if [[ -z "$migration_file" || ! -f "$migration_file" ]]; then
@@ -140,58 +135,50 @@ jobs:
           fi
 
           echo "KORRIDORX_MIGRATION_ARTIFACT=$migration_file" >> "$GITHUB_ENV"
-          echo "PASS staging deployment secrets are present"
+          echo "PASS staging SSH configuration is present"
           echo "PASS reviewed migrations.sql artifact is present"
 
       - name: Configure staging SSH
         env:
-          STAGING_HOST: ${{ secrets.STAGING_HOST }}
-          STAGING_SSH_KEY: ${{ secrets.STAGING_SSH_KEY }}
+          STAGING_SSH_PRIVATE_KEY: ${{ secrets.STAGING_SSH_PRIVATE_KEY }}
+          STAGING_SSH_KNOWN_HOSTS: ${{ secrets.STAGING_SSH_KNOWN_HOSTS }}
         run: |
           set -euo pipefail
 
           install -d -m 700 "$HOME/.ssh"
-          printf '%s\n' "$STAGING_SSH_KEY" > "$HOME/.ssh/korridorx_staging"
+          printf '%s\n' "$STAGING_SSH_PRIVATE_KEY" > "$HOME/.ssh/korridorx_staging"
+          printf '%s\n' "$STAGING_SSH_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
           chmod 600 "$HOME/.ssh/korridorx_staging"
-
-          ssh-keyscan \
-            -p "$STAGING_SSH_PORT" \
-            -H "$STAGING_HOST" \
-            >> "$HOME/.ssh/known_hosts"
-
           chmod 600 "$HOME/.ssh/known_hosts"
 
       - name: Upload reviewed migration artifact
         env:
-          STAGING_HOST: ${{ secrets.STAGING_HOST }}
-          STAGING_USER: ${{ secrets.STAGING_USER }}
+          STAGING_SSH_HOST: ${{ vars.STAGING_SSH_HOST }}
+          STAGING_SSH_USER: ${{ vars.STAGING_SSH_USER }}
         run: |
           set -euo pipefail
 
           ssh \
             -i "$HOME/.ssh/korridorx_staging" \
-            -p "$STAGING_SSH_PORT" \
-            "$STAGING_USER@$STAGING_HOST" \
+            "$STAGING_SSH_USER@$STAGING_SSH_HOST" \
             "mkdir -p /opt/korridorx/artifacts"
 
           scp \
             -i "$HOME/.ssh/korridorx_staging" \
-            -P "$STAGING_SSH_PORT" \
             "$KORRIDORX_MIGRATION_ARTIFACT" \
-            "$STAGING_USER@$STAGING_HOST:/opt/korridorx/artifacts/migrations.sql.next"
+            "$STAGING_SSH_USER@$STAGING_SSH_HOST:/opt/korridorx/artifacts/migrations.sql.next"
 
       - name: Deploy exact tested commit
         env:
-          STAGING_HOST: ${{ secrets.STAGING_HOST }}
-          STAGING_USER: ${{ secrets.STAGING_USER }}
+          STAGING_SSH_HOST: ${{ vars.STAGING_SSH_HOST }}
+          STAGING_SSH_USER: ${{ vars.STAGING_SSH_USER }}
           TESTED_COMMIT_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
 
           ssh \
             -i "$HOME/.ssh/korridorx_staging" \
-            -p "$STAGING_SSH_PORT" \
-            "$STAGING_USER@$STAGING_HOST" \
+            "$STAGING_SSH_USER@$STAGING_SSH_HOST" \
             "TESTED_COMMIT_SHA='$TESTED_COMMIT_SHA' bash -s" <<'REMOTE'
           set -euo pipefail
 
@@ -217,9 +204,6 @@ jobs:
           echo "Fetching tested commit $tested_sha"
           git fetch --prune origin develop
           git cat-file -e "${tested_sha}^{commit}"
-
-          # Do not force/reset the checkout: if tracked files were edited directly
-          # on the server, fail safely rather than overwriting them.
           git checkout --detach "$tested_sha"
 
           mv artifacts/migrations.sql.next artifacts/migrations.sql
