@@ -89,8 +89,9 @@ chmod +x scripts/deploy/*.sh
 ./scripts/deploy/staging-smoke-test.sh https://api.staging.korridorx.com
 ```
 
-Swagger is intentionally disabled in Staging by the current hosting security
-policy. The smoke test verifies that both Swagger routes return HTTP 404.
+Swagger is intentionally enabled in Staging for UAT and integration testing.
+The staging smoke test verifies both the Swagger UI and OpenAPI JSON return HTTP
+200. Production keeps `Hosting:SwaggerEnabled=false`.
 
 ## 7. Inspect and operate
 

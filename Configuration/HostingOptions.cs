@@ -78,12 +78,12 @@ public sealed class HostingOptionsValidator : IValidateOptions<HostingOptions>
             if (!options.RequireHttpsRedirection)
                 errors.Add("Hosting:RequireHttpsRedirection must be true outside Development.");
 
-            if (options.SwaggerEnabled)
-                errors.Add("Hosting:SwaggerEnabled must be false outside Development.");
-
             if (string.IsNullOrWhiteSpace(options.DataProtectionKeysPath))
                 errors.Add("Hosting:DataProtectionKeysPath is required outside Development.");
         }
+
+        if (_environment.IsProduction() && options.SwaggerEnabled)
+            errors.Add("Hosting:SwaggerEnabled must be false in Production.");
 
         return errors.Count == 0
             ? ValidateOptionsResult.Success
