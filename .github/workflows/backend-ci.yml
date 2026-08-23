@@ -88,6 +88,21 @@ jobs:
         run: |
           echo "::warning::EF Core reports pending model changes. Generate and review the release-candidate schema migration before enabling the migration-drift gate as blocking."
 
+      - name: Build staging API image
+        if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
+        run: |
+          set -euo pipefail
+          docker build --pull --tag korridorx-api:staging .
+          docker image inspect korridorx-api:staging --format 'Built image {{.Id}} ({{.Size}} bytes)'
+
+      - name: Package staging API image
+        if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
+        run: |
+          set -euo pipefail
+          docker save korridorx-api:staging | gzip -1 > artifacts/korridorx-api-staging.tar.gz
+          test -s artifacts/korridorx-api-staging.tar.gz
+          ls -lh artifacts/korridorx-api-staging.tar.gz
+
       - name: Upload validation artifacts
         if: always()
         uses: actions/upload-artifact@v4
@@ -134,9 +149,17 @@ jobs:
             exit 1
           fi
 
+          api_image_file="$(find release-artifact -type f -name korridorx-api-staging.tar.gz -print -quit)"
+          if [[ -z "$api_image_file" || ! -f "$api_image_file" ]]; then
+            echo "The successful CI artifact does not contain korridorx-api-staging.tar.gz." >&2
+            exit 1
+          fi
+
           echo "KORRIDORX_MIGRATION_ARTIFACT=$migration_file" >> "$GITHUB_ENV"
+          echo "KORRIDORX_API_IMAGE_ARTIFACT=$api_image_file" >> "$GITHUB_ENV"
           echo "PASS staging SSH configuration is present"
           echo "PASS reviewed migrations.sql artifact is present"
+          echo "PASS prebuilt staging API image artifact is present"
 
       - name: Configure staging SSH
         env:
@@ -176,9 +199,17 @@ jobs:
             "$KORRIDORX_MIGRATION_ARTIFACT" \
             "$STAGING_SSH_USER@$STAGING_SSH_HOST:/opt/korridorx/artifacts/migrations.sql.next"
 
-      # Docker/.NET publish can be quiet for several minutes on the staging EC2
-      # host. SSH keepalives prevent an otherwise healthy remote build from being
-      # dropped by an idle network path.
+          scp \
+            -i "$HOME/.ssh/korridorx_staging" \
+            -o ServerAliveInterval=30 \
+            -o ServerAliveCountMax=20 \
+            -o TCPKeepAlive=yes \
+            -o ConnectTimeout=20 \
+            "$KORRIDORX_API_IMAGE_ARTIFACT" \
+            "$STAGING_SSH_USER@$STAGING_SSH_HOST:/opt/korridorx/artifacts/korridorx-api-staging.tar.gz.next"
+
+      # The API image is already built by the CI runner. EC2 performs only
+      # backup, image load, migrations, container recreation and smoke tests.
       - name: Deploy exact tested commit
         env:
           STAGING_SSH_HOST: ${{ vars.STAGING_SSH_HOST }}
@@ -216,16 +247,23 @@ jobs:
             exit 1
           fi
 
+          if [[ ! -f artifacts/korridorx-api-staging.tar.gz.next ]]; then
+            echo "Missing uploaded prebuilt staging API image." >&2
+            exit 1
+          fi
+
           echo "Fetching tested commit $tested_sha"
           git fetch --prune origin develop
           git cat-file -e "${tested_sha}^{commit}"
           git checkout --detach "$tested_sha"
 
           mv artifacts/migrations.sql.next artifacts/migrations.sql
+          mv artifacts/korridorx-api-staging.tar.gz.next artifacts/korridorx-api-staging.tar.gz
           chmod +x scripts/deploy/*.sh
 
           echo "Deploying exact CI-tested commit: $(git rev-parse HEAD)"
-          ./scripts/deploy/staging-deploy.sh
+          KORRIDORX_API_IMAGE_FILE=artifacts/korridorx-api-staging.tar.gz \
+            ./scripts/deploy/staging-deploy.sh
           ./scripts/deploy/staging-smoke-test.sh https://api.staging.korridorx.com
           REMOTE
 
