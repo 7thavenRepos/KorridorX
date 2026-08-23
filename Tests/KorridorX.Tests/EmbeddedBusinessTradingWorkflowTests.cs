@@ -301,6 +301,12 @@ public sealed class EmbeddedBusinessTradingWorkflowTests
             tenant,
             EmbeddedFinanceScope.TradingRead | EmbeddedFinanceScope.TradingWrite);
 
+        var policy = await trading.CreatePricingPolicyAsync(
+            new CreateBusinessPricingPolicyRequestDto(
+                sourceAsset,
+                destinationAsset,
+                MarkupPercentage: 4m));
+
         var quote = await trading.CreateInstantQuoteAsync(
             tenant.CustomerId,
             new CreateInstantQuoteRequestDto(pair.Id, 20m));
@@ -310,7 +316,7 @@ public sealed class EmbeddedBusinessTradingWorkflowTests
             quote.Id);
 
         Assert.Equal(InstantTradeStatus.Completed, trade.Status);
-        Assert.Equal(25m, trade.DestinationAmount);
+        Assert.Equal(24m, trade.DestinationAmount);
 
         db.ChangeTracker.Clear();
 
@@ -323,6 +329,13 @@ public sealed class EmbeddedBusinessTradingWorkflowTests
         Assert.Equal(FinancialAccountOwnerType.BusinessCustomer, storedQuote.OwnerType);
         Assert.Equal(tenant.CustomerId, storedQuote.OwnerId);
         Assert.Equal(Guid.Empty, storedQuote.UserId);
+        Assert.Equal(1.25m, storedQuote.BaseCustomerRate);
+        Assert.Equal(1.20m, storedQuote.CustomerRate);
+        Assert.Equal(policy.Id, storedQuote.BusinessPricingPolicyId);
+        Assert.Equal(4m, storedQuote.BusinessMarkupPercentage);
+        Assert.Equal(25m, storedQuote.BaseDestinationAmount);
+        Assert.Equal(1m, storedQuote.BusinessRevenueAmount);
+        Assert.Equal(tenant.ProfileId, storedQuote.BusinessProfileId);
 
         Assert.Equal(FinancialAccountOwnerType.BusinessCustomer, storedTrade.OwnerType);
         Assert.Equal(tenant.CustomerId, storedTrade.OwnerId);
@@ -341,14 +354,50 @@ public sealed class EmbeddedBusinessTradingWorkflowTests
         Assert.Equal(80m, customerSourceAfter.SettledBalance);
         Assert.Equal(0m, customerSourceAfter.HeldBalance);
 
-        Assert.Equal(25m, customerDestinationAfter.AvailableBalance);
-        Assert.Equal(25m, customerDestinationAfter.SettledBalance);
+        Assert.Equal(24m, customerDestinationAfter.AvailableBalance);
+        Assert.Equal(24m, customerDestinationAfter.SettledBalance);
 
         Assert.Equal(20m, houseSourceAfter.AvailableBalance);
         Assert.Equal(20m, houseSourceAfter.SettledBalance);
 
         Assert.Equal(475m, houseDestinationAfter.AvailableBalance);
         Assert.Equal(475m, houseDestinationAfter.SettledBalance);
+
+        var businessRevenueAccount = await db.FinancialAccounts.AsNoTracking()
+            .SingleAsync(x =>
+                x.OwnerType == FinancialAccountOwnerType.Business &&
+                x.OwnerId == tenant.ProfileId &&
+                x.AssetCode == destinationAsset &&
+                x.AccountType == FinancialAccountType.Revenue);
+
+        Assert.Equal(1m, businessRevenueAccount.AvailableBalance);
+        Assert.Equal(1m, businessRevenueAccount.SettledBalance);
+
+        var storedTradeWithRevenue = await db.InstantTrades.AsNoTracking()
+            .SingleAsync(x => x.Id == trade.Id);
+
+        Assert.Equal(25m, storedTradeWithRevenue.BaseDestinationAmount);
+        Assert.Equal(1m, storedTradeWithRevenue.BusinessRevenueAmount);
+        Assert.Equal(businessRevenueAccount.Id, storedTradeWithRevenue.BusinessRevenueFinancialAccountId);
+        Assert.NotNull(storedTradeWithRevenue.BusinessRevenueLedgerTransactionId);
+
+        var revenueLedger = await db.LedgerTransactions.AsNoTracking()
+            .Include(x => x.Postings)
+            .SingleAsync(x => x.Id == storedTradeWithRevenue.BusinessRevenueLedgerTransactionId!.Value);
+
+        Assert.Equal(LedgerTransactionType.Fee, revenueLedger.Type);
+        Assert.Equal(1m, revenueLedger.Amount);
+        Assert.Equal(2, revenueLedger.Postings.Count);
+
+        var performance = await trading.GetPricingPerformanceAsync();
+        var performanceRow = Assert.Single(performance);
+        Assert.Equal(sourceAsset, performanceRow.SourceAssetCode);
+        Assert.Equal(destinationAsset, performanceRow.DestinationAssetCode);
+        Assert.Equal(1, performanceRow.CompletedTrades);
+        Assert.Equal(20m, performanceRow.SourceVolume);
+        Assert.Equal(24m, performanceRow.CustomerDestinationVolume);
+        Assert.Equal(25m, performanceRow.BaseDestinationVolume);
+        Assert.Equal(1m, performanceRow.RealizedBusinessRevenue);
 
         var reservation = await db.FinancialReservations.AsNoTracking()
             .SingleAsync(x => x.Id == storedTrade.ReservationId!.Value);
@@ -357,11 +406,146 @@ public sealed class EmbeddedBusinessTradingWorkflowTests
         Assert.Equal(20m, reservation.CapturedAmount);
         Assert.Equal(0m, reservation.RemainingAmount);
 
+        var settlementLedgers = await db.LedgerTransactions
+    .AsNoTracking()
+    .Where(x =>
+        x.IdempotencyScope == "InstantTradeSettlement" &&
+        x.RelatedEntityId == trade.Id)
+    .ToListAsync();
+
+        Assert.Equal(3, settlementLedgers.Count);
+
         Assert.Equal(
             2,
-            await db.LedgerTransactions.CountAsync(x =>
-                x.IdempotencyScope == "InstantTradeSettlement" &&
-                x.RelatedEntityId == trade.Id));
+            settlementLedgers.Count(x =>
+                x.Type == LedgerTransactionType.Conversion));
+
+        Assert.Single(
+            settlementLedgers,
+            x => x.Type == LedgerTransactionType.Fee);
+    }
+
+    [DatabaseIntegrationFact]
+    public async Task Business_pricing_policies_are_tenant_scoped_and_overlaps_are_rejected()
+    {
+        await using var scope = _fixture.Factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        var tenantOne = await CreateBusinessTenantAsync(db, "pricing-one");
+        var tenantTwo = await CreateBusinessTenantAsync(db, "pricing-two");
+
+        var sourceAsset = await CreateTestAssetAsync(db, "PS", trading: true, instant: true);
+        var destinationAsset = await CreateTestAssetAsync(db, "PD", trading: true, instant: true);
+
+        var tenantOneTrading = CreateTradingService(
+            scope,
+            db,
+            tenantOne,
+            EmbeddedFinanceScope.TradingRead | EmbeddedFinanceScope.TradingWrite);
+
+        var created = await tenantOneTrading.CreatePricingPolicyAsync(
+            new CreateBusinessPricingPolicyRequestDto(
+                sourceAsset,
+                destinationAsset,
+                MarkupPercentage: 2.5m,
+                MinimumCustomerRate: 1.10m,
+                MaximumCustomerRate: 1.50m,
+                EffectiveFrom: DateTime.UtcNow.AddMinutes(-1),
+                EffectiveTo: DateTime.UtcNow.AddDays(10)));
+
+        Assert.Equal(
+            tenantOne.ProfileId,
+            await db.BusinessPricingPolicies
+                .Where(x => x.Id == created.Id)
+                .Select(x => x.BusinessProfileId)
+                .SingleAsync());
+
+        var overlap = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            tenantOneTrading.CreatePricingPolicyAsync(
+                new CreateBusinessPricingPolicyRequestDto(
+                    sourceAsset,
+                    destinationAsset,
+                    MarkupPercentage: 3m,
+                    EffectiveFrom: DateTime.UtcNow,
+                    EffectiveTo: DateTime.UtcNow.AddDays(2))));
+
+        Assert.Contains("overlap", overlap.Message, StringComparison.OrdinalIgnoreCase);
+
+        var tenantTwoTrading = CreateTradingService(
+            scope,
+            db,
+            tenantTwo,
+            EmbeddedFinanceScope.TradingRead | EmbeddedFinanceScope.TradingWrite);
+
+        Assert.Empty(await tenantTwoTrading.GetPricingPoliciesAsync());
+
+        var foreignUpdate = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            tenantTwoTrading.UpdatePricingPolicyAsync(
+                created.Id,
+                new UpdateBusinessPricingPolicyRequestDto(
+                    MarkupPercentage: 1m,
+                    EffectiveFrom: created.EffectiveFrom,
+                    EffectiveTo: created.EffectiveTo)));
+
+        Assert.Contains("not found", foreignUpdate.Message, StringComparison.OrdinalIgnoreCase);
+
+        var disabled = await tenantOneTrading.DisablePricingPolicyAsync(created.Id);
+        Assert.False(disabled.IsActive);
+
+        var listed = await tenantOneTrading.GetPricingPoliciesAsync();
+        Assert.Single(listed);
+        Assert.False(listed[0].IsActive);
+    }
+
+    [DatabaseIntegrationFact]
+    public async Task Business_pricing_supports_percentage_basis_points_and_fixed_spread()
+    {
+        await using var scope = _fixture.Factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var pricing = scope.ServiceProvider.GetRequiredService<IBusinessPricingService>();
+
+        var tenant = await CreateBusinessTenantAsync(db, "pricing-modes");
+        var sourceAsset = await CreateTestAssetAsync(db, "PMS", trading: true, instant: true);
+        var destinationAsset = await CreateTestAssetAsync(db, "PMD", trading: true, instant: true);
+
+        var percentage = await pricing.CreatePolicyAsync(
+            tenant.ProfileId,
+            new CreateBusinessPricingPolicyRequestDto(
+                sourceAsset, destinationAsset, MarkupPercentage: 4m,
+                AdjustmentType: BusinessPricingAdjustmentType.Percentage,
+                AdjustmentValue: 4m));
+
+        var percentageResult = await pricing.ResolveAsync(
+            tenant.ProfileId, sourceAsset, destinationAsset, 1.25m, DateTime.UtcNow);
+        Assert.Equal(1.20m, percentageResult.CustomerRate);
+        Assert.Equal(0.05m, percentageResult.BusinessRevenueRate);
+        await pricing.DisablePolicyAsync(tenant.ProfileId, percentage.Id);
+
+        var bps = await pricing.CreatePolicyAsync(
+            tenant.ProfileId,
+            new CreateBusinessPricingPolicyRequestDto(
+                sourceAsset, destinationAsset, MarkupPercentage: 0m,
+                AdjustmentType: BusinessPricingAdjustmentType.BasisPoints,
+                AdjustmentValue: 400m));
+
+        var bpsResult = await pricing.ResolveAsync(
+            tenant.ProfileId, sourceAsset, destinationAsset, 1.25m, DateTime.UtcNow);
+        Assert.Equal(1.20m, bpsResult.CustomerRate);
+        Assert.Equal(BusinessPricingAdjustmentType.BasisPoints, bpsResult.AdjustmentType);
+        await pricing.DisablePolicyAsync(tenant.ProfileId, bps.Id);
+
+        await pricing.CreatePolicyAsync(
+            tenant.ProfileId,
+            new CreateBusinessPricingPolicyRequestDto(
+                sourceAsset, destinationAsset, MarkupPercentage: 0m,
+                AdjustmentType: BusinessPricingAdjustmentType.FixedSpread,
+                AdjustmentValue: 0.05m));
+
+        var fixedResult = await pricing.ResolveAsync(
+            tenant.ProfileId, sourceAsset, destinationAsset, 1.25m, DateTime.UtcNow);
+        Assert.Equal(1.20m, fixedResult.CustomerRate);
+        Assert.Equal(BusinessPricingAdjustmentType.FixedSpread, fixedResult.AdjustmentType);
+        Assert.Equal(0.05m, fixedResult.AdjustmentValue);
     }
 
     [DatabaseIntegrationFact]
@@ -414,7 +598,8 @@ public sealed class EmbeddedBusinessTradingWorkflowTests
             scope.ServiceProvider.GetRequiredService<IMarketplaceOrderService>(),
             scope.ServiceProvider.GetRequiredService<IMarketplaceOperationsService>(),
             scope.ServiceProvider.GetRequiredService<IInstantTradingService>(),
-            scope.ServiceProvider.GetRequiredService<IBusinessTradingRfqService>());
+            scope.ServiceProvider.GetRequiredService<IBusinessTradingRfqService>(),
+            scope.ServiceProvider.GetRequiredService<IBusinessPricingService>());
     }
 
     private async Task<TenantFixture> CreateBusinessTenantAsync(

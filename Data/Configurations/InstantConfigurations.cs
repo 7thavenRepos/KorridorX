@@ -63,7 +63,13 @@ public sealed class InstantQuoteConfiguration : IEntityTypeConfiguration<Instant
         builder.Property(x => x.SourceAmount).HasPrecision(36, 18);
         builder.Property(x => x.DestinationAmount).HasPrecision(36, 18);
         builder.Property(x => x.ProviderRate).HasPrecision(18, 8);
+        builder.Property(x => x.BaseCustomerRate).HasPrecision(18, 8);
         builder.Property(x => x.CustomerRate).HasPrecision(18, 8);
+        builder.Property(x => x.BusinessMarkupPercentage).HasPrecision(9, 6);
+        builder.Property(x => x.BusinessPricingAdjustmentValue).HasPrecision(18, 8);
+        builder.Property(x => x.BaseDestinationAmount).HasPrecision(36, 18);
+        builder.Property(x => x.BusinessRevenueRate).HasPrecision(18, 8);
+        builder.Property(x => x.BusinessRevenueAmount).HasPrecision(36, 18);
         builder.Property(x => x.Status).IsConcurrencyToken();
 
         builder.HasOne(x => x.InstantPair)
@@ -95,6 +101,11 @@ public sealed class InstantQuoteConfiguration : IEntityTypeConfiguration<Instant
             .WithMany()
             .HasForeignKey(x => x.ExchangeRateId)
             .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasOne(x => x.BusinessPricingPolicy)
+            .WithMany()
+            .HasForeignKey(x => x.BusinessPricingPolicyId)
+            .OnDelete(DeleteBehavior.Restrict);
     }
 }
 
@@ -114,7 +125,13 @@ public sealed class InstantTradeConfiguration : IEntityTypeConfiguration<Instant
         builder.Property(x => x.Reference).HasMaxLength(60);
         builder.Property(x => x.SourceAmount).HasPrecision(36, 18);
         builder.Property(x => x.DestinationAmount).HasPrecision(36, 18);
+        builder.Property(x => x.BaseDestinationAmount).HasPrecision(36, 18);
+        builder.Property(x => x.BaseCustomerRate).HasPrecision(18, 8);
         builder.Property(x => x.CustomerRate).HasPrecision(18, 8);
+        builder.Property(x => x.BusinessMarkupPercentage).HasPrecision(9, 6);
+        builder.Property(x => x.BusinessPricingAdjustmentValue).HasPrecision(18, 8);
+        builder.Property(x => x.BusinessRevenueRate).HasPrecision(18, 8);
+        builder.Property(x => x.BusinessRevenueAmount).HasPrecision(36, 18);
         builder.Property(x => x.FailureReason).HasMaxLength(1000);
         builder.Property(x => x.Status).IsConcurrencyToken();
 
@@ -161,6 +178,16 @@ public sealed class InstantTradeConfiguration : IEntityTypeConfiguration<Instant
         builder.HasOne(x => x.DestinationLedgerTransaction)
             .WithMany()
             .HasForeignKey(x => x.DestinationLedgerTransactionId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasOne(x => x.BusinessRevenueFinancialAccount)
+            .WithMany()
+            .HasForeignKey(x => x.BusinessRevenueFinancialAccountId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasOne(x => x.BusinessRevenueLedgerTransaction)
+            .WithMany()
+            .HasForeignKey(x => x.BusinessRevenueLedgerTransactionId)
             .OnDelete(DeleteBehavior.Restrict);
     }
 }

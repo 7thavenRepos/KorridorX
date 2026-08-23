@@ -15,6 +15,7 @@ public interface IInstantTradingService
         Guid ownerId,
         string countryCode,
         CreateInstantQuoteRequestDto request,
+        Guid? businessProfileId = null,
         Guid? actionedByUserId = null,
         CancellationToken ct = default);
     Task<InstantTradeDto> ExecuteQuoteForOwnerAsync(

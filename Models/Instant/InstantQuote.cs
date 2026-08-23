@@ -1,6 +1,7 @@
 using KorridorX.Models.Common;
 using KorridorX.Models.Enums;
 using KorridorX.Models.FinancialCore;
+using KorridorX.Models.EmbeddedFinance;
 using KorridorX.Models.Fx;
 
 namespace KorridorX.Models.Instant;
@@ -33,11 +34,21 @@ public class InstantQuote : AuditableEntity
 
     public Guid ExchangeRateId { get; set; }
     public ExchangeRate ExchangeRate { get; set; } = null!;
+    public BusinessPricingPolicy? BusinessPricingPolicy { get; set; }
 
     public decimal SourceAmount { get; set; }
     public decimal DestinationAmount { get; set; }
     public decimal ProviderRate { get; set; }
+    public decimal BaseCustomerRate { get; set; }
     public decimal CustomerRate { get; set; }
+    public decimal BaseDestinationAmount { get; set; }
+    public Guid? BusinessProfileId { get; set; }
+    public Guid? BusinessPricingPolicyId { get; set; }
+    public decimal? BusinessMarkupPercentage { get; set; }
+    public BusinessPricingAdjustmentType? BusinessPricingAdjustmentType { get; set; }
+    public decimal? BusinessPricingAdjustmentValue { get; set; }
+    public decimal BusinessRevenueRate { get; set; }
+    public decimal BusinessRevenueAmount { get; set; }
 
     public InstantQuoteStatus Status { get; set; } = InstantQuoteStatus.Active;
     public DateTime ExpiresAt { get; set; }

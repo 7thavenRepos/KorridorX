@@ -49,7 +49,10 @@ public record InstantQuoteDto(
     decimal DestinationAmount,
     decimal CustomerRate,
     DateTime ExpiresAt,
-    InstantQuoteStatus Status);
+    InstantQuoteStatus Status,
+    decimal? BaseCustomerRate = null,
+    decimal? BaseDestinationAmount = null,
+    decimal? BusinessRevenueAmount = null);
 
 public record ExecuteInstantQuoteRequestDto(Guid QuoteId);
 
@@ -66,7 +69,10 @@ public record InstantTradeDto(
     decimal CustomerRate,
     InstantTradeStatus Status,
     DateTime CreatedAt,
-    DateTime? CompletedAt);
+    DateTime? CompletedAt,
+    decimal? BaseCustomerRate = null,
+    decimal? BaseDestinationAmount = null,
+    decimal? BusinessRevenueAmount = null);
 
 
 public record InstantLiquidityDto(

@@ -3,6 +3,7 @@ using System;
 using KorridorX.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace KorridorX.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260822094853_FinancialCoreV2_BusinessPricing")]
+    partial class FinancialCoreV2_BusinessPricing
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -2660,398 +2663,6 @@ namespace KorridorX.Migrations
                     b.ToTable("CustomerProfiles");
                 });
 
-            modelBuilder.Entity("KorridorX.Models.DigitalAssets.DigitalAssetDepositAddress", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Address")
-                        .IsRequired()
-                        .HasMaxLength(300)
-                        .HasColumnType("character varying(300)");
-
-                    b.Property<Guid>("AssetNetworkId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("BusinessCustomerId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("BusinessProfileId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid?>("CreatedByUserId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime?>("DeletedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid?>("DeletedByUserId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("DestinationTag")
-                        .HasMaxLength(150)
-                        .HasColumnType("character varying(150)");
-
-                    b.Property<Guid>("FinancialAccountId")
-                        .HasColumnType("uuid");
-
-                    b.Property<bool>("IsDeleted")
-                        .HasColumnType("boolean");
-
-                    b.Property<DateTime?>("LastUpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid?>("LastUpdatedByUserId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime?>("LastUsedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("ProviderAddressId")
-                        .HasMaxLength(150)
-                        .HasColumnType("character varying(150)");
-
-                    b.Property<string>("ProviderCode")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)");
-
-                    b.Property<int>("Status")
-                        .HasColumnType("integer");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("AssetNetworkId");
-
-                    b.HasIndex("FinancialAccountId");
-
-                    b.HasIndex("BusinessProfileId", "BusinessCustomerId");
-
-                    b.HasIndex("ProviderCode", "AssetNetworkId", "Address")
-                        .IsUnique()
-                        .HasFilter("\"DestinationTag\" IS NULL");
-
-                    b.HasIndex("ProviderCode", "AssetNetworkId", "Address", "DestinationTag")
-                        .IsUnique()
-                        .HasDatabaseName("IX_DigitalAssetDepositAddresses_ProviderCode_AssetNetworkId_A~1")
-                        .HasFilter("\"DestinationTag\" IS NOT NULL");
-
-                    b.ToTable("DigitalAssetDepositAddresses");
-                });
-
-            modelBuilder.Entity("KorridorX.Models.DigitalAssets.DigitalAssetNetworkTransaction", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<decimal>("Amount")
-                        .HasPrecision(36, 18)
-                        .HasColumnType("numeric(36,18)");
-
-                    b.Property<string>("AssetCode")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)");
-
-                    b.Property<Guid>("AssetNetworkId")
-                        .HasColumnType("uuid");
-
-                    b.Property<long?>("BlockNumber")
-                        .HasColumnType("bigint");
-
-                    b.Property<Guid?>("CollectionId")
-                        .HasColumnType("uuid");
-
-                    b.Property<int>("Confirmations")
-                        .HasColumnType("integer");
-
-                    b.Property<DateTime?>("ConfirmedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid?>("CreatedByUserId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime?>("DeletedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid?>("DeletedByUserId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("DestinationTag")
-                        .HasMaxLength(150)
-                        .HasColumnType("character varying(150)");
-
-                    b.Property<int>("Direction")
-                        .HasColumnType("integer");
-
-                    b.Property<DateTime?>("FailedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("FromAddress")
-                        .HasMaxLength(300)
-                        .HasColumnType("character varying(300)");
-
-                    b.Property<bool>("IsDeleted")
-                        .HasColumnType("boolean");
-
-                    b.Property<DateTime?>("LastUpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid?>("LastUpdatedByUserId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid?>("LedgerTransactionId")
-                        .HasColumnType("uuid");
-
-                    b.Property<decimal>("NetworkFee")
-                        .HasPrecision(36, 18)
-                        .HasColumnType("numeric(36,18)");
-
-                    b.Property<DateTime>("ObservedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid?>("PayoutId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("ProviderCode")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)");
-
-                    b.Property<string>("ProviderReference")
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
-                    b.Property<string>("ProviderTransactionId")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
-                    b.Property<string>("RawPayloadJson")
-                        .HasColumnType("text");
-
-                    b.Property<int>("RequiredConfirmations")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("Status")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("ToAddress")
-                        .HasMaxLength(300)
-                        .HasColumnType("character varying(300)");
-
-                    b.Property<string>("TransactionHash")
-                        .HasMaxLength(300)
-                        .HasColumnType("character varying(300)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("AssetNetworkId");
-
-                    b.HasIndex("CollectionId");
-
-                    b.HasIndex("LedgerTransactionId");
-
-                    b.HasIndex("PayoutId");
-
-                    b.HasIndex("TransactionHash");
-
-                    b.HasIndex("ProviderCode", "ProviderTransactionId")
-                        .IsUnique();
-
-                    b.HasIndex("Status", "Direction");
-
-                    b.ToTable("DigitalAssetNetworkTransactions");
-                });
-
-            modelBuilder.Entity("KorridorX.Models.DigitalAssets.DigitalAssetWithdrawal", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<decimal>("Amount")
-                        .HasPrecision(36, 18)
-                        .HasColumnType("numeric(36,18)");
-
-                    b.Property<string>("AssetCode")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)");
-
-                    b.Property<Guid>("AssetNetworkId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("BusinessCustomerId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("BusinessProfileId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime?>("CompletedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid?>("CreatedByUserId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime?>("DeletedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid?>("DeletedByUserId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("DestinationId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime?>("FailedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("FailureReason")
-                        .HasMaxLength(1000)
-                        .HasColumnType("character varying(1000)");
-
-                    b.Property<Guid>("FinancialAccountId")
-                        .HasColumnType("uuid");
-
-                    b.Property<bool>("IsDeleted")
-                        .HasColumnType("boolean");
-
-                    b.Property<DateTime?>("LastUpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid?>("LastUpdatedByUserId")
-                        .HasColumnType("uuid");
-
-                    b.Property<decimal>("NetworkFee")
-                        .HasPrecision(36, 18)
-                        .HasColumnType("numeric(36,18)");
-
-                    b.Property<Guid>("PayoutId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("ProviderCode")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)");
-
-                    b.Property<Guid>("ReservationId")
-                        .HasColumnType("uuid");
-
-                    b.Property<int>("Status")
-                        .HasColumnType("integer");
-
-                    b.Property<DateTime?>("SubmittedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<decimal>("TotalDebitAmount")
-                        .HasPrecision(36, 18)
-                        .HasColumnType("numeric(36,18)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("AssetNetworkId");
-
-                    b.HasIndex("DestinationId");
-
-                    b.HasIndex("FinancialAccountId");
-
-                    b.HasIndex("PayoutId")
-                        .IsUnique();
-
-                    b.HasIndex("ReservationId")
-                        .IsUnique();
-
-                    b.HasIndex("Status");
-
-                    b.HasIndex("BusinessProfileId", "BusinessCustomerId", "CreatedAt");
-
-                    b.ToTable("DigitalAssetWithdrawals");
-                });
-
-            modelBuilder.Entity("KorridorX.Models.DigitalAssets.DigitalAssetWithdrawalDestination", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Address")
-                        .IsRequired()
-                        .HasMaxLength(300)
-                        .HasColumnType("character varying(300)");
-
-                    b.Property<string>("AssetCode")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)");
-
-                    b.Property<Guid>("AssetNetworkId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("BusinessCustomerId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("BusinessProfileId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid?>("CreatedByUserId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime?>("DeletedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid?>("DeletedByUserId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("DestinationTag")
-                        .HasMaxLength(150)
-                        .HasColumnType("character varying(150)");
-
-                    b.Property<bool>("IsDeleted")
-                        .HasColumnType("boolean");
-
-                    b.Property<string>("Label")
-                        .HasMaxLength(150)
-                        .HasColumnType("character varying(150)");
-
-                    b.Property<DateTime?>("LastUpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid?>("LastUpdatedByUserId")
-                        .HasColumnType("uuid");
-
-                    b.Property<int>("Status")
-                        .HasColumnType("integer");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("AssetNetworkId");
-
-                    b.HasIndex("BusinessProfileId", "BusinessCustomerId", "AssetNetworkId", "Address")
-                        .IsUnique()
-                        .HasFilter("\"DestinationTag\" IS NULL");
-
-                    b.HasIndex("BusinessProfileId", "BusinessCustomerId", "AssetNetworkId", "Address", "DestinationTag")
-                        .IsUnique()
-                        .HasDatabaseName("IX_DigitalAssetWithdrawalDestinations_BusinessProfileId_Busin~1")
-                        .HasFilter("\"DestinationTag\" IS NOT NULL");
-
-                    b.ToTable("DigitalAssetWithdrawalDestinations");
-                });
-
             modelBuilder.Entity("KorridorX.Models.EmbeddedFinance.ApiApplication", b =>
                 {
                     b.Property<Guid>("Id")
@@ -3268,13 +2879,6 @@ namespace KorridorX.Migrations
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
-
-                    b.Property<int>("AdjustmentType")
-                        .HasColumnType("integer");
-
-                    b.Property<decimal>("AdjustmentValue")
-                        .HasPrecision(18, 8)
-                        .HasColumnType("numeric(18,8)");
 
                     b.Property<Guid>("BusinessProfileId")
                         .HasColumnType("uuid");
@@ -5457,34 +5061,12 @@ namespace KorridorX.Migrations
                         .HasPrecision(18, 8)
                         .HasColumnType("numeric(18,8)");
 
-                    b.Property<decimal>("BaseDestinationAmount")
-                        .HasPrecision(36, 18)
-                        .HasColumnType("numeric(36,18)");
-
                     b.Property<decimal?>("BusinessMarkupPercentage")
                         .HasPrecision(9, 6)
                         .HasColumnType("numeric(9,6)");
 
-                    b.Property<int?>("BusinessPricingAdjustmentType")
-                        .HasColumnType("integer");
-
-                    b.Property<decimal?>("BusinessPricingAdjustmentValue")
-                        .HasPrecision(18, 8)
-                        .HasColumnType("numeric(18,8)");
-
                     b.Property<Guid?>("BusinessPricingPolicyId")
                         .HasColumnType("uuid");
-
-                    b.Property<Guid?>("BusinessProfileId")
-                        .HasColumnType("uuid");
-
-                    b.Property<decimal>("BusinessRevenueAmount")
-                        .HasPrecision(36, 18)
-                        .HasColumnType("numeric(36,18)");
-
-                    b.Property<decimal>("BusinessRevenueRate")
-                        .HasPrecision(18, 8)
-                        .HasColumnType("numeric(18,8)");
 
                     b.Property<DateTime?>("CancelledAt")
                         .HasColumnType("timestamp with time zone");
@@ -5600,45 +5182,6 @@ namespace KorridorX.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
-                    b.Property<decimal>("BaseCustomerRate")
-                        .HasPrecision(18, 8)
-                        .HasColumnType("numeric(18,8)");
-
-                    b.Property<decimal>("BaseDestinationAmount")
-                        .HasPrecision(36, 18)
-                        .HasColumnType("numeric(36,18)");
-
-                    b.Property<decimal?>("BusinessMarkupPercentage")
-                        .HasPrecision(9, 6)
-                        .HasColumnType("numeric(9,6)");
-
-                    b.Property<int?>("BusinessPricingAdjustmentType")
-                        .HasColumnType("integer");
-
-                    b.Property<decimal?>("BusinessPricingAdjustmentValue")
-                        .HasPrecision(18, 8)
-                        .HasColumnType("numeric(18,8)");
-
-                    b.Property<Guid?>("BusinessPricingPolicyId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid?>("BusinessProfileId")
-                        .HasColumnType("uuid");
-
-                    b.Property<decimal>("BusinessRevenueAmount")
-                        .HasPrecision(36, 18)
-                        .HasColumnType("numeric(36,18)");
-
-                    b.Property<Guid?>("BusinessRevenueFinancialAccountId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid?>("BusinessRevenueLedgerTransactionId")
-                        .HasColumnType("uuid");
-
-                    b.Property<decimal>("BusinessRevenueRate")
-                        .HasPrecision(18, 8)
-                        .HasColumnType("numeric(18,8)");
-
                     b.Property<DateTime?>("CompletedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -5731,10 +5274,6 @@ namespace KorridorX.Migrations
                         .HasColumnType("uuid");
 
                     b.HasKey("Id");
-
-                    b.HasIndex("BusinessRevenueFinancialAccountId");
-
-                    b.HasIndex("BusinessRevenueLedgerTransactionId");
 
                     b.HasIndex("DestinationLedgerTransactionId");
 
@@ -6705,8 +6244,8 @@ namespace KorridorX.Migrations
 
                     b.Property<string>("CurrencyCode")
                         .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)");
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
 
                     b.Property<DateTime?>("DeletedAt")
                         .HasColumnType("timestamp with time zone");
@@ -6925,8 +6464,8 @@ namespace KorridorX.Migrations
 
                     b.Property<string>("CurrencyCode")
                         .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)");
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
 
                     b.Property<DateTime?>("DeletedAt")
                         .HasColumnType("timestamp with time zone");
@@ -9947,111 +9486,6 @@ namespace KorridorX.Migrations
                     b.Navigation("User");
                 });
 
-            modelBuilder.Entity("KorridorX.Models.DigitalAssets.DigitalAssetDepositAddress", b =>
-                {
-                    b.HasOne("KorridorX.Models.Lookups.AssetNetwork", "AssetNetwork")
-                        .WithMany()
-                        .HasForeignKey("AssetNetworkId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("KorridorX.Models.FinancialCore.FinancialAccount", "FinancialAccount")
-                        .WithMany()
-                        .HasForeignKey("FinancialAccountId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("AssetNetwork");
-
-                    b.Navigation("FinancialAccount");
-                });
-
-            modelBuilder.Entity("KorridorX.Models.DigitalAssets.DigitalAssetNetworkTransaction", b =>
-                {
-                    b.HasOne("KorridorX.Models.Lookups.AssetNetwork", "AssetNetwork")
-                        .WithMany()
-                        .HasForeignKey("AssetNetworkId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("KorridorX.Models.Payments.Collection", "Collection")
-                        .WithMany()
-                        .HasForeignKey("CollectionId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
-                    b.HasOne("KorridorX.Models.FinancialCore.LedgerTransaction", "LedgerTransaction")
-                        .WithMany()
-                        .HasForeignKey("LedgerTransactionId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
-                    b.HasOne("KorridorX.Models.Payments.Payout", "Payout")
-                        .WithMany()
-                        .HasForeignKey("PayoutId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
-                    b.Navigation("AssetNetwork");
-
-                    b.Navigation("Collection");
-
-                    b.Navigation("LedgerTransaction");
-
-                    b.Navigation("Payout");
-                });
-
-            modelBuilder.Entity("KorridorX.Models.DigitalAssets.DigitalAssetWithdrawal", b =>
-                {
-                    b.HasOne("KorridorX.Models.Lookups.AssetNetwork", "AssetNetwork")
-                        .WithMany()
-                        .HasForeignKey("AssetNetworkId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("KorridorX.Models.DigitalAssets.DigitalAssetWithdrawalDestination", "Destination")
-                        .WithMany()
-                        .HasForeignKey("DestinationId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("KorridorX.Models.FinancialCore.FinancialAccount", "FinancialAccount")
-                        .WithMany()
-                        .HasForeignKey("FinancialAccountId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("KorridorX.Models.Payments.Payout", "Payout")
-                        .WithMany()
-                        .HasForeignKey("PayoutId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("KorridorX.Models.FinancialCore.FinancialReservation", "Reservation")
-                        .WithMany()
-                        .HasForeignKey("ReservationId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("AssetNetwork");
-
-                    b.Navigation("Destination");
-
-                    b.Navigation("FinancialAccount");
-
-                    b.Navigation("Payout");
-
-                    b.Navigation("Reservation");
-                });
-
-            modelBuilder.Entity("KorridorX.Models.DigitalAssets.DigitalAssetWithdrawalDestination", b =>
-                {
-                    b.HasOne("KorridorX.Models.Lookups.AssetNetwork", "AssetNetwork")
-                        .WithMany()
-                        .HasForeignKey("AssetNetworkId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("AssetNetwork");
-                });
-
             modelBuilder.Entity("KorridorX.Models.EmbeddedFinance.ApiApplication", b =>
                 {
                     b.HasOne("KorridorX.Models.Customers.BusinessProfile", "BusinessProfile")
@@ -10492,16 +9926,6 @@ namespace KorridorX.Migrations
 
             modelBuilder.Entity("KorridorX.Models.Instant.InstantTrade", b =>
                 {
-                    b.HasOne("KorridorX.Models.FinancialCore.FinancialAccount", "BusinessRevenueFinancialAccount")
-                        .WithMany()
-                        .HasForeignKey("BusinessRevenueFinancialAccountId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
-                    b.HasOne("KorridorX.Models.FinancialCore.LedgerTransaction", "BusinessRevenueLedgerTransaction")
-                        .WithMany()
-                        .HasForeignKey("BusinessRevenueLedgerTransactionId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
                     b.HasOne("KorridorX.Models.FinancialCore.LedgerTransaction", "DestinationLedgerTransaction")
                         .WithMany()
                         .HasForeignKey("DestinationLedgerTransactionId")
@@ -10552,10 +9976,6 @@ namespace KorridorX.Migrations
                         .HasForeignKey("UserSourceFinancialAccountId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
-
-                    b.Navigation("BusinessRevenueFinancialAccount");
-
-                    b.Navigation("BusinessRevenueLedgerTransaction");
 
                     b.Navigation("DestinationLedgerTransaction");
 

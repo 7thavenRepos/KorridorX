@@ -38,7 +38,23 @@ public class InstantTrade : AuditableEntity
 
     public decimal SourceAmount { get; set; }
     public decimal DestinationAmount { get; set; }
+    public decimal BaseCustomerRate { get; set; }
     public decimal CustomerRate { get; set; }
+    public decimal BaseDestinationAmount { get; set; }
+
+    public Guid? BusinessProfileId { get; set; }
+    public Guid? BusinessPricingPolicyId { get; set; }
+    public decimal? BusinessMarkupPercentage { get; set; }
+    public BusinessPricingAdjustmentType? BusinessPricingAdjustmentType { get; set; }
+    public decimal? BusinessPricingAdjustmentValue { get; set; }
+    public decimal BusinessRevenueRate { get; set; }
+    public decimal BusinessRevenueAmount { get; set; }
+
+    public Guid? BusinessRevenueFinancialAccountId { get; set; }
+    public FinancialAccount? BusinessRevenueFinancialAccount { get; set; }
+
+    public Guid? BusinessRevenueLedgerTransactionId { get; set; }
+    public LedgerTransaction? BusinessRevenueLedgerTransaction { get; set; }
 
     public InstantTradeStatus Status { get; set; } = InstantTradeStatus.PendingSettlement;
 

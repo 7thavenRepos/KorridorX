@@ -4,6 +4,7 @@ using KorridorX.Models.BusinessTransfers;
 using KorridorX.Models.FinancialCore;
 using KorridorX.Models.Compliance;
 using KorridorX.Models.Customers;
+using KorridorX.Models.DigitalAssets;
 using KorridorX.Models.EmbeddedFinance;
 using KorridorX.Models.Fx;
 using KorridorX.Models.Finance;
@@ -41,6 +42,7 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<Guid
     public DbSet<ApiApplication> ApiApplications => Set<ApiApplication>();
     public DbSet<ApiCredential> ApiCredentials => Set<ApiCredential>();
     public DbSet<BusinessCustomer> BusinessCustomers => Set<BusinessCustomer>();
+    public DbSet<BusinessPricingPolicy> BusinessPricingPolicies => Set<BusinessPricingPolicy>();
     public DbSet<CollectionAccount> CollectionAccounts => Set<CollectionAccount>();
     public DbSet<ProviderAccountMapping> ProviderAccountMappings => Set<ProviderAccountMapping>();
     public DbSet<EmbeddedApiIdempotencyRecord> EmbeddedApiIdempotencyRecords => Set<EmbeddedApiIdempotencyRecord>();
@@ -66,6 +68,11 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<Guid
     public DbSet<LedgerTransaction> LedgerTransactions => Set<LedgerTransaction>();
     public DbSet<LedgerPosting> LedgerPostings => Set<LedgerPosting>();
     public DbSet<FinancialReservation> FinancialReservations => Set<FinancialReservation>();
+
+    public DbSet<DigitalAssetDepositAddress> DigitalAssetDepositAddresses => Set<DigitalAssetDepositAddress>();
+    public DbSet<DigitalAssetWithdrawalDestination> DigitalAssetWithdrawalDestinations => Set<DigitalAssetWithdrawalDestination>();
+    public DbSet<DigitalAssetNetworkTransaction> DigitalAssetNetworkTransactions => Set<DigitalAssetNetworkTransaction>();
+    public DbSet<DigitalAssetWithdrawal> DigitalAssetWithdrawals => Set<DigitalAssetWithdrawal>();
 
     public DbSet<MarketplacePair> MarketplacePairs => Set<MarketplacePair>();
     public DbSet<TradeOrder> TradeOrders => Set<TradeOrder>();

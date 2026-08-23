@@ -19,7 +19,7 @@ public class CollectionConfiguration : IEntityTypeConfiguration<Collection>
         builder.HasIndex(x => x.ProviderRefundId);
 
         builder.Property(x => x.Reference).HasMaxLength(50);
-        builder.Property(x => x.CurrencyCode).HasMaxLength(10);
+        builder.Property(x => x.CurrencyCode).HasMaxLength(20);
         builder.Property(x => x.ProviderCode).HasMaxLength(50);
         builder.Property(x => x.ProviderCollectionId).HasMaxLength(150);
         builder.Property(x => x.ProviderReference).HasMaxLength(150);
@@ -80,7 +80,7 @@ public class PayoutConfiguration : IEntityTypeConfiguration<Payout>
         builder.HasIndex(x => x.ProviderReference);
 
         builder.Property(x => x.Reference).HasMaxLength(50);
-        builder.Property(x => x.CurrencyCode).HasMaxLength(10);
+        builder.Property(x => x.CurrencyCode).HasMaxLength(20);
         builder.Property(x => x.ProviderCode).HasMaxLength(50);
         builder.Property(x => x.ProviderPayoutId).HasMaxLength(150);
         builder.Property(x => x.ProviderReference).HasMaxLength(150);

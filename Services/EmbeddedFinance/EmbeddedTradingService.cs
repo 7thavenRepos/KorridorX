@@ -19,6 +19,7 @@ public sealed class EmbeddedTradingService : IEmbeddedTradingService
     private readonly IMarketplaceOperationsService _marketplaceOperations;
     private readonly IInstantTradingService _instant;
     private readonly IBusinessTradingRfqService _rfqs;
+    private readonly IBusinessPricingService _businessPricing;
 
     public EmbeddedTradingService(
         AppDbContext db,
@@ -26,7 +27,8 @@ public sealed class EmbeddedTradingService : IEmbeddedTradingService
         IMarketplaceOrderService orders,
         IMarketplaceOperationsService marketplaceOperations,
         IInstantTradingService instant,
-        IBusinessTradingRfqService rfqs)
+        IBusinessTradingRfqService rfqs,
+        IBusinessPricingService businessPricing)
     {
         _db = db;
         _context = context;
@@ -34,6 +36,7 @@ public sealed class EmbeddedTradingService : IEmbeddedTradingService
         _marketplaceOperations = marketplaceOperations;
         _instant = instant;
         _rfqs = rfqs;
+        _businessPricing = businessPricing;
     }
 
     public async Task<IReadOnlyList<EmbeddedTradingBalanceDto>> GetBalancesAsync(
@@ -159,6 +162,60 @@ public sealed class EmbeddedTradingService : IEmbeddedTradingService
             ct);
     }
 
+    public async Task<IReadOnlyList<BusinessPricingPolicyDto>> GetPricingPoliciesAsync(
+        CancellationToken ct = default)
+    {
+        var principal = RequireScope(EmbeddedFinanceScope.TradingRead);
+        return await _businessPricing.GetPoliciesAsync(principal.BusinessProfileId, ct);
+    }
+
+    public async Task<IReadOnlyList<BusinessPricingPerformanceRowDto>> GetPricingPerformanceAsync(
+        DateTime? from = null,
+        DateTime? to = null,
+        CancellationToken ct = default)
+    {
+        var principal = RequireScope(EmbeddedFinanceScope.TradingRead);
+        return await _businessPricing.GetPerformanceAsync(principal.BusinessProfileId, from, to, ct);
+    }
+
+    public async Task<BusinessPricingPolicyDto> CreatePricingPolicyAsync(
+        CreateBusinessPricingPolicyRequestDto request,
+        CancellationToken ct = default)
+    {
+        var principal = RequireScope(EmbeddedFinanceScope.TradingWrite);
+        return await _businessPricing.CreatePolicyAsync(
+            principal.BusinessProfileId,
+            request,
+            null,
+            ct);
+    }
+
+    public async Task<BusinessPricingPolicyDto> UpdatePricingPolicyAsync(
+        Guid policyId,
+        UpdateBusinessPricingPolicyRequestDto request,
+        CancellationToken ct = default)
+    {
+        var principal = RequireScope(EmbeddedFinanceScope.TradingWrite);
+        return await _businessPricing.UpdatePolicyAsync(
+            principal.BusinessProfileId,
+            policyId,
+            request,
+            null,
+            ct);
+    }
+
+    public async Task<BusinessPricingPolicyDto> DisablePricingPolicyAsync(
+        Guid policyId,
+        CancellationToken ct = default)
+    {
+        var principal = RequireScope(EmbeddedFinanceScope.TradingWrite);
+        return await _businessPricing.DisablePolicyAsync(
+            principal.BusinessProfileId,
+            policyId,
+            null,
+            ct);
+    }
+
     public async Task<IReadOnlyList<InstantPairDto>> GetInstantPairsAsync(
         Guid businessCustomerId,
         CancellationToken ct = default)
@@ -181,6 +238,7 @@ public sealed class EmbeddedTradingService : IEmbeddedTradingService
             customer.Id,
             customer.CountryCode,
             request,
+            _context.GetRequiredPrincipal().BusinessProfileId,
             null,
             ct);
     }

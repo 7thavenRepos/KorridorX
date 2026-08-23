@@ -17,9 +17,12 @@ public enum EmbeddedFinanceScope : long
     WebhooksManage = 1L << 10,
     TradingRead = 1L << 11,
     TradingWrite = 1L << 12,
+    DigitalAssetsRead = 1L << 13,
+    DigitalAssetsWrite = 1L << 14,
     All = CustomersRead | CustomersWrite | AccountsRead | AccountsWrite |
           CollectionsRead | CollectionsWrite | PayoutsRead | PayoutsWrite |
-          TransfersRead | TransfersWrite | WebhooksManage | TradingRead | TradingWrite
+          TransfersRead | TransfersWrite | WebhooksManage | TradingRead | TradingWrite |
+          DigitalAssetsRead | DigitalAssetsWrite
 }
 
 public enum ApiApplicationStatus { Active = 1, Suspended = 2, Disabled = 3 }
@@ -42,4 +45,11 @@ public enum BusinessWebhookDeliveryStatus
     Retry = 3,
     Delivered = 4,
     DeadLetter = 5
+}
+
+public enum BusinessPricingAdjustmentType
+{
+    Percentage = 1,
+    BasisPoints = 2,
+    FixedSpread = 3
 }

@@ -92,6 +92,7 @@ public class FinancialReservationService : IFinancialReservationService
         {
             FinancialReservationType.MarketplaceTrade => LedgerTransactionType.MarketplaceReservation,
             FinancialReservationType.InstantTrade => LedgerTransactionType.InstantReservation,
+            FinancialReservationType.Withdrawal => LedgerTransactionType.Withdrawal,
             _ => LedgerTransactionType.TransferReservation
         };
 

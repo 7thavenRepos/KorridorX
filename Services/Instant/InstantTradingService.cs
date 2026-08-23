@@ -6,6 +6,7 @@ using KorridorX.Infrastructure;
 using KorridorX.Models.Enums;
 using KorridorX.Models.FinancialCore;
 using KorridorX.Models.Instant;
+using KorridorX.Services.EmbeddedFinance;
 using KorridorX.Services.FinancialCore;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
@@ -20,15 +21,18 @@ public sealed class InstantTradingService : IInstantTradingService
 
     private readonly AppDbContext _db;
     private readonly IFinancialReservationService _reservations;
+    private readonly IBusinessPricingService _businessPricing;
     private readonly TreasuryOptions _treasuryOptions;
 
     public InstantTradingService(
         AppDbContext db,
         IFinancialReservationService reservations,
+        IBusinessPricingService businessPricing,
         IOptions<TreasuryOptions> treasuryOptions)
     {
         _db = db;
         _reservations = reservations;
+        _businessPricing = businessPricing;
         _treasuryOptions = treasuryOptions.Value;
     }
 
@@ -155,6 +159,7 @@ public sealed class InstantTradingService : IInstantTradingService
             SourceAmount = request.SourceAmount,
             DestinationAmount = destinationAmount,
             ProviderRate = rate.ProviderRate,
+            BaseCustomerRate = rate.CustomerRate,
             CustomerRate = rate.CustomerRate,
             Status = InstantQuoteStatus.Active,
             ExpiresAt = now.AddSeconds(pair.QuoteValiditySeconds),
@@ -172,6 +177,7 @@ public sealed class InstantTradingService : IInstantTradingService
         Guid ownerId,
         string countryCode,
         CreateInstantQuoteRequestDto request,
+        Guid? businessProfileId = null,
         Guid? actionedByUserId = null,
         CancellationToken ct = default)
     {
@@ -248,16 +254,39 @@ public sealed class InstantTradingService : IInstantTradingService
         if (rate.EffectiveFrom < staleBefore)
             throw new InvalidOperationException("The current instant FX rate is stale.");
 
-        var destinationAmount = decimal.Round(
-            request.SourceAmount * rate.CustomerRate,
+        var pricing = businessProfileId.HasValue
+            ? await _businessPricing.ResolveAsync(
+                businessProfileId.Value,
+                pair.SourceAssetCode,
+                pair.DestinationAssetCode,
+                rate.CustomerRate,
+                now,
+                ct)
+            : new KorridorX.Dtos.EmbeddedFinance.BusinessPricingResolutionDto(
+                rate.CustomerRate,
+                rate.CustomerRate,
+                null,
+                null);
+
+        var baseDestinationAmount = decimal.Round(
+            request.SourceAmount * pricing.BaseCustomerRate,
             pair.DestinationAsset.DecimalPlaces,
             MidpointRounding.ToZero);
 
-        if (destinationAmount <= 0m)
+        var destinationAmount = decimal.Round(
+            request.SourceAmount * pricing.CustomerRate,
+            pair.DestinationAsset.DecimalPlaces,
+            MidpointRounding.ToZero);
+
+        if (destinationAmount <= 0m || baseDestinationAmount <= 0m)
             throw new InvalidOperationException("The calculated instant destination amount is invalid.");
 
-        if (pair.HouseDestinationFinancialAccount.AvailableBalance < destinationAmount ||
-            pair.HouseDestinationFinancialAccount.SettledBalance < destinationAmount)
+        var businessRevenueAmount = baseDestinationAmount - destinationAmount;
+        if (businessRevenueAmount < 0m)
+            throw new InvalidOperationException("Business pricing cannot produce a negative realized spread.");
+
+        if (pair.HouseDestinationFinancialAccount.AvailableBalance < baseDestinationAmount ||
+            pair.HouseDestinationFinancialAccount.SettledBalance < baseDestinationAmount)
             throw new InvalidOperationException($"House {pair.DestinationAssetCode} liquidity is insufficient.");
 
         var quote = new InstantQuote
@@ -275,7 +304,16 @@ public sealed class InstantTradingService : IInstantTradingService
             SourceAmount = request.SourceAmount,
             DestinationAmount = destinationAmount,
             ProviderRate = rate.ProviderRate,
-            CustomerRate = rate.CustomerRate,
+            BaseCustomerRate = pricing.BaseCustomerRate,
+            CustomerRate = pricing.CustomerRate,
+            BaseDestinationAmount = baseDestinationAmount,
+            BusinessProfileId = businessProfileId,
+            BusinessPricingPolicyId = pricing.BusinessPricingPolicyId,
+            BusinessMarkupPercentage = pricing.BusinessMarkupPercentage,
+            BusinessPricingAdjustmentType = pricing.AdjustmentType,
+            BusinessPricingAdjustmentValue = pricing.AdjustmentValue,
+            BusinessRevenueRate = pricing.BusinessRevenueRate,
+            BusinessRevenueAmount = businessRevenueAmount,
             Status = InstantQuoteStatus.Active,
             ExpiresAt = now.AddSeconds(pair.QuoteValiditySeconds),
             CreatedByUserId = actionedByUserId
@@ -442,8 +480,8 @@ public sealed class InstantTradingService : IInstantTradingService
             quote.InstantPair.DestinationAssetCode,
             "destination");
 
-        if (quote.HouseDestinationFinancialAccount.AvailableBalance < quote.DestinationAmount ||
-            quote.HouseDestinationFinancialAccount.SettledBalance < quote.DestinationAmount)
+        if (quote.HouseDestinationFinancialAccount.AvailableBalance < quote.BaseDestinationAmount ||
+            quote.HouseDestinationFinancialAccount.SettledBalance < quote.BaseDestinationAmount)
             throw new InvalidOperationException(
                 $"House {quote.InstantPair.DestinationAssetCode} liquidity is insufficient.");
 
@@ -461,7 +499,16 @@ public sealed class InstantTradingService : IInstantTradingService
             HouseDestinationFinancialAccountId = quote.HouseDestinationFinancialAccountId,
             SourceAmount = quote.SourceAmount,
             DestinationAmount = quote.DestinationAmount,
+            BaseCustomerRate = quote.BaseCustomerRate,
             CustomerRate = quote.CustomerRate,
+            BaseDestinationAmount = quote.BaseDestinationAmount,
+            BusinessProfileId = quote.BusinessProfileId,
+            BusinessPricingPolicyId = quote.BusinessPricingPolicyId,
+            BusinessMarkupPercentage = quote.BusinessMarkupPercentage,
+            BusinessPricingAdjustmentType = quote.BusinessPricingAdjustmentType,
+            BusinessPricingAdjustmentValue = quote.BusinessPricingAdjustmentValue,
+            BusinessRevenueRate = quote.BusinessRevenueRate,
+            BusinessRevenueAmount = quote.BusinessRevenueAmount,
             Status = InstantTradeStatus.Settling,
             SettlementStartedAt = now,
             CreatedByUserId = actionedByUserId
@@ -482,13 +529,34 @@ public sealed class InstantTradingService : IInstantTradingService
 
         trade.ReservationId = reservation.Id;
 
+        FinancialAccount? businessRevenueAccount = null;
+        if (quote.BusinessProfileId.HasValue && quote.BusinessRevenueAmount > 0m)
+        {
+            businessRevenueAccount = await GetOrCreateBusinessRevenueAccountAsync(
+                quote.BusinessProfileId.Value,
+                quote.InstantPair.DestinationAssetCode,
+                actionedByUserId,
+                ct);
+        }
+
         var sourceLedger = SettleSourceLeg(quote, trade, reservation, now);
         var destinationLedger = SettleDestinationLeg(quote, trade, now);
+        var businessRevenueLedger = businessRevenueAccount is null
+            ? null
+            : SettleBusinessRevenueLeg(quote, trade, businessRevenueAccount, now);
 
         trade.SourceLedgerTransactionId = sourceLedger.Id;
         trade.SourceLedgerTransaction = sourceLedger;
         trade.DestinationLedgerTransactionId = destinationLedger.Id;
         trade.DestinationLedgerTransaction = destinationLedger;
+
+        if (businessRevenueLedger is not null && businessRevenueAccount is not null)
+        {
+            trade.BusinessRevenueFinancialAccountId = businessRevenueAccount.Id;
+            trade.BusinessRevenueFinancialAccount = businessRevenueAccount;
+            trade.BusinessRevenueLedgerTransactionId = businessRevenueLedger.Id;
+            trade.BusinessRevenueLedgerTransaction = businessRevenueLedger;
+        }
         trade.Status = InstantTradeStatus.Completed;
         trade.CompletedAt = now;
         trade.LastUpdatedAt = now;
@@ -973,6 +1041,114 @@ public sealed class InstantTradingService : IInstantTradingService
             now);
     }
 
+    private async Task<FinancialAccount> GetOrCreateBusinessRevenueAccountAsync(
+        Guid businessProfileId,
+        string assetCode,
+        Guid? actionedByUserId,
+        CancellationToken ct)
+    {
+        var existing = await _db.FinancialAccounts
+            .FirstOrDefaultAsync(x =>
+                x.OwnerType == FinancialAccountOwnerType.Business &&
+                x.OwnerId == businessProfileId &&
+                x.AssetCode == assetCode &&
+                x.AccountType == FinancialAccountType.Revenue &&
+                !x.IsDeleted,
+                ct);
+
+        if (existing is not null)
+        {
+            if (existing.Status != FinancialAccountStatus.Active)
+                throw new InvalidOperationException($"Business {assetCode} revenue account is not active.");
+            return existing;
+        }
+
+        var account = new FinancialAccount
+        {
+            OwnerType = FinancialAccountOwnerType.Business,
+            OwnerId = businessProfileId,
+            AccountCode = GenerateReference($"KXREV-{assetCode}"),
+            AssetCode = assetCode,
+            AccountType = FinancialAccountType.Revenue,
+            Status = FinancialAccountStatus.Active,
+            SettledBalance = 0m,
+            AvailableBalance = 0m,
+            HeldBalance = 0m,
+            CreatedByUserId = actionedByUserId
+        };
+
+        _db.FinancialAccounts.Add(account);
+        return account;
+    }
+
+    private LedgerTransaction SettleBusinessRevenueLeg(
+        InstantQuote quote,
+        InstantTrade trade,
+        FinancialAccount revenueAccount,
+        DateTime now)
+    {
+        var house = quote.HouseDestinationFinancialAccount;
+        var amount = quote.BusinessRevenueAmount;
+
+        if (amount <= 0m)
+            throw new InvalidOperationException("Business revenue amount must be greater than zero.");
+        if (house.AvailableBalance < amount || house.SettledBalance < amount)
+            throw new InvalidOperationException("House destination liquidity is insufficient for business spread settlement.");
+
+        house.AvailableBalance -= amount;
+        house.SettledBalance -= amount;
+        house.LastUpdatedAt = now;
+
+        revenueAccount.AvailableBalance += amount;
+        revenueAccount.SettledBalance += amount;
+        revenueAccount.LastUpdatedAt = now;
+
+        var ledger = new LedgerTransaction
+        {
+            Reference = GenerateReference("KXLED"),
+            AssetCode = quote.InstantPair.DestinationAssetCode,
+            Type = LedgerTransactionType.Fee,
+            Status = LedgerTransactionStatus.Posted,
+            Amount = amount,
+            Description = $"Instant trade {trade.Reference} realized business spread.",
+            IdempotencyScope = SettlementScope,
+            IdempotencyKey = $"{trade.Id:N}:BUSINESS_REVENUE",
+            RelatedEntityType = nameof(InstantTrade),
+            RelatedEntityId = trade.Id,
+            ContextEntityType = nameof(InstantQuote),
+            ContextEntityId = trade.InstantQuoteId,
+            PostedAt = now,
+            CreatedByUserId = trade.CreatedByUserId
+        };
+
+        ledger.Postings.Add(new LedgerPosting
+        {
+            LedgerTransactionId = ledger.Id,
+            LedgerTransaction = ledger,
+            FinancialAccountId = house.Id,
+            FinancialAccount = house,
+            BalanceBucket = LedgerBalanceBucket.Available,
+            Side = LedgerPostingSide.Debit,
+            Amount = amount,
+            AccountBalanceAfter = house.AvailableBalance
+        });
+
+        ledger.Postings.Add(new LedgerPosting
+        {
+            LedgerTransactionId = ledger.Id,
+            LedgerTransaction = ledger,
+            FinancialAccountId = revenueAccount.Id,
+            FinancialAccount = revenueAccount,
+            BalanceBucket = LedgerBalanceBucket.Available,
+            Side = LedgerPostingSide.Credit,
+            Amount = amount,
+            AccountBalanceAfter = revenueAccount.AvailableBalance
+        });
+
+        _db.LedgerTransactions.Add(ledger);
+        return ledger;
+    }
+
     private LedgerTransaction AddSettlementLedger(
         string assetCode,
         decimal amount,
@@ -1145,7 +1321,10 @@ public sealed class InstantTradingService : IInstantTradingService
         x.DestinationAmount,
         x.CustomerRate,
         x.ExpiresAt,
-        x.Status);
+        x.Status,
+        x.BaseCustomerRate,
+        x.BaseDestinationAmount,
+        x.BusinessRevenueAmount);
 
     private static InstantTradeDto ToTradeDto(InstantTrade x) =>
         ToTradeDto(x, x.InstantPair);
@@ -1163,7 +1342,10 @@ public sealed class InstantTradingService : IInstantTradingService
         x.CustomerRate,
         x.Status,
         x.CreatedAt,
-        x.CompletedAt);
+        x.CompletedAt,
+        x.BaseCustomerRate,
+        x.BaseDestinationAmount,
+        x.BusinessRevenueAmount);
 
     private static string GenerateReference(string prefix) =>
         $"{prefix}-{DateTime.UtcNow:yyyyMMddHHmmss}-{Guid.NewGuid():N}"

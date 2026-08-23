@@ -15,6 +15,14 @@ public interface IEmbeddedTradingService
     Task<TradeOrderDto> CancelMarketplaceOrderAsync(Guid businessCustomerId, Guid orderId, CancellationToken ct = default);
     Task<PagedResult<TradeOrderDto>> GetMarketplaceOrdersAsync(Guid businessCustomerId, int page, int pageSize, CancellationToken ct = default);
     Task<PagedResult<TradeHistoryDto>> GetMarketplaceTradesAsync(Guid businessCustomerId, int page, int pageSize, CancellationToken ct = default);
+    Task<IReadOnlyList<BusinessPricingPolicyDto>> GetPricingPoliciesAsync(CancellationToken ct = default);
+    Task<IReadOnlyList<BusinessPricingPerformanceRowDto>> GetPricingPerformanceAsync(
+        DateTime? from = null,
+        DateTime? to = null,
+        CancellationToken ct = default);
+    Task<BusinessPricingPolicyDto> CreatePricingPolicyAsync(CreateBusinessPricingPolicyRequestDto request, CancellationToken ct = default);
+    Task<BusinessPricingPolicyDto> UpdatePricingPolicyAsync(Guid policyId, UpdateBusinessPricingPolicyRequestDto request, CancellationToken ct = default);
+    Task<BusinessPricingPolicyDto> DisablePricingPolicyAsync(Guid policyId, CancellationToken ct = default);
     Task<IReadOnlyList<InstantPairDto>> GetInstantPairsAsync(Guid businessCustomerId, CancellationToken ct = default);
     Task<InstantQuoteDto> CreateInstantQuoteAsync(Guid businessCustomerId, CreateInstantQuoteRequestDto request, CancellationToken ct = default);
     Task<InstantTradeDto> ExecuteInstantQuoteAsync(Guid businessCustomerId, Guid quoteId, CancellationToken ct = default);
