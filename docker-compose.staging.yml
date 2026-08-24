@@ -42,6 +42,13 @@ services:
       Security__Accounts__FrontendBaseUrl: ${ACCOUNT_FRONTEND_BASE_URL:?ACCOUNT_FRONTEND_BASE_URL is required}
       Security__Mfa__EnforceForPrivilegedRoles: ${MFA_ENFORCE_FOR_PRIVILEGED_ROLES:-true}
       Security__Mfa__CodeReplayPepper: ${MFA_CODE_REPLAY_PEPPER:?MFA_CODE_REPLAY_PEPPER is required}
+      IdentitySeed__SeedTestUsers: ${IDENTITY_SEED_TEST_USERS:-false}
+      IdentitySeed__SuperAdmin__FirstName: ${IDENTITY_SUPERADMIN_FIRST_NAME:?IDENTITY_SUPERADMIN_FIRST_NAME is required}
+      IdentitySeed__SuperAdmin__LastName: ${IDENTITY_SUPERADMIN_LAST_NAME:?IDENTITY_SUPERADMIN_LAST_NAME is required}
+      IdentitySeed__SuperAdmin__Email: ${IDENTITY_SUPERADMIN_EMAIL:?IDENTITY_SUPERADMIN_EMAIL is required}
+      IdentitySeed__SuperAdmin__Password: ${IDENTITY_SUPERADMIN_PASSWORD:?IDENTITY_SUPERADMIN_PASSWORD is required}
+      IdentitySeed__SuperAdmin__PhoneNumber: ${IDENTITY_SUPERADMIN_PHONE_NUMBER:-}
+      IdentitySeed__SuperAdmin__CountryCode: ${IDENTITY_SUPERADMIN_COUNTRY_CODE:?IDENTITY_SUPERADMIN_COUNTRY_CODE is required}
       Hosting__TrustedProxies__0: ${TRUSTED_PROXY_IP:-172.30.0.1}
       Hosting__ForwardLimit: 1
       Hosting__DataProtectionKeysPath: /var/lib/korridorx/keys
