@@ -19,6 +19,8 @@ public class AdminKycService : IAdminKycService
 
     public async Task<PagedResult<AdminKycApplicationListItemDto>> GetApplicationsAsync(
         KycStatus? status,
+        string? countryCode,
+        string? search,
         int page,
         int pageSize,
         CancellationToken ct = default)
@@ -35,21 +37,48 @@ public class AdminKycService : IAdminKycService
             query = query.Where(x => x.Status == status.Value);
         }
 
-        var paged = await query
+        if (!string.IsNullOrWhiteSpace(countryCode))
+        {
+            var normalizedCountryCode = countryCode.Trim().ToUpperInvariant();
+
+            query = query.Where(x =>
+                x.KycProfile.CustomerProfile.CountryCode == normalizedCountryCode);
+        }
+
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var normalizedSearch = search.Trim().ToLowerInvariant();
+
+            query = query.Where(x =>
+                x.KycProfile.CustomerProfile.FirstName.ToLower().Contains(normalizedSearch) ||
+                x.KycProfile.CustomerProfile.LastName.ToLower().Contains(normalizedSearch) ||
+                ((x.KycProfile.CustomerProfile.FirstName + " " +
+                  x.KycProfile.CustomerProfile.LastName)
+                    .ToLower()
+                    .Contains(normalizedSearch)) ||
+                (x.KycProfile.CustomerProfile.Email != null &&
+                 x.KycProfile.CustomerProfile.Email.ToLower().Contains(normalizedSearch)) ||
+                (x.KycProfile.CustomerProfile.User.Email != null &&
+                 x.KycProfile.CustomerProfile.User.Email.ToLower().Contains(normalizedSearch)) ||
+                (x.ProviderApplicationId != null &&
+                 x.ProviderApplicationId.ToLower().Contains(normalizedSearch)));
+        }
+
+        return await query
             .OrderByDescending(x => x.CreatedAt)
             .Select(x => new AdminKycApplicationListItemDto(
                 x.Id,
                 x.KycProfile.CustomerProfileId,
-                (x.KycProfile.CustomerProfile.FirstName + " " + x.KycProfile.CustomerProfile.LastName).Trim(),
-                x.KycProfile.CustomerProfile.Email ?? x.KycProfile.CustomerProfile.User.Email,
+                (x.KycProfile.CustomerProfile.FirstName + " " +
+                 x.KycProfile.CustomerProfile.LastName).Trim(),
+                x.KycProfile.CustomerProfile.Email ??
+                    x.KycProfile.CustomerProfile.User.Email,
                 x.KycProfile.CustomerProfile.CountryCode,
                 x.Status,
                 x.ProviderApplicationId,
                 x.SubmittedAt,
                 x.CreatedAt))
             .PaginateAsync(page, pageSize, ct);
-
-        return paged;
     }
 
     public async Task<AdminKycApplicationDetailsDto> GetApplicationAsync(
@@ -85,14 +114,17 @@ public class AdminKycService : IAdminKycService
             ToApplicationDto(application));
     }
 
-    private static KycApplicationDto ToApplicationDto(KycApplication application)
+    private static KycApplicationDto ToApplicationDto(
+        KycApplication application)
     {
         var documents = application.Documents
             .Where(x => !x.IsDeleted)
             .OrderBy(x => x.DocumentType)
             .Select(x =>
             {
-                if (!Enum.TryParse<KycDocumentType>(x.DocumentType, out var documentType))
+                if (!Enum.TryParse<KycDocumentType>(
+                        x.DocumentType,
+                        out var documentType))
                 {
                     throw new InvalidOperationException(
                         $"Unsupported stored KYC document type '{x.DocumentType}'.");

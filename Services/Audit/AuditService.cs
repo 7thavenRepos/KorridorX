@@ -40,31 +40,87 @@ public sealed partial class AuditService : IAuditService
         string? category,
         string? action,
         string? entityName,
+        string? entityId,
         Guid? userId,
+        string? correlationId,
+        string? search,
         DateTime? from,
         DateTime? to,
         int page,
         int pageSize,
         CancellationToken ct = default)
     {
-        var query = _db.AuditLogs.AsNoTracking().Where(x => !x.IsDeleted);
+        var query = _db.AuditLogs
+            .AsNoTracking()
+            .Where(x => !x.IsDeleted);
 
         if (!string.IsNullOrWhiteSpace(category))
             query = query.Where(x => x.Category == category.Trim());
+
         if (!string.IsNullOrWhiteSpace(action))
             query = query.Where(x => x.Action == action.Trim());
+
         if (!string.IsNullOrWhiteSpace(entityName))
             query = query.Where(x => x.EntityName == entityName.Trim());
-        if (userId is not null)
-            query = query.Where(x => x.UserId == userId);
-        if (from is not null)
-            query = query.Where(x => x.OccurredAt >= from.Value.ToUniversalTime());
-        if (to is not null)
-            query = query.Where(x => x.OccurredAt <= to.Value.ToUniversalTime());
+
+        if (!string.IsNullOrWhiteSpace(entityId))
+            query = query.Where(x => x.EntityId == entityId.Trim());
+
+        if (userId.HasValue)
+            query = query.Where(x => x.UserId == userId.Value);
+
+        if (!string.IsNullOrWhiteSpace(correlationId))
+            query = query.Where(
+                x => x.CorrelationId == correlationId.Trim());
+
+        if (from.HasValue)
+            query = query.Where(
+                x => x.OccurredAt >= from.Value.ToUniversalTime());
+
+        if (to.HasValue)
+            query = query.Where(
+                x => x.OccurredAt <= to.Value.ToUniversalTime());
+
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var value = search.Trim().ToLowerInvariant();
+
+            query = query.Where(x =>
+                x.Action.ToLower().Contains(value) ||
+                x.Category.ToLower().Contains(value) ||
+                x.EntityName.ToLower().Contains(value) ||
+                (x.EntityId != null &&
+                 x.EntityId.ToLower().Contains(value)) ||
+                (x.CorrelationId != null &&
+                 x.CorrelationId.ToLower().Contains(value)) ||
+                (x.IpAddress != null &&
+                 x.IpAddress.ToLower().Contains(value)));
+        }
 
         return await query
             .OrderByDescending(x => x.OccurredAt)
-            .Select(x => new AuditLogDto(
+            .Select(ToDtoExpression())
+            .PaginateAsync(page, pageSize, ct);
+    }
+
+    public async Task<AuditLogDto> GetByIdAsync(
+        Guid auditLogId,
+        CancellationToken ct = default)
+    {
+        var item = await _db.AuditLogs
+            .AsNoTracking()
+            .Where(x => x.Id == auditLogId && !x.IsDeleted)
+            .Select(ToDtoExpression())
+            .FirstOrDefaultAsync(ct);
+
+        return item
+            ?? throw new InvalidOperationException(
+                "Audit log not found.");
+    }
+
+    private static System.Linq.Expressions.Expression<Func<AuditLog, AuditLogDto>>
+        ToDtoExpression() =>
+            x => new AuditLogDto(
                 x.Id,
                 x.UserId,
                 x.Action,
@@ -77,10 +133,7 @@ public sealed partial class AuditService : IAuditService
                 x.IpAddress,
                 x.UserAgent,
                 x.CorrelationId,
-                x.OccurredAt))
-            .PaginateAsync(page, pageSize, ct);
-    }
-
+                x.OccurredAt);
     private AuditLog CreateLog(AuditRecordRequest request)
     {
         var context = _httpContextAccessor.HttpContext;

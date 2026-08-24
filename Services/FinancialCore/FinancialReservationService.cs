@@ -1,6 +1,7 @@
 using KorridorX.Data;
 using KorridorX.Models.Enums;
 using KorridorX.Models.FinancialCore;
+using KorridorX.Services.Compliance;
 using Microsoft.EntityFrameworkCore;
 
 namespace KorridorX.Services.FinancialCore;
@@ -8,10 +9,14 @@ namespace KorridorX.Services.FinancialCore;
 public class FinancialReservationService : IFinancialReservationService
 {
     private readonly AppDbContext _db;
+    private readonly IOutboundFundsRestrictionService _outboundFundsRestrictions;
 
-    public FinancialReservationService(AppDbContext db)
+    public FinancialReservationService(
+        AppDbContext db,
+        IOutboundFundsRestrictionService outboundFundsRestrictions)
     {
         _db = db;
+        _outboundFundsRestrictions = outboundFundsRestrictions;
     }
 
     public async Task<FinancialReservation> ReserveAsync(
@@ -56,6 +61,16 @@ public class FinancialReservationService : IFinancialReservationService
         if (account.Status != FinancialAccountStatus.Active)
         {
             throw new InvalidOperationException("The financial account is not active.");
+        }
+
+        if (type is FinancialReservationType.Transfer or FinancialReservationType.Withdrawal)
+        {
+            await _outboundFundsRestrictions
+                .EnsureFinancialAccountOwnerOutboundAllowedAsync(
+                    account.OwnerType,
+                    account.OwnerId,
+                    $"financial_reservation:{type}",
+                    ct);
         }
 
         if (account.AvailableBalance < amount)

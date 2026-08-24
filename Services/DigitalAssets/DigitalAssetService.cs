@@ -81,6 +81,7 @@ public sealed class DigitalAssetService :
 
         var account = await GetCustomerAccountAsync(businessCustomerId, request.FinancialAccountId, ct);
         var network = await GetNetworkAsync(request.AssetNetworkId, account.AssetCode, true, ct);
+        await EnsureCountryAssetPermissionAsync(customer, account.AssetCode, true, ct);
         var provider = _providers.GetRequired(request.ProviderCode, account.AssetCode, network.NetworkCode);
 
         var existing = await _db.DigitalAssetDepositAddresses.AsNoTracking().Include(x => x.AssetNetwork)
@@ -150,6 +151,7 @@ public sealed class DigitalAssetService :
 
         var account = await GetCustomerAccountAsync(businessCustomerId, request.FinancialAccountId, ct);
         var network = await GetNetworkAsync(request.AssetNetworkId, account.AssetCode, true, ct);
+        await EnsureCountryAssetPermissionAsync(customer, account.AssetCode, true, ct);
         var provider = _providers.GetRequired(request.ProviderCode, account.AssetCode, network.NetworkCode);
 
         if (provider is not IDigitalAssetCollectionProvider collections)
@@ -228,6 +230,7 @@ public sealed class DigitalAssetService :
         var network = await _db.AssetNetworks.Include(x => x.Asset).FirstOrDefaultAsync(x => x.Id == request.AssetNetworkId, ct)
             ?? throw new InvalidOperationException("Asset network not found.");
         ValidateNetwork(network, network.AssetCode, false);
+        await EnsureCountryAssetPermissionAsync(customer, network.AssetCode, false, ct);
 
         var destination = new DigitalAssetWithdrawalDestination
         {
@@ -278,6 +281,8 @@ public sealed class DigitalAssetService :
             throw new InvalidOperationException("Digital-asset withdrawal destination is not active.");
 
         ValidateNetwork(destination.AssetNetwork, account.AssetCode, false);
+        await EnsureCountryAssetPermissionAsync(customer, account.AssetCode, false, ct);
+
         if (request.Amount < destination.AssetNetwork.MinimumWithdrawal)
             throw new InvalidOperationException($"Minimum withdrawal is {destination.AssetNetwork.MinimumWithdrawal} {account.AssetCode}.");
 
@@ -961,6 +966,48 @@ public sealed class DigitalAssetService :
             throw new InvalidOperationException("Digital-asset deposits are disabled for this network.");
         if (!deposit && (!network.Asset.WithdrawalEnabled || !network.WithdrawalEnabled))
             throw new InvalidOperationException("Digital-asset withdrawals are disabled for this network.");
+    }
+
+    private async Task EnsureCountryAssetPermissionAsync(
+        BusinessCustomer customer,
+        string assetCode,
+        bool deposit,
+        CancellationToken ct)
+    {
+        var countryCode = Required(
+            customer.CountryCode,
+            10,
+            "Business customer country").ToUpperInvariant();
+
+        var normalizedAsset = Required(
+            assetCode,
+            20,
+            "Asset code").ToUpperInvariant();
+
+        var mapping = await _db.CountryAssets
+            .AsNoTracking()
+            .FirstOrDefaultAsync(x =>
+                x.CountryCode == countryCode &&
+                x.AssetCode == normalizedAsset,
+                ct);
+
+        if (mapping is null)
+        {
+            throw new InvalidOperationException(
+                $"Digital asset {normalizedAsset} is not enabled for business customers in {countryCode}.");
+        }
+
+        if (deposit && !mapping.CanDeposit)
+        {
+            throw new InvalidOperationException(
+                $"Digital-asset deposits are not enabled for {normalizedAsset} in {countryCode}.");
+        }
+
+        if (!deposit && !mapping.CanWithdraw)
+        {
+            throw new InvalidOperationException(
+                $"Digital-asset withdrawals are not enabled for {normalizedAsset} in {countryCode}.");
+        }
     }
 
     private EmbeddedFinancePrincipal RequireScope(EmbeddedFinanceScope scope)

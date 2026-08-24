@@ -1,3 +1,5 @@
+using System.ComponentModel.DataAnnotations;
+
 namespace KorridorX.Dtos.Notifications;
 
 public record NotificationMessageDto(
@@ -20,4 +22,11 @@ public record NotificationMessageDto(
     DateTime? SentAt,
     DateTime? ReadAt);
 
-public record RetryNotificationRequestDto(bool ResetAttemptCount = false);
+public sealed class RetryNotificationRequestDto
+{
+    public bool ResetAttemptCount { get; set; }
+
+    [Required]
+    [MaxLength(1000)]
+    public string Reason { get; set; } = string.Empty;
+}

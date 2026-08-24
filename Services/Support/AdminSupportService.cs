@@ -32,13 +32,19 @@ public sealed class AdminSupportService : IAdminSupportService
         _options = options.Value;
     }
 
-    public async Task<PagedResult<SupportTicketListItemDto>> GetTicketsAsync(SupportTicketStatus? status, SupportTicketPriority? priority, Guid? assignedToUserId, bool? slaBreached, string? search, int page, int pageSize, CancellationToken ct = default)
+    public async Task<PagedResult<SupportTicketListItemDto>> GetTicketsAsync(SupportTicketStatus? status, SupportTicketPriority? priority, Guid? assignedToUserId, bool? unassigned, bool? slaBreached, string? search, int page, int pageSize, CancellationToken ct = default)
     {
         var query = _db.SupportTickets.AsNoTracking().Include(x => x.Transfer).Where(x => !x.IsDeleted);
         if (status.HasValue) query = query.Where(x => x.Status == status.Value);
         if (priority.HasValue) query = query.Where(x => x.Priority == priority.Value);
-        if (assignedToUserId.HasValue) query = query.Where(x => x.AssignedToUserId == assignedToUserId.Value);
-        if (slaBreached.HasValue) query = query.Where(x => x.IsSlaBreached == slaBreached.Value);
+        if (assignedToUserId.HasValue)
+            query = query.Where(x => x.AssignedToUserId == assignedToUserId.Value);
+
+        if (unassigned == true)
+            query = query.Where(x => x.AssignedToUserId == null);
+
+        if (slaBreached.HasValue)
+            query = query.Where(x => x.IsSlaBreached == slaBreached.Value);
         if (!string.IsNullOrWhiteSpace(search))
         {
             var value = search.Trim().ToLower();
@@ -75,43 +81,248 @@ public sealed class AdminSupportService : IAdminSupportService
         return await GetTicketAsync(ticket.Id, ct);
     }
 
-    public async Task<SupportTicketDetailsDto> UpdateTicketAsync(Guid agentUserId, Guid ticketId, UpdateSupportTicketRequestDto request, CancellationToken ct = default)
+    public async Task<SupportTicketDetailsDto> AssignTicketAsync(
+        Guid agentUserId,
+        Guid ticketId,
+        AssignSupportTicketRequestDto request,
+        CancellationToken ct = default)
     {
-        var ticket = await _db.SupportTickets.FirstOrDefaultAsync(x => x.Id == ticketId && !x.IsDeleted, ct) ?? throw new InvalidOperationException("Support ticket not found.");
-        var old = new { ticket.Status, ticket.Priority, ticket.AssignedToUserId };
-        var now = DateTime.UtcNow;
-        if (request.Priority.HasValue && request.Priority.Value != ticket.Priority)
+        var reason = request.Reason?.Trim();
+
+        if (string.IsNullOrWhiteSpace(reason))
+            throw new InvalidOperationException("A reason is required to change support ticket assignment.");
+
+        var ticket = await _db.SupportTickets
+            .FirstOrDefaultAsync(
+                x => x.Id == ticketId && !x.IsDeleted,
+                ct)
+            ?? throw new InvalidOperationException("Support ticket not found.");
+
+        if (request.AssignedToUserId.HasValue)
         {
-            ticket.Priority = request.Priority.Value;
-            var target = GetSlaTarget(ticket.Priority);
-            ticket.FirstResponseDueAt = ticket.FirstRespondedAt.HasValue ? ticket.FirstResponseDueAt : ticket.CreatedAt.AddMinutes(target.FirstResponseMinutes);
-            ticket.ResolutionDueAt = ticket.CreatedAt.AddMinutes(target.ResolutionMinutes);
+            var assigneeExists = await _db.Users
+                .AsNoTracking()
+                .AnyAsync(
+                    x => x.Id == request.AssignedToUserId.Value,
+                    ct);
+
+            if (!assigneeExists)
+                throw new InvalidOperationException("The selected support assignee was not found.");
         }
-        if (request.AssignedToUserId.HasValue) ticket.AssignedToUserId = request.AssignedToUserId;
-        if (request.Status.HasValue)
-        {
-            ticket.Status = request.Status.Value;
-            if (ticket.Status == SupportTicketStatus.Resolved) ticket.ResolvedAt ??= now;
-            else if (ticket.Status == SupportTicketStatus.Closed) { ticket.ResolvedAt ??= now; ticket.ClosedAt ??= now; }
-            else { ticket.ResolvedAt = null; ticket.ClosedAt = null; }
-        }
-        ticket.LastUpdatedAt = now;
+
+        var oldAssignedToUserId = ticket.AssignedToUserId;
+
+        ticket.AssignedToUserId = request.AssignedToUserId;
+        ticket.LastUpdatedAt = DateTime.UtcNow;
         ticket.LastUpdatedByUserId = agentUserId;
-        _audit.Stage(new AuditRecordRequest("SupportTicketUpdated", "Support", nameof(SupportTicket), ticket.Id.ToString(), old, new { ticket.Status, ticket.Priority, ticket.AssignedToUserId }, UserId: agentUserId));
-        if (request.Status.HasValue) await _notifications.QueueUserAsync(ticket.UserId, $"Support ticket {ticket.Reference} status updated", $"Your support ticket is now {ticket.Status}.", nameof(SupportTicket), ticket.Id, ct);
+
+        _audit.Stage(new AuditRecordRequest(
+            "SupportTicketAssignmentChanged",
+            "Support",
+            nameof(SupportTicket),
+            ticket.Id.ToString(),
+            new
+            {
+                AssignedToUserId = oldAssignedToUserId
+            },
+            new
+            {
+                ticket.AssignedToUserId
+            },
+            new
+            {
+                Reason = reason
+            },
+            agentUserId));
+
         await _db.SaveChangesAsync(ct);
         return await GetTicketAsync(ticket.Id, ct);
     }
-
-    public async Task<PagedResult<TransferDisputeDto>> GetDisputesAsync(TransferDisputeStatus? status, Guid? transferId, int page, int pageSize, CancellationToken ct = default)
+    public async Task<SupportTicketDetailsDto> UpdateTicketAsync(
+        Guid agentUserId,
+        Guid ticketId,
+        UpdateSupportTicketRequestDto request,
+        CancellationToken ct = default)
     {
-        var query = _db.TransferDisputes.AsNoTracking().Include(x => x.Transfer).Where(x => !x.IsDeleted);
-        if (status.HasValue) query = query.Where(x => x.Status == status.Value);
-        if (transferId.HasValue) query = query.Where(x => x.TransferId == transferId.Value);
-        var paged = await query.OrderByDescending(x => x.CreatedAt).PaginateAsync(page, pageSize, ct);
-        return new PagedResult<TransferDisputeDto> { Items = paged.Items.Select(SupportService.ToDisputeDto).ToList(), Meta = paged.Meta };
+        var reason = request.Reason?.Trim();
+
+        if (string.IsNullOrWhiteSpace(reason))
+            throw new InvalidOperationException("A reason is required to update a support ticket.");
+
+        var ticket = await _db.SupportTickets
+            .FirstOrDefaultAsync(
+                x => x.Id == ticketId && !x.IsDeleted,
+                ct)
+            ?? throw new InvalidOperationException("Support ticket not found.");
+
+        var old = new
+        {
+            ticket.Status,
+            ticket.Priority,
+            ticket.AssignedToUserId
+        };
+
+        var now = DateTime.UtcNow;
+
+        if (request.Priority.HasValue &&
+            request.Priority.Value != ticket.Priority)
+        {
+            ticket.Priority = request.Priority.Value;
+
+            var target = GetSlaTarget(ticket.Priority);
+
+            ticket.FirstResponseDueAt = ticket.FirstRespondedAt.HasValue
+                ? ticket.FirstResponseDueAt
+                : ticket.CreatedAt.AddMinutes(
+                    target.FirstResponseMinutes);
+
+            ticket.ResolutionDueAt = ticket.CreatedAt.AddMinutes(
+                target.ResolutionMinutes);
+        }
+
+        if (request.AssignedToUserId.HasValue)
+        {
+            var assigneeExists = await _db.Users
+                .AsNoTracking()
+                .AnyAsync(
+                    x => x.Id == request.AssignedToUserId.Value,
+                    ct);
+
+            if (!assigneeExists)
+                throw new InvalidOperationException("The selected support assignee was not found.");
+
+            ticket.AssignedToUserId = request.AssignedToUserId;
+        }
+
+        if (request.Status.HasValue)
+        {
+            ticket.Status = request.Status.Value;
+
+            if (ticket.Status == SupportTicketStatus.Resolved)
+            {
+                ticket.ResolvedAt ??= now;
+            }
+            else if (ticket.Status == SupportTicketStatus.Closed)
+            {
+                ticket.ResolvedAt ??= now;
+                ticket.ClosedAt ??= now;
+            }
+            else
+            {
+                ticket.ResolvedAt = null;
+                ticket.ClosedAt = null;
+            }
+        }
+
+        ticket.LastUpdatedAt = now;
+        ticket.LastUpdatedByUserId = agentUserId;
+
+        _audit.Stage(new AuditRecordRequest(
+            "SupportTicketUpdated",
+            "Support",
+            nameof(SupportTicket),
+            ticket.Id.ToString(),
+            old,
+            new
+            {
+                ticket.Status,
+                ticket.Priority,
+                ticket.AssignedToUserId
+            },
+            new
+            {
+                Reason = reason
+            },
+            agentUserId));
+
+        if (request.Status.HasValue)
+        {
+            await _notifications.QueueUserAsync(
+                ticket.UserId,
+                $"Support ticket {ticket.Reference} status updated",
+                $"Your support ticket is now {ticket.Status}.",
+                nameof(SupportTicket),
+                ticket.Id,
+                ct);
+        }
+
+        await _db.SaveChangesAsync(ct);
+        return await GetTicketAsync(ticket.Id, ct);
+    }
+    public async Task<PagedResult<TransferDisputeDto>> GetDisputesAsync(
+        TransferDisputeStatus? status,
+        Guid? transferId,
+        Guid? assignedToUserId,
+        string? search,
+        int page,
+        int pageSize,
+        CancellationToken ct = default)
+    {
+        var query = _db.TransferDisputes
+            .AsNoTracking()
+            .Include(x => x.Transfer)
+            .Where(x => !x.IsDeleted);
+
+        if (status.HasValue)
+            query = query.Where(x => x.Status == status.Value);
+
+        if (transferId.HasValue)
+            query = query.Where(x => x.TransferId == transferId.Value);
+
+        if (assignedToUserId.HasValue)
+            query = query.Where(x => x.AssignedToUserId == assignedToUserId.Value);
+
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var value = search.Trim().ToLowerInvariant();
+
+            query = query.Where(x =>
+                x.Reference.ToLower().Contains(value) ||
+                x.Transfer.Reference.ToLower().Contains(value) ||
+                x.Reason.ToLower().Contains(value));
+        }
+
+        var paged = await query
+            .OrderByDescending(x => x.CreatedAt)
+            .PaginateAsync(page, pageSize, ct);
+
+        return new PagedResult<TransferDisputeDto>
+        {
+            Items = paged.Items
+                .Select(SupportService.ToDisputeDto)
+                .ToList(),
+            Meta = paged.Meta
+        };
     }
 
+    public async Task<TransferDisputeDetailsDto> GetDisputeAsync(
+        Guid disputeId,
+        CancellationToken ct = default)
+    {
+        var dispute = await _db.TransferDisputes
+            .AsNoTracking()
+            .Include(x => x.Transfer)
+            .Include(x => x.Evidence)
+            .Include(x => x.Investigations)
+                .ThenInclude(x => x.Transfer)
+            .FirstOrDefaultAsync(
+                x => x.Id == disputeId && !x.IsDeleted,
+                ct)
+            ?? throw new InvalidOperationException(
+                "Transfer dispute not found.");
+
+        return new TransferDisputeDetailsDto(
+            SupportService.ToDisputeDto(dispute),
+            dispute.Evidence
+                .OrderByDescending(x => x.CreatedAt)
+                .Select(SupportService.ToEvidenceDto)
+                .ToList(),
+            dispute.Investigations
+                .Where(x => !x.IsDeleted)
+                .OrderByDescending(x => x.CreatedAt)
+                .Select(SupportService.ToInvestigationDto)
+                .ToList());
+    }
     public async Task<TransferDisputeDto> ResolveDisputeAsync(Guid agentUserId, Guid disputeId, ResolveTransferDisputeRequestDto request, CancellationToken ct = default)
     {
         if (request.Status is not TransferDisputeStatus.Resolved and not TransferDisputeStatus.Rejected)
@@ -165,42 +376,222 @@ public sealed class AdminSupportService : IAdminSupportService
         return SupportService.ToInvestigationDto(investigation);
     }
 
-    public async Task<PagedResult<TransferInvestigationDto>> GetInvestigationsAsync(TransferInvestigationStatus? status, Guid? assignedToUserId, bool? overdue, int page, int pageSize, CancellationToken ct = default)
+    public async Task<PagedResult<TransferInvestigationDto>> GetInvestigationsAsync(
+        TransferInvestigationStatus? status,
+        Guid? assignedToUserId,
+        Guid? transferId,
+        bool? overdue,
+        string? search,
+        int page,
+        int pageSize,
+        CancellationToken ct = default)
     {
         var now = DateTime.UtcNow;
-        var query = _db.TransferInvestigations.AsNoTracking().Include(x => x.Transfer).Where(x => !x.IsDeleted);
-        if (status.HasValue) query = query.Where(x => x.Status == status.Value);
-        if (assignedToUserId.HasValue) query = query.Where(x => x.AssignedToUserId == assignedToUserId.Value);
-        if (overdue.HasValue) query = overdue.Value ? query.Where(x => x.DueAt < now && x.Status != TransferInvestigationStatus.Resolved && x.Status != TransferInvestigationStatus.Closed) : query.Where(x => x.DueAt >= now || x.Status == TransferInvestigationStatus.Resolved || x.Status == TransferInvestigationStatus.Closed);
-        var paged = await query.OrderBy(x => x.DueAt).PaginateAsync(page, pageSize, ct);
-        return new PagedResult<TransferInvestigationDto> { Items = paged.Items.Select(SupportService.ToInvestigationDto).ToList(), Meta = paged.Meta };
+
+        var query = _db.TransferInvestigations
+            .AsNoTracking()
+            .Include(x => x.Transfer)
+            .Where(x => !x.IsDeleted);
+
+        if (status.HasValue)
+            query = query.Where(x => x.Status == status.Value);
+
+        if (assignedToUserId.HasValue)
+            query = query.Where(x => x.AssignedToUserId == assignedToUserId.Value);
+
+        if (transferId.HasValue)
+            query = query.Where(x => x.TransferId == transferId.Value);
+
+        if (overdue.HasValue)
+        {
+            query = overdue.Value
+                ? query.Where(x =>
+                    x.DueAt < now &&
+                    x.Status != TransferInvestigationStatus.Resolved &&
+                    x.Status != TransferInvestigationStatus.Closed)
+                : query.Where(x =>
+                    x.DueAt >= now ||
+                    x.Status == TransferInvestigationStatus.Resolved ||
+                    x.Status == TransferInvestigationStatus.Closed);
+        }
+
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var value = search.Trim().ToLowerInvariant();
+
+            query = query.Where(x =>
+                x.Reference.ToLower().Contains(value) ||
+                x.Transfer.Reference.ToLower().Contains(value) ||
+                x.Summary.ToLower().Contains(value) ||
+                (x.ProviderCaseReference != null &&
+                 x.ProviderCaseReference.ToLower().Contains(value)));
+        }
+
+        var paged = await query
+            .OrderBy(x => x.DueAt)
+            .PaginateAsync(page, pageSize, ct);
+
+        return new PagedResult<TransferInvestigationDto>
+        {
+            Items = paged.Items
+                .Select(SupportService.ToInvestigationDto)
+                .ToList(),
+            Meta = paged.Meta
+        };
     }
 
-    public async Task<TransferInvestigationDto> UpdateInvestigationAsync(Guid agentUserId, Guid investigationId, UpdateTransferInvestigationRequestDto request, CancellationToken ct = default)
+    public async Task<TransferInvestigationDetailsDto> GetInvestigationAsync(
+        Guid investigationId,
+        CancellationToken ct = default)
     {
-        var investigation = await _db.TransferInvestigations.Include(x => x.Transfer).FirstOrDefaultAsync(x => x.Id == investigationId && !x.IsDeleted, ct) ?? throw new InvalidOperationException("Transfer investigation not found.");
-        if (request.AssignedToUserId.HasValue) investigation.AssignedToUserId = request.AssignedToUserId;
-        if (request.Findings is not null) investigation.Findings = request.Findings.Trim();
-        if (request.ProviderCaseReference is not null) investigation.ProviderCaseReference = request.ProviderCaseReference.Trim();
-        if (request.Outcome.HasValue) investigation.Outcome = request.Outcome.Value;
+        var investigation = await _db.TransferInvestigations
+            .AsNoTracking()
+            .Include(x => x.Transfer)
+            .Include(x => x.Evidence)
+            .FirstOrDefaultAsync(
+                x => x.Id == investigationId && !x.IsDeleted,
+                ct)
+            ?? throw new InvalidOperationException(
+                "Transfer investigation not found.");
+
+        return new TransferInvestigationDetailsDto(
+            SupportService.ToInvestigationDto(investigation),
+            investigation.Evidence
+                .OrderByDescending(x => x.CreatedAt)
+                .Select(SupportService.ToEvidenceDto)
+                .ToList());
+    }
+    public async Task<TransferInvestigationDto> UpdateInvestigationAsync(
+        Guid agentUserId,
+        Guid investigationId,
+        UpdateTransferInvestigationRequestDto request,
+        CancellationToken ct = default)
+    {
+        var reason = request.Reason?.Trim();
+
+        if (string.IsNullOrWhiteSpace(reason))
+            throw new InvalidOperationException(
+                "A reason is required to update a transfer investigation.");
+
+        var investigation = await _db.TransferInvestigations
+            .Include(x => x.Transfer)
+            .FirstOrDefaultAsync(
+                x => x.Id == investigationId && !x.IsDeleted,
+                ct)
+            ?? throw new InvalidOperationException(
+                "Transfer investigation not found.");
+
+        var old = new
+        {
+            investigation.Status,
+            investigation.Outcome,
+            investigation.AssignedToUserId,
+            investigation.Findings,
+            investigation.ProviderCaseReference
+        };
+
+        var targetStatus = request.Status ?? investigation.Status;
+        var targetOutcome = request.Outcome ?? investigation.Outcome;
+        var targetFindings = request.Findings is null
+            ? investigation.Findings
+            : request.Findings.Trim();
+
+        if (targetStatus is TransferInvestigationStatus.Resolved or
+            TransferInvestigationStatus.Closed)
+        {
+            if (targetOutcome == TransferInvestigationOutcome.None)
+                throw new InvalidOperationException(
+                    "A completed investigation requires an outcome.");
+
+            if (string.IsNullOrWhiteSpace(targetFindings))
+                throw new InvalidOperationException(
+                    "A completed investigation requires findings.");
+        }
+
+        if (request.AssignedToUserId.HasValue)
+        {
+            var assigneeExists = await _db.Users
+                .AsNoTracking()
+                .AnyAsync(
+                    x => x.Id == request.AssignedToUserId.Value,
+                    ct);
+
+            if (!assigneeExists)
+                throw new InvalidOperationException(
+                    "The selected investigation assignee was not found.");
+
+            investigation.AssignedToUserId = request.AssignedToUserId;
+        }
+
+        if (request.Findings is not null)
+            investigation.Findings = request.Findings.Trim();
+
+        if (request.ProviderCaseReference is not null)
+            investigation.ProviderCaseReference =
+                request.ProviderCaseReference.Trim();
+
+        if (request.Outcome.HasValue)
+            investigation.Outcome = request.Outcome.Value;
+
         if (request.Status.HasValue)
         {
             investigation.Status = request.Status.Value;
-            if (investigation.Status is TransferInvestigationStatus.Resolved or TransferInvestigationStatus.Closed) investigation.ResolvedAt ??= DateTime.UtcNow;
-            else investigation.ResolvedAt = null;
+
+            if (investigation.Status is
+                TransferInvestigationStatus.Resolved or
+                TransferInvestigationStatus.Closed)
+            {
+                investigation.ResolvedAt ??= DateTime.UtcNow;
+            }
+            else
+            {
+                investigation.ResolvedAt = null;
+            }
         }
+
         investigation.LastUpdatedAt = DateTime.UtcNow;
         investigation.LastUpdatedByUserId = agentUserId;
-        if (investigation.Status is TransferInvestigationStatus.Resolved or TransferInvestigationStatus.Closed)
+
+        if (investigation.Status is
+            TransferInvestigationStatus.Resolved or
+            TransferInvestigationStatus.Closed)
         {
-            await ReleaseOperationalHoldIfClearAsync(investigation.Transfer, null, investigation.Id, ct);
-            AddTimeline(investigation.Transfer, "TRANSFER_INVESTIGATION_RESOLVED", "Transfer investigation completed", $"Investigation {investigation.Reference} was completed with outcome {investigation.Outcome}.");
+            await ReleaseOperationalHoldIfClearAsync(
+                investigation.Transfer,
+                null,
+                investigation.Id,
+                ct);
+
+            AddTimeline(
+                investigation.Transfer,
+                "TRANSFER_INVESTIGATION_RESOLVED",
+                "Transfer investigation completed",
+                $"Investigation {investigation.Reference} was completed with outcome {investigation.Outcome}.");
         }
-        _audit.Stage(new AuditRecordRequest("TransferInvestigationUpdated", "Support", nameof(TransferInvestigation), investigation.Id.ToString(), NewValues: new { investigation.Status, investigation.Outcome, investigation.AssignedToUserId, investigation.ProviderCaseReference }, UserId: agentUserId));
+
+        _audit.Stage(new AuditRecordRequest(
+            "TransferInvestigationUpdated",
+            "Support",
+            nameof(TransferInvestigation),
+            investigation.Id.ToString(),
+            old,
+            new
+            {
+                investigation.Status,
+                investigation.Outcome,
+                investigation.AssignedToUserId,
+                investigation.Findings,
+                investigation.ProviderCaseReference
+            },
+            new
+            {
+                Reason = reason
+            },
+            agentUserId));
+
         await _db.SaveChangesAsync(ct);
         return SupportService.ToInvestigationDto(investigation);
     }
-
     public async Task<SupportEvidenceDto> AddInvestigationEvidenceAsync(Guid agentUserId, Guid investigationId, AddSupportEvidenceRequestDto request, CancellationToken ct = default)
     {
         var investigation = await _db.TransferInvestigations.AsNoTracking().FirstOrDefaultAsync(x => x.Id == investigationId && !x.IsDeleted, ct) ?? throw new InvalidOperationException("Transfer investigation not found.");
@@ -232,24 +623,132 @@ public sealed class AdminSupportService : IAdminSupportService
             totalResolved == 0 ? 100m : Math.Round(resolutionMet * 100m / totalResolved, 2));
     }
 
-    public async Task<int> ProcessSlaBreachesAsync(int batchSize, CancellationToken ct = default)
+    public Task<int> ProcessSlaBreachesAsync(
+        int batchSize,
+        CancellationToken ct = default) =>
+        ProcessSlaBreachesCoreAsync(
+            batchSize,
+            initiatedByUserId: null,
+            manualReason: null,
+            auditManualRun: false,
+            ct);
+
+    public Task<int> ProcessSlaBreachesAsync(
+        int batchSize,
+        Guid initiatedByUserId,
+        string reason,
+        CancellationToken ct = default)
+    {
+        var cleanedReason = reason?.Trim();
+
+        if (string.IsNullOrWhiteSpace(cleanedReason))
+            throw new InvalidOperationException(
+                "A reason is required for manual support SLA processing.");
+
+        if (cleanedReason.Length > 1000)
+            throw new InvalidOperationException(
+                "Reason cannot exceed 1000 characters.");
+
+        return ProcessSlaBreachesCoreAsync(
+            batchSize,
+            initiatedByUserId,
+            cleanedReason,
+            auditManualRun: true,
+            ct);
+    }
+
+    private async Task<int> ProcessSlaBreachesCoreAsync(
+        int batchSize,
+        Guid? initiatedByUserId,
+        string? manualReason,
+        bool auditManualRun,
+        CancellationToken ct)
     {
         var now = DateTime.UtcNow;
         batchSize = Math.Clamp(batchSize, 1, 500);
-        var tickets = await _db.SupportTickets.Where(x => !x.IsDeleted && x.Status != SupportTicketStatus.Resolved && x.Status != SupportTicketStatus.Closed && (!x.FirstRespondedAt.HasValue && x.FirstResponseDueAt < now || x.ResolutionDueAt < now) && (!x.IsSlaBreached || x.LastEscalatedAt == null || x.LastEscalatedAt < now.AddHours(-24))).OrderBy(x => x.ResolutionDueAt).Take(batchSize).ToListAsync(ct);
+
+        var tickets = await _db.SupportTickets
+            .Where(x =>
+                !x.IsDeleted &&
+                x.Status != SupportTicketStatus.Resolved &&
+                x.Status != SupportTicketStatus.Closed &&
+                ((!x.FirstRespondedAt.HasValue &&
+                  x.FirstResponseDueAt < now) ||
+                 x.ResolutionDueAt < now) &&
+                (!x.IsSlaBreached ||
+                 x.LastEscalatedAt == null ||
+                 x.LastEscalatedAt < now.AddHours(-24)))
+            .OrderBy(x => x.ResolutionDueAt)
+            .Take(batchSize)
+            .ToListAsync(ct);
+
         foreach (var ticket in tickets)
         {
             ticket.IsSlaBreached = true;
             ticket.EscalationLevel++;
             ticket.LastEscalatedAt = now;
             ticket.LastUpdatedAt = now;
-            if (ticket.AssignedToUserId.HasValue) await _notifications.QueueUserAsync(ticket.AssignedToUserId.Value, $"SLA escalation: {ticket.Reference}", $"Support ticket {ticket.Reference} has breached an SLA target and requires attention.", nameof(SupportTicket), ticket.Id, ct);
-            _audit.Stage(new AuditRecordRequest("SupportSlaBreached", "Support", nameof(SupportTicket), ticket.Id.ToString(), NewValues: new { ticket.EscalationLevel, ticket.FirstResponseDueAt, ticket.ResolutionDueAt }));
+
+            if (ticket.AssignedToUserId.HasValue)
+            {
+                await _notifications.QueueUserAsync(
+                    ticket.AssignedToUserId.Value,
+                    $"SLA escalation: {ticket.Reference}",
+                    $"Support ticket {ticket.Reference} has breached an SLA target and requires attention.",
+                    nameof(SupportTicket),
+                    ticket.Id,
+                    ct);
+            }
+
+            _audit.Stage(new AuditRecordRequest(
+                "SupportSlaBreached",
+                "Support",
+                nameof(SupportTicket),
+                ticket.Id.ToString(),
+                NewValues: new
+                {
+                    ticket.EscalationLevel,
+                    ticket.FirstResponseDueAt,
+                    ticket.ResolutionDueAt
+                },
+                Metadata: auditManualRun
+                    ? new
+                    {
+                        Trigger = "Manual",
+                        Reason = manualReason
+                    }
+                    : new
+                    {
+                        Trigger = "BackgroundWorker"
+                    },
+                UserId: initiatedByUserId));
         }
-        if (tickets.Count > 0) await _db.SaveChangesAsync(ct);
+
+        if (auditManualRun)
+        {
+            _audit.Stage(new AuditRecordRequest(
+                "SupportSlaProcessingRun",
+                "Support",
+                nameof(SupportTicket),
+                "SLA",
+                NewValues: new
+                {
+                    BatchSize = batchSize,
+                    Processed = tickets.Count,
+                    CheckedAt = now
+                },
+                Metadata: new
+                {
+                    Reason = manualReason
+                },
+                UserId: initiatedByUserId));
+        }
+
+        if (tickets.Count > 0 || auditManualRun)
+            await _db.SaveChangesAsync(ct);
+
         return tickets.Count;
     }
-
     private IQueryable<SupportTicket> TicketQuery() => _db.SupportTickets.AsNoTracking().Include(x => x.Transfer).Include(x => x.Messages).Include(x => x.Evidence).Where(x => !x.IsDeleted);
     private SupportSlaTargetOptions GetSlaTarget(SupportTicketPriority priority) => _options.SlaTargets.TryGetValue(priority, out var target) ? target : throw new InvalidOperationException($"SLA target is not configured for {priority} priority.");
 

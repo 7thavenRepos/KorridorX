@@ -394,12 +394,47 @@ public sealed class TransferRiskService : ITransferRiskService
     public async Task<TransferRiskDecisionDto> ReassessAsync(
         Guid transferId,
         Guid reviewedByUserId,
+        string reason,
         CancellationToken ct = default)
     {
-        var transfer = await _db.Transfers.FirstOrDefaultAsync(x => x.Id == transferId && !x.IsDeleted, ct)
+        var cleanedReason = reason?.Trim();
+
+        if (string.IsNullOrWhiteSpace(cleanedReason))
+            throw new InvalidOperationException("A reason is required for transfer risk reassessment.");
+
+        if (cleanedReason.Length > 1000)
+            throw new InvalidOperationException("Reason cannot exceed 1000 characters.");
+
+        var transfer = await _db.Transfers
+            .FirstOrDefaultAsync(
+                x => x.Id == transferId && !x.IsDeleted,
+                ct)
             ?? throw new InvalidOperationException("Transfer not found.");
 
-        var result = await AssessAsync(transfer, reviewedByUserId, ct);
+        var result = await AssessAsync(
+            transfer,
+            reviewedByUserId,
+            ct);
+
+        _audit.Stage(new AuditRecordRequest(
+            "TRANSFER_RISK_REASSESSED",
+            "Compliance",
+            nameof(Transfer),
+            transfer.Id.ToString(),
+            null,
+            new
+            {
+                Reason = cleanedReason,
+                result.Score,
+                result.Level,
+                result.Decision,
+                result.IsComplianceHold,
+                result.TriggeredRules,
+                result.AssessedAt
+            },
+            null,
+            reviewedByUserId));
+
         await _db.SaveChangesAsync(ct);
         return result;
     }

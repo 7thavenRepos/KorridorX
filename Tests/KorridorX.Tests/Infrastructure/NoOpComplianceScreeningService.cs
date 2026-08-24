@@ -89,4 +89,11 @@ public sealed class NoOpComplianceScreeningService : IComplianceScreeningService
         int batchSize,
         CancellationToken ct = default) =>
         Task.FromResult(0);
+
+    public Task<int> RunDueRescreeningAsync(
+        int batchSize,
+        Guid initiatedByUserId,
+        string reason,
+        CancellationToken ct = default) =>
+        Task.FromResult(0);
 }

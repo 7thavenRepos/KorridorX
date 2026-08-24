@@ -8,6 +8,8 @@ public interface IAdminKycService
 {
     Task<PagedResult<AdminKycApplicationListItemDto>> GetApplicationsAsync(
         KycStatus? status,
+        string? countryCode,
+        string? search,
         int page,
         int pageSize,
         CancellationToken ct = default);

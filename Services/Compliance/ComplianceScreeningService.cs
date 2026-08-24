@@ -399,68 +399,195 @@ public sealed class ComplianceScreeningService : IComplianceScreeningService
         };
     }
 
-    public async Task<int> RunDueRescreeningAsync(
+    public Task<int> RunDueRescreeningAsync(
         int batchSize,
+        CancellationToken ct = default) =>
+        RunDueRescreeningCoreAsync(
+            batchSize,
+            initiatedByUserId: null,
+            auditReason: null,
+            auditOperatorAction: false,
+            ct);
+
+    public Task<int> RunDueRescreeningAsync(
+        int batchSize,
+        Guid initiatedByUserId,
+        string reason,
         CancellationToken ct = default)
     {
-        if (!_options.IsEnabled)
-            return 0;
+        var cleanedReason = reason?.Trim();
+
+        if (string.IsNullOrWhiteSpace(cleanedReason))
+            throw new InvalidOperationException(
+                "A reason is required for a due-rescreening run.");
+
+        if (cleanedReason.Length > 1000)
+            throw new InvalidOperationException(
+                "Reason cannot exceed 1000 characters.");
+
+        return RunDueRescreeningCoreAsync(
+            batchSize,
+            initiatedByUserId,
+            cleanedReason,
+            auditOperatorAction: true,
+            ct);
+    }
+
+    private async Task<int> RunDueRescreeningCoreAsync(
+        int batchSize,
+        Guid? initiatedByUserId,
+        string? auditReason,
+        bool auditOperatorAction,
+        CancellationToken ct)
+    {
         batchSize = Math.Clamp(batchSize, 1, 500);
+
+        if (!_options.IsEnabled)
+        {
+            if (auditOperatorAction)
+            {
+                _audit.Stage(new AuditRecordRequest(
+                    "DUE_COMPLIANCE_RESCREENING_RUN",
+                    "Compliance",
+                    nameof(ScreeningRecord),
+                    "DUE",
+                    null,
+                    new
+                    {
+                        BatchSize = batchSize,
+                        Processed = 0,
+                        Reason = auditReason,
+                        ScreeningEnabled = false
+                    },
+                    null,
+                    initiatedByUserId));
+
+                await _db.SaveChangesAsync(ct);
+            }
+
+            return 0;
+        }
+
         var cutoff = DateTime.UtcNow;
         var processed = 0;
 
-        var customerIds = await DueCustomerIds(cutoff).Take(batchSize).ToListAsync(ct);
+        var customerIds = await DueCustomerIds(cutoff)
+            .Take(batchSize)
+            .ToListAsync(ct);
+
         foreach (var id in customerIds)
         {
-            await ScreenCustomerAsync(id, ScreeningReason.OngoingRescreening, null, null, ct);
+            await ScreenCustomerAsync(
+                id,
+                ScreeningReason.OngoingRescreening,
+                initiatedByUserId,
+                null,
+                ct);
+
             processed++;
         }
 
         if (processed < batchSize)
         {
-            var businessIds = await DueBusinessIds(cutoff).Take(batchSize - processed).ToListAsync(ct);
+            var businessIds = await DueBusinessIds(cutoff)
+                .Take(batchSize - processed)
+                .ToListAsync(ct);
+
             foreach (var id in businessIds)
             {
-                await ScreenBusinessAsync(id, ScreeningReason.OngoingRescreening, null, null, ct);
+                await ScreenBusinessAsync(
+                    id,
+                    ScreeningReason.OngoingRescreening,
+                    initiatedByUserId,
+                    null,
+                    ct);
+
                 processed++;
             }
         }
 
         if (processed < batchSize)
         {
-            var recipientIds = await DueRecipientIds(cutoff).Take(batchSize - processed).ToListAsync(ct);
+            var recipientIds = await DueRecipientIds(cutoff)
+                .Take(batchSize - processed)
+                .ToListAsync(ct);
+
             foreach (var id in recipientIds)
             {
-                await ScreenRecipientAsync(id, ScreeningReason.OngoingRescreening, null, null, ct);
+                await ScreenRecipientAsync(
+                    id,
+                    ScreeningReason.OngoingRescreening,
+                    initiatedByUserId,
+                    null,
+                    ct);
+
                 processed++;
             }
         }
 
         if (processed < batchSize)
         {
-            var beneficiaryIds = await DueBusinessBeneficiaryIds(cutoff).Take(batchSize - processed).ToListAsync(ct);
+            var beneficiaryIds = await DueBusinessBeneficiaryIds(cutoff)
+                .Take(batchSize - processed)
+                .ToListAsync(ct);
+
             foreach (var id in beneficiaryIds)
             {
-                await ScreenBusinessBeneficiaryAsync(id, ScreeningReason.OngoingRescreening, null, null, ct);
+                await ScreenBusinessBeneficiaryAsync(
+                    id,
+                    ScreeningReason.OngoingRescreening,
+                    initiatedByUserId,
+                    null,
+                    ct);
+
                 processed++;
             }
         }
 
         if (processed < batchSize)
         {
-            var ownerIds = await DueBusinessBeneficialOwnerIds(cutoff).Take(batchSize - processed).ToListAsync(ct);
+            var ownerIds = await DueBusinessBeneficialOwnerIds(cutoff)
+                .Take(batchSize - processed)
+                .ToListAsync(ct);
+
             foreach (var id in ownerIds)
             {
-                await ScreenBusinessBeneficialOwnerAsync(id, ScreeningReason.OngoingRescreening, null, null, ct);
+                await ScreenBusinessBeneficialOwnerAsync(
+                    id,
+                    ScreeningReason.OngoingRescreening,
+                    initiatedByUserId,
+                    null,
+                    ct);
+
                 processed++;
             }
         }
 
-        if (processed > 0)
+        if (auditOperatorAction)
+        {
+            _audit.Stage(new AuditRecordRequest(
+                "DUE_COMPLIANCE_RESCREENING_RUN",
+                "Compliance",
+                nameof(ScreeningRecord),
+                "DUE",
+                null,
+                new
+                {
+                    BatchSize = batchSize,
+                    Processed = processed,
+                    Reason = auditReason,
+                    ScreeningEnabled = true,
+                    Cutoff = cutoff
+                },
+                null,
+                initiatedByUserId));
+        }
+
+        if (processed > 0 || auditOperatorAction)
             await _db.SaveChangesAsync(ct);
+
         return processed;
     }
-
     private async Task<ScreeningRecordDto?> ScreenSubjectAsync(
         ScreeningSubjectSnapshot subject,
         ScreeningReason reason,

@@ -52,10 +52,20 @@ public class AdminRiskController : ControllerBase
     }
 
     [HttpPost("transfers/{transferId:guid}/reassess")]
-    public async Task<IActionResult> ReassessTransfer(Guid transferId, CancellationToken ct)
+    public async Task<IActionResult> ReassessTransfer(
+        Guid transferId,
+        [FromBody] ReassessTransferRiskRequestDto request,
+        CancellationToken ct)
     {
-        var result = await _riskService.ReassessAsync(transferId, GetUserId(), ct);
-        return Ok(ApiResponses.Ok(result, "Transfer risk reassessment completed successfully."));
+        var result = await _riskService.ReassessAsync(
+            transferId,
+            GetUserId(),
+            request.Reason,
+            ct);
+
+        return Ok(ApiResponses.Ok(
+            result,
+            "Transfer risk reassessment completed successfully."));
     }
 
     private Guid GetUserId()

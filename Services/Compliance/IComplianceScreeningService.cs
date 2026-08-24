@@ -70,4 +70,10 @@ public interface IComplianceScreeningService
     Task<int> RunDueRescreeningAsync(
         int batchSize,
         CancellationToken ct = default);
+
+    Task<int> RunDueRescreeningAsync(
+        int batchSize,
+        Guid initiatedByUserId,
+        string reason,
+        CancellationToken ct = default);
 }

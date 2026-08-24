@@ -143,11 +143,18 @@ public sealed class AdminComplianceCasesController : ControllerBase
 
     [HttpPost("screenings/rescreen-due")]
     public async Task<IActionResult> RescreenDue(
-        [FromQuery] int batchSize = 50,
+        [FromBody] RunDueRescreeningRequestDto request,
         CancellationToken ct = default)
     {
-        var count = await _screeningService.RunDueRescreeningAsync(batchSize, ct);
-        return Ok(ApiResponses.Ok(new { Processed = count }, "Due screening subjects processed successfully."));
+        var count = await _screeningService.RunDueRescreeningAsync(
+            request.BatchSize,
+            GetUserId(),
+            request.Reason,
+            ct);
+
+        return Ok(ApiResponses.Ok(
+            new { Processed = count },
+            "Due screening subjects processed successfully."));
     }
 
     private Guid GetUserId()

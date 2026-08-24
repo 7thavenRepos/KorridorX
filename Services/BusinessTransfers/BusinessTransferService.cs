@@ -31,6 +31,7 @@ public class BusinessTransferService : IBusinessTransferService
     private readonly ITransferRiskService _transferRiskService;
     private readonly IComplianceScreeningService _screeningService;
     private readonly ITransactionMonitoringService _transactionMonitoringService;
+    private readonly IOutboundFundsRestrictionService _outboundFundsRestrictions;
 
     public BusinessTransferService(
         AppDbContext db,
@@ -42,7 +43,8 @@ public class BusinessTransferService : IBusinessTransferService
         IComplianceLimitService complianceLimitService,
         ITransferRiskService transferRiskService,
         IComplianceScreeningService screeningService,
-        ITransactionMonitoringService transactionMonitoringService)
+        ITransactionMonitoringService transactionMonitoringService,
+        IOutboundFundsRestrictionService outboundFundsRestrictions)
     {
         _db = db;
         _accessService = accessService;
@@ -54,6 +56,7 @@ public class BusinessTransferService : IBusinessTransferService
         _transferRiskService = transferRiskService;
         _screeningService = screeningService;
         _transactionMonitoringService = transactionMonitoringService;
+        _outboundFundsRestrictions = outboundFundsRestrictions;
     }
 
     public async Task<TransferQuoteDto> CreateQuoteAsync(
@@ -158,6 +161,12 @@ public class BusinessTransferService : IBusinessTransferService
         CancellationToken ct = default)
     {
         var access = await _accessService.EnsurePermissionAsync(userId, BusinessPermission.CreateTransfers, ct);
+
+        await _outboundFundsRestrictions.EnsureBusinessOutboundAllowedAsync(
+            access.BusinessProfileId,
+            "business_transfer_create",
+            ct);
+
         ValidateDestinationSelection(request.BusinessBeneficiaryBankAccountId, request.BusinessBeneficiaryMobileWalletId);
 
         if (!Enum.IsDefined(typeof(TransferPurpose), request.Purpose))

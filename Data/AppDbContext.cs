@@ -105,6 +105,7 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<Guid
     public DbSet<BusinessBeneficiaryBankAccount> BusinessBeneficiaryBankAccounts => Set<BusinessBeneficiaryBankAccount>();
     public DbSet<BusinessBeneficiaryMobileWallet> BusinessBeneficiaryMobileWallets => Set<BusinessBeneficiaryMobileWallet>();
     public DbSet<ComplianceLimit> ComplianceLimits => Set<ComplianceLimit>();
+    public DbSet<OutboundFundsRestriction> OutboundFundsRestrictions => Set<OutboundFundsRestriction>();
     public DbSet<ComplianceCheck> ComplianceChecks => Set<ComplianceCheck>();
     public DbSet<AmlFlag> AmlFlags => Set<AmlFlag>();
     public DbSet<ScreeningRecord> ScreeningRecords => Set<ScreeningRecord>();

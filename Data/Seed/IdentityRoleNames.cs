@@ -6,6 +6,7 @@ public static class IdentityRoleNames
     public const string Business = "Business";
     public const string BusinessAdmin = "BusinessAdmin";
     public const string Compliance = "Compliance";
+    public const string InternalAudit = "InternalAudit";
     public const string Support = "Support";
     public const string Operations = "Operations";
     public const string Admin = "Admin";
@@ -17,6 +18,7 @@ public static class IdentityRoleNames
         Business,
         BusinessAdmin,
         Compliance,
+        InternalAudit,
         Support,
         Operations,
         Admin,

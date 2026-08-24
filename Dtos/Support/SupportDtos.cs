@@ -25,6 +25,9 @@ public sealed class AdminAddSupportMessageRequestDto : AddSupportMessageRequestD
 public sealed class AssignSupportTicketRequestDto
 {
     public Guid? AssignedToUserId { get; set; }
+
+    [Required, MaxLength(1000)]
+    public string Reason { get; set; } = "";
 }
 
 public sealed class UpdateSupportTicketRequestDto
@@ -32,6 +35,9 @@ public sealed class UpdateSupportTicketRequestDto
     public SupportTicketStatus? Status { get; set; }
     public SupportTicketPriority? Priority { get; set; }
     public Guid? AssignedToUserId { get; set; }
+
+    [Required, MaxLength(1000)]
+    public string Reason { get; set; } = "";
 }
 
 public sealed class CreateTransferDisputeRequestDto
@@ -64,6 +70,9 @@ public sealed class UpdateTransferInvestigationRequestDto
     public Guid? AssignedToUserId { get; set; }
     [MaxLength(8000)] public string? Findings { get; set; }
     [MaxLength(200)] public string? ProviderCaseReference { get; set; }
+
+    [Required, MaxLength(1000)]
+    public string Reason { get; set; } = "";
 }
 
 public sealed class AddSupportEvidenceRequestDto
@@ -75,6 +84,14 @@ public sealed class AddSupportEvidenceRequestDto
     [MaxLength(2000)] public string? StorageUrl { get; set; }
 }
 
+public sealed class ProcessSupportSlaRequestDto
+{
+    [Range(1, 500)]
+    public int BatchSize { get; set; } = 100;
+
+    [Required, MaxLength(1000)]
+    public string Reason { get; set; } = "";
+}
 public sealed record SupportTicketListItemDto(
     Guid Id,
     string Reference,
@@ -159,6 +176,14 @@ public sealed record TransferInvestigationDto(
     DateTime? ResolvedAt,
     DateTime CreatedAt);
 
+public sealed record TransferDisputeDetailsDto(
+    TransferDisputeDto Dispute,
+    IReadOnlyList<SupportEvidenceDto> Evidence,
+    IReadOnlyList<TransferInvestigationDto> Investigations);
+
+public sealed record TransferInvestigationDetailsDto(
+    TransferInvestigationDto Investigation,
+    IReadOnlyList<SupportEvidenceDto> Evidence);
 public sealed record SupportOperationsSummaryDto(
     int OpenTickets,
     int UnassignedTickets,

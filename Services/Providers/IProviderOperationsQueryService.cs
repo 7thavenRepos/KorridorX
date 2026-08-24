@@ -30,4 +30,14 @@ public interface IProviderOperationsQueryService
         int page,
         int pageSize,
         CancellationToken ct = default);
+
+    Task<ProviderWebhookEventDetailsDto> GetWebhookEventAsync(
+        Guid webhookEventId,
+        CancellationToken ct = default);
+
+    Task<PagedResult<FailedPayoutRecoveryDto>> GetFailedPayoutsAsync(
+        string? search,
+        int page,
+        int pageSize,
+        CancellationToken ct = default);
 }

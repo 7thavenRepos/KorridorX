@@ -14,6 +14,7 @@ public static class MfaSecurityPolicy
             IdentityRoleNames.Business,
             IdentityRoleNames.BusinessAdmin,
             IdentityRoleNames.Compliance,
+            IdentityRoleNames.InternalAudit,
             IdentityRoleNames.Support,
             IdentityRoleNames.Operations,
             IdentityRoleNames.Admin,

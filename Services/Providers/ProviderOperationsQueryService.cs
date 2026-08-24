@@ -193,4 +193,96 @@ public class ProviderOperationsQueryService : IProviderOperationsQueryService
                 x.Attempts.Count))
             .PaginateAsync(page, pageSize, ct);
     }
+
+    public async Task<ProviderWebhookEventDetailsDto> GetWebhookEventAsync(
+        Guid webhookEventId,
+        CancellationToken ct = default)
+    {
+        var webhook = await _db.WebhookEvents
+            .AsNoTracking()
+            .Include(x => x.Attempts)
+            .FirstOrDefaultAsync(x =>
+                x.Id == webhookEventId &&
+                x.ProviderCode == ProviderCode.Blaaiz &&
+                !x.IsDeleted,
+                ct);
+
+        if (webhook is null)
+        {
+            throw new InvalidOperationException("Provider webhook event not found.");
+        }
+
+        var summary = new ProviderWebhookEventDto(
+            webhook.Id,
+            webhook.ProviderCode,
+            webhook.ProviderEventId,
+            webhook.EventType,
+            webhook.ProcessingStatus,
+            webhook.IsDuplicate,
+            webhook.ReceivedAt,
+            webhook.ProcessedAt,
+            webhook.ErrorMessage,
+            webhook.Attempts.Count);
+
+        var attempts = webhook.Attempts
+            .Where(x => !x.IsDeleted)
+            .OrderByDescending(x => x.StartedAt)
+            .Select(x => new ProviderWebhookProcessingAttemptDto(
+                x.Id,
+                x.Status,
+                x.ErrorMessage,
+                x.StartedAt,
+                x.FinishedAt))
+            .ToArray();
+
+        return new ProviderWebhookEventDetailsDto(
+            summary,
+            webhook.RawPayloadJson,
+            attempts);
+    }
+
+    public async Task<PagedResult<FailedPayoutRecoveryDto>> GetFailedPayoutsAsync(
+        string? search,
+        int page,
+        int pageSize,
+        CancellationToken ct = default)
+    {
+        var query = _db.Payouts
+            .AsNoTracking()
+            .Where(x =>
+                !x.IsDeleted &&
+                x.Purpose == PaymentOperationPurpose.Remittance &&
+                x.Status == PayoutStatus.Failed);
+
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var value = search.Trim().ToLower();
+
+            query = query.Where(x =>
+                x.Reference.ToLower().Contains(value) ||
+                (x.ProviderPayoutId != null && x.ProviderPayoutId.ToLower().Contains(value)) ||
+                (x.ProviderReference != null && x.ProviderReference.ToLower().Contains(value)) ||
+                (x.FailureReason != null && x.FailureReason.ToLower().Contains(value)) ||
+                (x.Transfer != null && x.Transfer.Reference.ToLower().Contains(value)));
+        }
+
+        return await query
+            .OrderByDescending(x => x.FailedAt ?? x.CreatedAt)
+            .Select(x => new FailedPayoutRecoveryDto(
+                x.Id,
+                x.TransferId,
+                x.Transfer == null ? null : x.Transfer.Reference,
+                x.Reference,
+                x.CurrencyCode,
+                x.Amount,
+                x.Status,
+                x.ProviderCode,
+                x.ProviderPayoutId,
+                x.ProviderReference,
+                x.FailureReason,
+                x.FailedAt,
+                x.Attempts.Count,
+                x.CreatedAt))
+            .PaginateAsync(page, pageSize, ct);
+    }
 }

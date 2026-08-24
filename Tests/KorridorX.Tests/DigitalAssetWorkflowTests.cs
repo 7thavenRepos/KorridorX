@@ -566,6 +566,151 @@ public sealed class DigitalAssetWorkflowTests
             x.ProviderTransactionId == cleanProviderTx);
     }
 
+    [DatabaseIntegrationFact]
+    public async Task Country_asset_blocks_deposit_creation_when_can_deposit_is_false()
+    {
+        await using var scope = _fixture.Factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        var setup = await CreateScenarioAsync(db, "country-deposit-block", 0m);
+
+        var mapping = await db.CountryAssets.SingleAsync(x =>
+            x.CountryCode == "CA" &&
+            x.AssetCode == setup.AssetCode);
+
+        mapping.CanDeposit = false;
+        await db.SaveChangesAsync();
+        db.ChangeTracker.Clear();
+
+        var provider = new FakeDigitalAssetProvider(
+            "TESTCHAIN",
+            $"0x{Guid.NewGuid():N}");
+
+        var service = CreateService(
+            scope,
+            db,
+            setup.ProfileId,
+            EmbeddedFinanceScope.DigitalAssetsRead |
+            EmbeddedFinanceScope.DigitalAssetsWrite,
+            provider);
+
+        var blocked = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            service.CreateDepositAddressAsync(
+                setup.CustomerId,
+                new CreateDigitalAssetDepositAddressRequestDto(
+                    setup.AccountId,
+                    setup.NetworkId,
+                    provider.ProviderCode)));
+
+        Assert.Contains(
+            "deposits are not enabled",
+            blocked.Message,
+            StringComparison.OrdinalIgnoreCase);
+
+        Assert.Equal(0, provider.DepositAddressCreateCalls);
+    }
+
+    [DatabaseIntegrationFact]
+    public async Task Country_asset_blocks_withdrawal_destination_when_can_withdraw_is_false()
+    {
+        await using var scope = _fixture.Factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        var setup = await CreateScenarioAsync(db, "country-destination-block", 100m);
+
+        var mapping = await db.CountryAssets.SingleAsync(x =>
+            x.CountryCode == "CA" &&
+            x.AssetCode == setup.AssetCode);
+
+        mapping.CanWithdraw = false;
+        await db.SaveChangesAsync();
+        db.ChangeTracker.Clear();
+
+        var provider = new FakeDigitalAssetProvider(
+            "TESTCHAIN",
+            $"0x{Guid.NewGuid():N}",
+            $"wd-{Guid.NewGuid():N}",
+            $"0x{Guid.NewGuid():N}");
+
+        var service = CreateService(
+            scope,
+            db,
+            setup.ProfileId,
+            EmbeddedFinanceScope.DigitalAssetsRead |
+            EmbeddedFinanceScope.DigitalAssetsWrite,
+            provider);
+
+        var blocked = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            service.CreateWithdrawalDestinationAsync(
+                setup.CustomerId,
+                new CreateDigitalAssetWithdrawalDestinationRequestDto(
+                    setup.NetworkId,
+                    $"0x{Guid.NewGuid():N}",
+                    null,
+                    "Blocked country target")));
+
+        Assert.Contains(
+            "withdrawals are not enabled",
+            blocked.Message,
+            StringComparison.OrdinalIgnoreCase);
+    }
+
+    [DatabaseIntegrationFact]
+    public async Task Country_asset_is_rechecked_when_withdrawal_is_submitted()
+    {
+        await using var scope = _fixture.Factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        var setup = await CreateScenarioAsync(db, "country-withdraw-recheck", 100m);
+
+        var provider = new FakeDigitalAssetProvider(
+            "TESTCHAIN",
+            $"0x{Guid.NewGuid():N}",
+            $"wd-{Guid.NewGuid():N}",
+            $"0x{Guid.NewGuid():N}");
+
+        var service = CreateService(
+            scope,
+            db,
+            setup.ProfileId,
+            EmbeddedFinanceScope.DigitalAssetsRead |
+            EmbeddedFinanceScope.DigitalAssetsWrite,
+            provider);
+
+        var destination = await service.CreateWithdrawalDestinationAsync(
+            setup.CustomerId,
+            new CreateDigitalAssetWithdrawalDestinationRequestDto(
+                setup.NetworkId,
+                $"0x{Guid.NewGuid():N}",
+                null,
+                "Initially allowed target"));
+
+        var mapping = await db.CountryAssets.SingleAsync(x =>
+            x.CountryCode == "CA" &&
+            x.AssetCode == setup.AssetCode);
+
+        mapping.CanWithdraw = false;
+        await db.SaveChangesAsync();
+        db.ChangeTracker.Clear();
+
+        var blocked = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            service.CreateWithdrawalAsync(
+                setup.CustomerId,
+                new CreateDigitalAssetWithdrawalRequestDto(
+                    setup.AccountId,
+                    destination.Id,
+                    10m,
+                    provider.ProviderCode,
+                    null)));
+
+        Assert.Contains(
+            "withdrawals are not enabled",
+            blocked.Message,
+            StringComparison.OrdinalIgnoreCase);
+
+        Assert.Equal(0, provider.WithdrawalSubmitCalls);
+    }
+
     private DigitalAssetService CreateService(
         AsyncServiceScope scope,
         AppDbContext db,
@@ -682,6 +827,16 @@ public sealed class DigitalAssetWorkflowTests
         db.Assets.Add(asset);
         db.AssetNetworks.Add(network);
         db.FinancialAccounts.Add(account);
+        db.CountryAssets.Add(new CountryAsset
+        {
+            CountryCode = customer.CountryCode,
+            Asset = asset,
+            AssetCode = assetCode,
+            CanDeposit = true,
+            CanWithdraw = true,
+            CanTrade = true,
+            CanUseInstant = true
+        });
 
         await db.SaveChangesAsync();
         db.ChangeTracker.Clear();

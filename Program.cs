@@ -13,6 +13,7 @@ using KorridorX.Providers.Remittance.Blaaiz;
 using KorridorX.Providers.Screening;
 using KorridorX.Services.Auth;
 using KorridorX.Services.Audit;
+using KorridorX.Services.AdminUsers;
 using KorridorX.Services.BusinessContext;
 using KorridorX.Services.BusinessBeneficiaries;
 using KorridorX.Services.BusinessTransfers;
@@ -310,6 +311,7 @@ builder.Services.AddScoped<IDigitalAssetSettlementService, DigitalAssetService>(
 builder.Services.AddScoped<IDigitalAssetDepositIntentSettlementService, DigitalAssetService>();
 builder.Services.AddScoped<IDigitalAssetReconciliationService, DigitalAssetReconciliationService>();
 builder.Services.AddScoped<IDigitalAssetProviderOperationsService, DigitalAssetProviderOperationsService>();
+builder.Services.AddScoped<IDigitalAssetEnablementService, DigitalAssetEnablementService>();
 builder.Services.AddScoped<IDigitalAssetProviderWebhookService, DigitalAssetProviderWebhookService>();
 builder.Services.AddScoped<IMarketplaceSettlementService, MarketplaceSettlementService>();
 builder.Services.AddScoped<IMarketplaceOperationsService, MarketplaceOperationsService>();
@@ -319,6 +321,7 @@ builder.Services.AddScoped<IBusinessTradingRfqService, BusinessTradingRfqService
 builder.Services.AddScoped<IBusinessPricingService, BusinessPricingService>();
 builder.Services.AddScoped<IInstantTradingService, InstantTradingService>();
 builder.Services.AddScoped<IEmbeddedFinanceManagementService, EmbeddedFinanceManagementService>();
+builder.Services.AddScoped<IEmbeddedFinanceAdminQueryService, EmbeddedFinanceAdminQueryService>();
 builder.Services.AddScoped<IEmbeddedFinanceCustomerService, EmbeddedFinanceCustomerService>();
 builder.Services.AddScoped<IEmbeddedFinanceCredentialAuthenticator, EmbeddedFinanceCredentialAuthenticator>();
 builder.Services.AddScoped<IEmbeddedFinanceContextAccessor, HttpEmbeddedFinanceContextAccessor>();
@@ -346,6 +349,7 @@ builder.Services.AddScoped<INotificationQueueService, NotificationQueueService>(
 builder.Services.AddScoped<INotificationOperationsService, NotificationOperationsService>();
 builder.Services.AddScoped<INotificationDeliveryProvider, SmtpNotificationDeliveryProvider>();
 builder.Services.AddScoped<IAuditService, AuditService>();
+builder.Services.AddScoped<IAdminUserManagementService, AdminUserManagementService>();
 builder.Services.AddScoped<IOperationalHealthService, OperationalHealthService>();
 builder.Services.AddScoped<IBusinessContextAccessor, HttpBusinessContextAccessor>();
 builder.Services.AddScoped<ITransferQuoteService, TransferQuoteService>();
@@ -358,6 +362,7 @@ builder.Services.AddScoped<ITransferStatusService, TransferStatusService>();
 builder.Services.AddScoped<ITransferService, TransferService>();
 // Required by collection, payout, and business-funding services.
 builder.Services.AddScoped<IComplianceGateService, ComplianceGateService>();
+builder.Services.AddScoped<IOutboundFundsRestrictionService, OutboundFundsRestrictionService>();
 builder.Services.AddScoped<IComplianceLimitService, ComplianceLimitService>();
 builder.Services.AddScoped<IComplianceCaseService, ComplianceCaseService>();
 builder.Services.AddScoped<IComplianceScreeningService, ComplianceScreeningService>();
@@ -365,6 +370,7 @@ builder.Services.AddScoped<ITransactionMonitoringService, TransactionMonitoringS
 builder.Services.AddScoped<IRegulatoryReportingService, RegulatoryReportingService>();
 builder.Services.AddScoped<IDataRetentionService, DataRetentionService>();
 builder.Services.AddScoped<IComplianceManagementReportService, ComplianceManagementReportService>();
+builder.Services.AddScoped<IComplianceOperationsQueryService, ComplianceOperationsQueryService>();
 builder.Services.AddScoped<ITransferRiskService, TransferRiskService>();
 builder.Services.AddScoped<ISupportService, SupportService>();
 builder.Services.AddScoped<IAdminSupportService, AdminSupportService>();

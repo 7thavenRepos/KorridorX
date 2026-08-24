@@ -84,6 +84,18 @@ public record ProviderWebhookEventDto(
     string? ErrorMessage,
     int AttemptCount);
 
+public record ProviderWebhookProcessingAttemptDto(
+    Guid Id,
+    WebhookProcessingStatus Status,
+    string? ErrorMessage,
+    DateTime StartedAt,
+    DateTime? FinishedAt);
+
+public record ProviderWebhookEventDetailsDto(
+    ProviderWebhookEventDto Event,
+    string RawPayloadJson,
+    IReadOnlyList<ProviderWebhookProcessingAttemptDto> Attempts);
+
 public record ProviderWebhookReplayDto(
     string ProviderTransactionId,
     string Message,
@@ -94,3 +106,22 @@ public record ManualReconciliationDto(
     bool Updated,
     string ProviderStatus,
     DateTime ReconciledAt);
+
+public record FailedPayoutRecoveryDto(
+    Guid Id,
+    Guid? TransferId,
+    string? TransferReference,
+    string Reference,
+    string CurrencyCode,
+    decimal Amount,
+    PayoutStatus Status,
+    string ProviderCode,
+    string? ProviderPayoutId,
+    string? ProviderReference,
+    string? FailureReason,
+    DateTime? FailedAt,
+    int AttemptCount,
+    DateTime CreatedAt);
+
+public sealed record ProviderAdminActionRequestDto(
+    string Reason);

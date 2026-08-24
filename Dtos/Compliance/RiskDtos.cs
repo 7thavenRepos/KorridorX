@@ -46,6 +46,12 @@ public class ReviewAmlFlagRequestDto
     [MaxLength(1000)]
     public string Note { get; set; } = string.Empty;
 }
+public class ReassessTransferRiskRequestDto
+{
+    [Required]
+    [MaxLength(1000)]
+    public string Reason { get; set; } = string.Empty;
+}
 
 public record ComplianceLimitDto(
     Guid Id,

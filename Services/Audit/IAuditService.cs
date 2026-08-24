@@ -15,10 +15,17 @@ public interface IAuditService
         string? category,
         string? action,
         string? entityName,
+        string? entityId,
         Guid? userId,
+        string? correlationId,
+        string? search,
         DateTime? from,
         DateTime? to,
         int page,
         int pageSize,
+        CancellationToken ct = default);
+
+    Task<AuditLogDto> GetByIdAsync(
+        Guid auditLogId,
         CancellationToken ct = default);
 }

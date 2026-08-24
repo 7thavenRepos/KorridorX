@@ -171,3 +171,13 @@ public sealed class ManualScreeningRequestDto
 
     public Guid? TransferId { get; set; }
 }
+
+public sealed class RunDueRescreeningRequestDto
+{
+    [Range(1, 500)]
+    public int BatchSize { get; set; } = 50;
+
+    [Required]
+    [MaxLength(1000)]
+    public string Reason { get; set; } = string.Empty;
+}

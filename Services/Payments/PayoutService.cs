@@ -32,6 +32,7 @@ public class PayoutService : IPayoutService
     private readonly IBusinessFundingService _businessFundingService;
     private readonly ITransferRiskService _transferRiskService;
     private readonly IComplianceScreeningService _screeningService;
+    private readonly IOutboundFundsRestrictionService _outboundFundsRestrictions;
     private readonly IReadOnlyDictionary<string, string> _payoutWalletIds;
 
     public PayoutService(
@@ -44,6 +45,7 @@ public class PayoutService : IPayoutService
         IBusinessFundingService businessFundingService,
         ITransferRiskService transferRiskService,
         IComplianceScreeningService screeningService,
+        IOutboundFundsRestrictionService outboundFundsRestrictions,
         IOptions<BlaaizOptions> blaaizOptions)
     {
         _db = db;
@@ -55,6 +57,7 @@ public class PayoutService : IPayoutService
         _businessFundingService = businessFundingService;
         _transferRiskService = transferRiskService;
         _screeningService = screeningService;
+        _outboundFundsRestrictions = outboundFundsRestrictions;
         _payoutWalletIds = blaaizOptions.Value.PayoutWalletIds;
     }
 
@@ -105,6 +108,7 @@ public class PayoutService : IPayoutService
 
         _transferRiskService.EnsureCanProceedToPayout(transfer);
         await _screeningService.EnsureTransferCanProceedToPayoutAsync(transfer, ct);
+        await EnsureTransferOutboundRestrictionAsync(transfer, ct);
 
         var destination = await ResolveDestinationAsync(transfer, changedByUserId, ct);
         if (destination.IsMobileWallet)
@@ -555,6 +559,41 @@ public class PayoutService : IPayoutService
             _ => throw new InvalidOperationException(
                 $"Automatic payout is not yet configured for {destinationCurrencyCode}.")
         };
+
+    private async Task EnsureTransferOutboundRestrictionAsync(
+        Transfer transfer,
+        CancellationToken ct)
+    {
+        if (transfer.BusinessCustomerId.HasValue)
+        {
+            await _outboundFundsRestrictions
+                .EnsureBusinessCustomerOutboundAllowedAsync(
+                    transfer.BusinessCustomerId.Value,
+                    "transfer_payout_dispatch",
+                    ct);
+            return;
+        }
+
+        if (transfer.BusinessProfileId.HasValue)
+        {
+            await _outboundFundsRestrictions
+                .EnsureBusinessOutboundAllowedAsync(
+                    transfer.BusinessProfileId.Value,
+                    "transfer_payout_dispatch",
+                    ct);
+            return;
+        }
+
+        var userId = transfer.CustomerProfile?.UserId
+            ?? throw new InvalidOperationException(
+                "Transfer customer user is missing.");
+
+        await _outboundFundsRestrictions
+            .EnsureUserOutboundAllowedAsync(
+                userId,
+                "transfer_payout_dispatch",
+                ct);
+    }
 
     private async Task<PayoutDestination> ResolveDestinationAsync(
         Transfer transfer,

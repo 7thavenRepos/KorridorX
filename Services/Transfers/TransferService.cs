@@ -21,6 +21,7 @@ public class TransferService : ITransferService
     private readonly ITransferRiskService _transferRiskService;
     private readonly IComplianceScreeningService _screeningService;
     private readonly ITransactionMonitoringService _transactionMonitoringService;
+    private readonly IOutboundFundsRestrictionService _outboundFundsRestrictions;
 
     public TransferService(
         AppDbContext db,
@@ -29,7 +30,8 @@ public class TransferService : ITransferService
         IComplianceLimitService complianceLimitService,
         ITransferRiskService transferRiskService,
         IComplianceScreeningService screeningService,
-        ITransactionMonitoringService transactionMonitoringService)
+        ITransactionMonitoringService transactionMonitoringService,
+        IOutboundFundsRestrictionService outboundFundsRestrictions)
     {
         _db = db;
         _referenceGenerator = referenceGenerator;
@@ -38,6 +40,7 @@ public class TransferService : ITransferService
         _transferRiskService = transferRiskService;
         _screeningService = screeningService;
         _transactionMonitoringService = transactionMonitoringService;
+        _outboundFundsRestrictions = outboundFundsRestrictions;
     }
 
     public async Task<TransferDetailsDto> CreateTransferAsync(
@@ -67,6 +70,11 @@ public class TransferService : ITransferService
         {
             throw new InvalidOperationException("Customer profile not found.");
         }
+
+        await _outboundFundsRestrictions.EnsureUserOutboundAllowedAsync(
+            userId,
+            "consumer_transfer_create",
+            ct);
 
         var quote = await _db.TransferQuotes
             .FirstOrDefaultAsync(x =>

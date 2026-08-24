@@ -195,6 +195,7 @@ public sealed class DigitalAssetProviderComplianceTests
             {
                 ProviderCode = providerCode.ToLowerInvariant(),
                 DisplayName = "Slice 12A Test Provider",
+                Reason = "Provider configuration integration test.",
                 BaseUrl = "https://provider.example.test",
                 WebhookSecret = secret,
                 IsActive = true,
@@ -318,6 +319,7 @@ public sealed class DigitalAssetProviderComplianceTests
             {
                 ProviderCode = providerCode,
                 DisplayName = "Webhook Test Provider",
+                Reason = "Webhook provider integration test.",
                 WebhookSecret = "webhook-secret-5678",
                 IsActive = true,
                 WebhooksEnabled = true,
@@ -415,6 +417,7 @@ public sealed class DigitalAssetProviderComplianceTests
             {
                 ProviderCode = providerCode,
                 DisplayName = "Signature Test Provider",
+                Reason = "Webhook signature integration test.",
                 WebhookSecret = "webhook-secret-9999",
                 IsActive = true,
                 WebhooksEnabled = true,

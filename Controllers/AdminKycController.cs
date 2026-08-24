@@ -21,12 +21,16 @@ public class AdminKycController : ControllerBase
     [HttpGet]
     public async Task<IActionResult> GetApplications(
         [FromQuery] KycStatus? status,
+        [FromQuery] string? countryCode,
+        [FromQuery] string? search,
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 20,
         CancellationToken ct = default)
     {
         var result = await _adminKycService.GetApplicationsAsync(
             status,
+            countryCode,
+            search,
             page,
             pageSize,
             ct);
@@ -42,8 +46,12 @@ public class AdminKycController : ControllerBase
         [FromRoute] Guid applicationId,
         CancellationToken ct)
     {
-        var result = await _adminKycService.GetApplicationAsync(applicationId, ct);
+        var result = await _adminKycService.GetApplicationAsync(
+            applicationId,
+            ct);
 
-        return Ok(ApiResponses.Ok(result, "KYC application retrieved successfully."));
+        return Ok(ApiResponses.Ok(
+            result,
+            "KYC application retrieved successfully."));
     }
 }

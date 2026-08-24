@@ -24,6 +24,12 @@ public sealed class NotificationOperationsService : INotificationOperationsServi
 
     public async Task<PagedResult<NotificationMessageDto>> GetAsync(
         string? status,
+        string? channel,
+        string? search,
+        string? relatedEntityType,
+        string? relatedEntityId,
+        DateTime? from,
+        DateTime? to,
         int page,
         int pageSize,
         CancellationToken ct = default)
@@ -36,6 +42,53 @@ public sealed class NotificationOperationsService : INotificationOperationsServi
         {
             var normalized = status.Trim();
             query = query.Where(x => x.Status == normalized);
+        }
+
+        if (!string.IsNullOrWhiteSpace(channel))
+        {
+            var normalized = channel.Trim();
+            query = query.Where(x => x.Channel == normalized);
+        }
+
+        if (!string.IsNullOrWhiteSpace(relatedEntityType))
+        {
+            var normalized = relatedEntityType.Trim();
+            query = query.Where(x => x.RelatedEntityType == normalized);
+        }
+
+        if (!string.IsNullOrWhiteSpace(relatedEntityId))
+        {
+            var normalized = relatedEntityId.Trim();
+            query = query.Where(x => x.RelatedEntityId == normalized);
+        }
+
+        if (from.HasValue)
+        {
+            var value = from.Value.ToUniversalTime();
+            query = query.Where(x => x.CreatedAt >= value);
+        }
+
+        if (to.HasValue)
+        {
+            var value = to.Value.ToUniversalTime();
+            query = query.Where(x => x.CreatedAt <= value);
+        }
+
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var value = search.Trim().ToLowerInvariant();
+
+            query = query.Where(x =>
+                x.Recipient.ToLower().Contains(value) ||
+                x.Subject.ToLower().Contains(value) ||
+                (x.ProviderMessageId != null &&
+                 x.ProviderMessageId.ToLower().Contains(value)) ||
+                (x.RelatedEntityType != null &&
+                 x.RelatedEntityType.ToLower().Contains(value)) ||
+                (x.RelatedEntityId != null &&
+                 x.RelatedEntityId.ToLower().Contains(value)) ||
+                (x.ErrorMessage != null &&
+                 x.ErrorMessage.ToLower().Contains(value)));
         }
 
         return await query
@@ -64,19 +117,68 @@ public sealed class NotificationOperationsService : INotificationOperationsServi
             .PaginateAsync(page, pageSize, ct);
     }
 
-    public async Task<NotificationMessageDto> RetryAsync(
+    public async Task<NotificationMessageDto> GetByIdAsync(
         Guid notificationId,
-        bool resetAttemptCount,
         CancellationToken ct = default)
     {
         var notification = await _db.NotificationMessages
-            .FirstOrDefaultAsync(x => x.Id == notificationId && !x.IsDeleted, ct)
+            .AsNoTracking()
+            .FirstOrDefaultAsync(
+                x => x.Id == notificationId && !x.IsDeleted,
+                ct)
+            ?? throw new InvalidOperationException("Notification not found.");
+
+        return ToDto(notification);
+    }
+
+    public async Task<NotificationMessageDto> RetryAsync(
+        Guid notificationId,
+        Guid initiatedByUserId,
+        bool resetAttemptCount,
+        string reason,
+        CancellationToken ct = default)
+    {
+        var cleanedReason = reason?.Trim();
+
+        if (string.IsNullOrWhiteSpace(cleanedReason))
+            throw new InvalidOperationException(
+                "A reason is required to retry a notification.");
+
+        if (cleanedReason.Length > 1000)
+            throw new InvalidOperationException(
+                "Reason cannot exceed 1000 characters.");
+
+        var notification = await _db.NotificationMessages
+            .FirstOrDefaultAsync(
+                x => x.Id == notificationId && !x.IsDeleted,
+                ct)
             ?? throw new InvalidOperationException("Notification not found.");
 
         if (notification.Status == NotificationStatuses.Sent)
-            throw new InvalidOperationException("A sent notification cannot be retried.");
+            throw new InvalidOperationException(
+                "A sent notification cannot be retried.");
+
         if (notification.Status == NotificationStatuses.Processing)
-            throw new InvalidOperationException("A notification currently being processed cannot be retried.");
+            throw new InvalidOperationException(
+                "A notification currently being processed cannot be retried.");
+
+        if (!resetAttemptCount &&
+            notification.MaxAttempts > 0 &&
+            notification.AttemptCount >= notification.MaxAttempts)
+        {
+            throw new InvalidOperationException(
+                "The notification has exhausted its retry limit. Reset the attempt count before retrying.");
+        }
+
+        var old = new
+        {
+            notification.Status,
+            notification.AttemptCount,
+            notification.MaxAttempts,
+            notification.NextAttemptAt,
+            notification.DeadLetteredAt,
+            notification.ErrorMessage
+        };
 
         notification.Status = NotificationStatuses.Retry;
         notification.NextAttemptAt = DateTime.UtcNow;
@@ -88,6 +190,7 @@ public sealed class NotificationOperationsService : INotificationOperationsServi
 
         if (resetAttemptCount)
             notification.AttemptCount = 0;
+
         if (notification.MaxAttempts <= 0)
             notification.MaxAttempts = 5;
 
@@ -96,13 +199,22 @@ public sealed class NotificationOperationsService : INotificationOperationsServi
             Category: "Notifications",
             EntityName: nameof(NotificationMessage),
             EntityId: notification.Id.ToString(),
+            OldValues: old,
             NewValues: new
             {
                 notification.Status,
                 notification.AttemptCount,
-                notification.NextAttemptAt
+                notification.MaxAttempts,
+                notification.NextAttemptAt,
+                notification.DeadLetteredAt,
+                notification.ErrorMessage
             },
-            Metadata: new { resetAttemptCount }));
+            Metadata: new
+            {
+                ResetAttemptCount = resetAttemptCount,
+                Reason = cleanedReason
+            },
+            UserId: initiatedByUserId));
 
         await _db.SaveChangesAsync(ct);
         return ToDto(notification);

@@ -33,5 +33,6 @@ public interface ITransferRiskService
     Task<TransferRiskDecisionDto> ReassessAsync(
         Guid transferId,
         Guid reviewedByUserId,
+        string reason,
         CancellationToken ct = default);
 }

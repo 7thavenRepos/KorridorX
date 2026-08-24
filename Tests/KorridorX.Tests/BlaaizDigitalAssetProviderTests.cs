@@ -990,6 +990,46 @@ public sealed class BlaaizDigitalAssetProviderTests
             LastSyncedAt = DateTime.UtcNow
         };
 
+        var countryAsset = await db.CountryAssets
+            .FirstOrDefaultAsync(x =>
+                x.CountryCode == customer.CountryCode &&
+                x.AssetCode == assetCode);
+
+        var countryAssetWasCreated = countryAsset is null;
+
+        bool? originalCountryCanDeposit = null;
+        bool? originalCountryCanWithdraw = null;
+        bool? originalCountryCanTrade = null;
+        bool? originalCountryCanUseInstant = null;
+
+        if (countryAsset is null)
+        {
+            countryAsset = new CountryAsset
+            {
+                CountryCode = customer.CountryCode,
+                Asset = asset,
+                AssetCode = assetCode,
+                CanDeposit = true,
+                CanWithdraw = true,
+                CanTrade = true,
+                CanUseInstant = true
+            };
+
+            db.CountryAssets.Add(countryAsset);
+        }
+        else
+        {
+            originalCountryCanDeposit = countryAsset.CanDeposit;
+            originalCountryCanWithdraw = countryAsset.CanWithdraw;
+            originalCountryCanTrade = countryAsset.CanTrade;
+            originalCountryCanUseInstant = countryAsset.CanUseInstant;
+
+            countryAsset.CanDeposit = true;
+            countryAsset.CanWithdraw = true;
+            countryAsset.CanTrade = true;
+            countryAsset.CanUseInstant = true;
+        }
+
         db.BusinessProfiles.Add(profile);
         db.BusinessCustomers.Add(customer);
 
@@ -1016,7 +1056,12 @@ public sealed class BlaaizDigitalAssetProviderTests
             originalAssetType,
             originalIsSupported,
             originalDepositEnabled,
-            originalWithdrawalEnabled);
+            originalWithdrawalEnabled,
+            countryAssetWasCreated,
+            originalCountryCanDeposit,
+            originalCountryCanWithdraw,
+            originalCountryCanTrade,
+            originalCountryCanUseInstant);
     }
 
     private static BlaaizCryptoWalletListResponse CryptoWalletResponse(
@@ -1089,6 +1134,11 @@ public sealed class BlaaizDigitalAssetProviderTests
         private readonly bool? _originalIsSupported;
         private readonly bool? _originalDepositEnabled;
         private readonly bool? _originalWithdrawalEnabled;
+        private readonly bool _countryAssetWasCreated;
+        private readonly bool? _originalCountryCanDeposit;
+        private readonly bool? _originalCountryCanWithdraw;
+        private readonly bool? _originalCountryCanTrade;
+        private readonly bool? _originalCountryCanUseInstant;
         private bool _disposed;
 
         public Scenario(
@@ -1104,7 +1154,12 @@ public sealed class BlaaizDigitalAssetProviderTests
             AssetType? originalAssetType,
             bool? originalIsSupported,
             bool? originalDepositEnabled,
-            bool? originalWithdrawalEnabled)
+            bool? originalWithdrawalEnabled,
+            bool countryAssetWasCreated,
+            bool? originalCountryCanDeposit,
+            bool? originalCountryCanWithdraw,
+            bool? originalCountryCanTrade,
+            bool? originalCountryCanUseInstant)
         {
             _db = db;
             ProfileId = profileId;
@@ -1119,6 +1174,11 @@ public sealed class BlaaizDigitalAssetProviderTests
             _originalIsSupported = originalIsSupported;
             _originalDepositEnabled = originalDepositEnabled;
             _originalWithdrawalEnabled = originalWithdrawalEnabled;
+            _countryAssetWasCreated = countryAssetWasCreated;
+            _originalCountryCanDeposit = originalCountryCanDeposit;
+            _originalCountryCanWithdraw = originalCountryCanWithdraw;
+            _originalCountryCanTrade = originalCountryCanTrade;
+            _originalCountryCanUseInstant = originalCountryCanUseInstant;
         }
 
         public Guid ProfileId { get; }
@@ -1131,30 +1191,60 @@ public sealed class BlaaizDigitalAssetProviderTests
 
         public async ValueTask DisposeAsync()
         {
-            if (_disposed || _assetWasCreated)
+            if (_disposed)
                 return;
 
             _disposed = true;
 
             _db.ChangeTracker.Clear();
 
-            var asset = await _db.Assets
-                .FirstOrDefaultAsync(x => x.Code == AssetCode);
+            var countryAsset = await _db.CountryAssets
+                .FirstOrDefaultAsync(x =>
+                    x.CountryCode == "CA" &&
+                    x.AssetCode == AssetCode);
 
-            if (asset is null)
-                return;
+            if (countryAsset is not null)
+            {
+                if (_countryAssetWasCreated)
+                {
+                    _db.CountryAssets.Remove(countryAsset);
+                }
+                else
+                {
+                    if (_originalCountryCanDeposit.HasValue)
+                        countryAsset.CanDeposit = _originalCountryCanDeposit.Value;
 
-            if (_originalAssetType.HasValue)
-                asset.Type = _originalAssetType.Value;
+                    if (_originalCountryCanWithdraw.HasValue)
+                        countryAsset.CanWithdraw = _originalCountryCanWithdraw.Value;
 
-            if (_originalIsSupported.HasValue)
-                asset.IsSupported = _originalIsSupported.Value;
+                    if (_originalCountryCanTrade.HasValue)
+                        countryAsset.CanTrade = _originalCountryCanTrade.Value;
 
-            if (_originalDepositEnabled.HasValue)
-                asset.DepositEnabled = _originalDepositEnabled.Value;
+                    if (_originalCountryCanUseInstant.HasValue)
+                        countryAsset.CanUseInstant = _originalCountryCanUseInstant.Value;
+                }
+            }
 
-            if (_originalWithdrawalEnabled.HasValue)
-                asset.WithdrawalEnabled = _originalWithdrawalEnabled.Value;
+            if (!_assetWasCreated)
+            {
+                var asset = await _db.Assets
+                    .FirstOrDefaultAsync(x => x.Code == AssetCode);
+
+                if (asset is not null)
+                {
+                    if (_originalAssetType.HasValue)
+                        asset.Type = _originalAssetType.Value;
+
+                    if (_originalIsSupported.HasValue)
+                        asset.IsSupported = _originalIsSupported.Value;
+
+                    if (_originalDepositEnabled.HasValue)
+                        asset.DepositEnabled = _originalDepositEnabled.Value;
+
+                    if (_originalWithdrawalEnabled.HasValue)
+                        asset.WithdrawalEnabled = _originalWithdrawalEnabled.Value;
+                }
+            }
 
             await _db.SaveChangesAsync();
             _db.ChangeTracker.Clear();

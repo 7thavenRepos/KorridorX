@@ -49,6 +49,14 @@ public class GlobalExceptionMiddleware
                 "UNAUTHORIZED",
                 ex.Message);
         }
+        catch (OutboundFundsRestrictedException ex)
+        {
+            await WriteErrorAsync(
+                context,
+                HttpStatusCode.Conflict,
+                ex.Code,
+                ex.Message);
+        }
         catch (ComplianceLimitExceededException ex)
         {
             await WriteErrorAsync(
