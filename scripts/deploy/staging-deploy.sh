@@ -8,6 +8,7 @@ cd "$project_dir"
 env_file=".env.staging"
 compose_file="docker-compose.staging.yml"
 migration_file="${KORRIDORX_MIGRATION_FILE:-artifacts/migrations.sql}"
+api_image_file="${KORRIDORX_API_IMAGE_FILE:-artifacts/korridorx-api-staging.tar.gz}"
 rollback_armed=false
 
 rollback_failed_deployment() {
@@ -31,6 +32,11 @@ fi
 
 if [[ ! -f "$migration_file" ]]; then
   echo "Missing $migration_file. Download migrations.sql from the successful GitHub CI artifact." >&2
+  exit 1
+fi
+
+if [[ ! -f "$api_image_file" ]]; then
+  echo "Missing $api_image_file. The staging API image must be built by GitHub CI." >&2
   exit 1
 fi
 
@@ -82,13 +88,22 @@ if [[ -n "$api_container" ]]; then
   rollback_armed=true
 fi
 
+echo "Loading CI-built staging API image..."
+gzip -dc "$api_image_file" | docker load
+
+loaded_image_id="$(docker image inspect korridorx-api:staging --format '{{.Id}}' 2>/dev/null || true)"
+if [[ -z "$loaded_image_id" ]]; then
+  echo "The CI image archive did not load korridorx-api:staging." >&2
+  exit 1
+fi
+echo "Loaded staging API image: $loaded_image_id"
+
 echo "Applying reviewed idempotent migration script..."
 "${compose[@]}" exec -T postgres sh -c \
   'PGPASSWORD="$POSTGRES_PASSWORD" psql --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" --set ON_ERROR_STOP=1' \
   < "$migration_file"
 
-"${compose[@]}" build --pull api
-"${compose[@]}" up -d --no-deps --force-recreate api
+"${compose[@]}" up -d --no-build --no-deps --force-recreate api
 
 api_port="$(sed -n 's/^API_PORT=//p' "$env_file" | tail -n 1)"
 api_port="${api_port:-8080}"

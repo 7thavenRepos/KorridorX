@@ -110,6 +110,18 @@ curl -fsS https://api.staging.korridorx.com/health/ready
 
 Rollback restores the previously tagged API image. It does not reverse database migrations. Prefer a forward-fix migration; restore the verified pre-deployment backup only when an incident plan explicitly requires it.
 
+### Staging API image build location
+
+The staging EC2 host does not compile the .NET application. After tests and
+migration validation pass, GitHub CI builds `korridorx-api:staging`, packages it
+as `artifacts/korridorx-api-staging.tar.gz`, and transfers that image to the
+staging host with `migrations.sql`.
+
+The staging host only performs the database backup, preserves the current API
+image as `korridorx-api:staging-rollback`, loads the CI-built image, applies the
+reviewed migration artifact, recreates the API container with `--no-build`, and
+runs readiness/smoke checks.
+
 ## 9. Automatic staging deployment
 
 Successful pushes to `develop` deploy the exact CI-tested commit to the existing
