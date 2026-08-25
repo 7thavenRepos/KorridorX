@@ -54,6 +54,11 @@ public sealed class CollectionAccountProvisioningService : ICollectionAccountPro
         if (existing?.Status == ProviderAccountMappingStatus.Active)
             return ToDto(existing);
 
+        EnsureProvisionableAccountStatus(account.Status);
+
+        if (existing?.Status == ProviderAccountMappingStatus.Pending)
+            return ToDto(existing);
+
         if (!_provisioners.TryGetValue(providerCode, out var provisioner))
             throw new InvalidOperationException(
                 $"Provider '{providerCode}' does not expose collection-account provisioning in this deployment.");
@@ -75,10 +80,57 @@ public sealed class CollectionAccountProvisioningService : ICollectionAccountPro
         mapping.Status = ProviderAccountMappingStatus.Pending;
         mapping.FailureReason = null;
         mapping.LastUpdatedAt = DateTime.UtcNow;
-        await _db.SaveChangesAsync(ct);
+        try
+        {
+            await _db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException)
+        {
+            _db.ChangeTracker.Clear();
+            var recovered = await RecoverConcurrentMappingAsync(
+                account.Id, providerCode, ct);
+            if (recovered is not null) return ToDto(recovered);
+            throw;
+        }
 
         try
         {
+            var dispatchState = await _db.CollectionAccounts
+                .AsNoTracking()
+                .Where(x =>
+                    x.Id == account.Id &&
+                    x.BusinessCustomerId == businessCustomerId &&
+                    x.BusinessProfileId == principal.BusinessProfileId &&
+                    !x.IsDeleted &&
+                    !x.BusinessCustomer.IsDeleted)
+                .Select(x => new
+                {
+                    x.Status,
+                    CustomerStatus = x.BusinessCustomer.Status
+                })
+                .FirstOrDefaultAsync(ct)
+                ?? throw new InvalidOperationException(
+                    "Collection account is no longer available for provisioning.");
+
+            if (dispatchState.CustomerStatus != BusinessCustomerStatus.Active)
+                throw new InvalidOperationException(
+                    "Business customer must be active before provider provisioning.");
+
+            EnsureProvisionableAccountStatus(dispatchState.Status);
+
+            var mappingStillPending = await _db.ProviderAccountMappings
+                .AsNoTracking()
+                .AnyAsync(x =>
+                    x.Id == mapping.Id &&
+                    x.CollectionAccountId == account.Id &&
+                    x.Status == ProviderAccountMappingStatus.Pending &&
+                    !x.IsDeleted,
+                    ct);
+
+            if (!mappingStillPending)
+                throw new InvalidOperationException(
+                    "Provider account mapping is no longer pending for provisioning.");
+
             var result = await provisioner.ProvisionAsync(
                 new CollectionAccountProvisioningRequest(
                     principal.BusinessProfileId,
@@ -147,6 +199,43 @@ public sealed class CollectionAccountProvisioningService : ICollectionAccountPro
                 x.AccountName, x.BankName, x.Status, x.FailureReason,
                 x.CreatedAt, x.LastUpdatedAt))
             .ToListAsync(ct);
+    }
+
+    private async Task<ProviderAccountMapping?> RecoverConcurrentMappingAsync(
+        Guid collectionAccountId,
+        string providerCode,
+        CancellationToken ct)
+    {
+        var mapping = await _db.ProviderAccountMappings
+            .AsNoTracking()
+            .FirstOrDefaultAsync(x =>
+                x.CollectionAccountId == collectionAccountId &&
+                x.ProviderCode == providerCode &&
+                !x.IsDeleted,
+                ct);
+
+        return mapping is not null &&
+               mapping.Status is ProviderAccountMappingStatus.Pending or ProviderAccountMappingStatus.Active
+            ? mapping
+            : null;
+    }
+
+    private static void EnsureProvisionableAccountStatus(
+        CollectionAccountStatus status)
+    {
+        if (status == CollectionAccountStatus.Pending)
+            return;
+
+        if (status == CollectionAccountStatus.Suspended)
+            throw new InvalidOperationException(
+                "Reactivate the collection account before provider provisioning.");
+
+        if (status == CollectionAccountStatus.Closed)
+            throw new InvalidOperationException(
+                "A closed collection account cannot be provisioned.");
+
+        throw new InvalidOperationException(
+            "Only pending collection accounts can be provisioned through the Embedded Finance API.");
     }
 
     private EmbeddedFinancePrincipal RequireScope(EmbeddedFinanceScope scope)

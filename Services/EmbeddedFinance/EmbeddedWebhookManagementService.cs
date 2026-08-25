@@ -96,6 +96,11 @@ public sealed class EmbeddedWebhookManagementService : IEmbeddedWebhookManagemen
     public async Task SetStatusAsync(Guid userId, Guid endpointId, bool enabled, CancellationToken ct = default)
     {
         var endpoint = await GetOwnedEndpointAsync(userId, endpointId, ct);
+
+        if (enabled && !IsApplicationActive(endpoint.ApiApplication))
+            throw new InvalidOperationException(
+                "Webhook endpoint cannot be enabled while its API application is not active.");
+
         endpoint.Status = enabled ? BusinessWebhookEndpointStatus.Active : BusinessWebhookEndpointStatus.Disabled;
         endpoint.LastUpdatedAt = DateTime.UtcNow;
         endpoint.LastUpdatedByUserId = userId;
@@ -121,11 +126,28 @@ public sealed class EmbeddedWebhookManagementService : IEmbeddedWebhookManagemen
     public async Task RetryDeliveryAsync(Guid userId, Guid deliveryId, CancellationToken ct = default)
     {
         var access = await _access.EnsurePermissionAsync(userId, BusinessPermission.ManageApiAccess, ct);
-        var delivery = await _db.BusinessWebhookDeliveries.Include(x => x.BusinessWebhookEndpoint)
-            .FirstOrDefaultAsync(x => x.Id == deliveryId && x.BusinessWebhookEndpoint.BusinessProfileId == access.BusinessProfileId && !x.IsDeleted, ct)
+        var delivery = await _db.BusinessWebhookDeliveries
+            .Include(x => x.BusinessWebhookEndpoint)
+                .ThenInclude(x => x.ApiApplication)
+            .FirstOrDefaultAsync(
+                x =>
+                    x.Id == deliveryId &&
+                    x.BusinessWebhookEndpoint.BusinessProfileId == access.BusinessProfileId &&
+                    !x.IsDeleted &&
+                    !x.BusinessWebhookEndpoint.IsDeleted,
+                ct)
             ?? throw new InvalidOperationException("Webhook delivery not found.");
+
         if (delivery.Status == BusinessWebhookDeliveryStatus.Delivered)
             throw new InvalidOperationException("Delivered webhook deliveries cannot be retried.");
+
+        if (delivery.BusinessWebhookEndpoint.Status != BusinessWebhookEndpointStatus.Active)
+            throw new InvalidOperationException(
+                "Webhook delivery cannot be retried while its endpoint is disabled.");
+
+        if (!IsApplicationActive(delivery.BusinessWebhookEndpoint.ApiApplication))
+            throw new InvalidOperationException(
+                "Webhook delivery cannot be retried while its API application is not active.");
         delivery.Status = BusinessWebhookDeliveryStatus.Pending;
         delivery.AttemptCount = 0;
         delivery.NextAttemptAt = DateTime.UtcNow;
@@ -137,10 +159,19 @@ public sealed class EmbeddedWebhookManagementService : IEmbeddedWebhookManagemen
     private async Task<BusinessWebhookEndpoint> GetOwnedEndpointAsync(Guid userId, Guid endpointId, CancellationToken ct)
     {
         var access = await _access.EnsurePermissionAsync(userId, BusinessPermission.ManageApiAccess, ct);
-        return await _db.BusinessWebhookEndpoints.FirstOrDefaultAsync(x =>
-            x.Id == endpointId && x.BusinessProfileId == access.BusinessProfileId && !x.IsDeleted, ct)
+        return await _db.BusinessWebhookEndpoints
+            .Include(x => x.ApiApplication)
+            .FirstOrDefaultAsync(x =>
+                x.Id == endpointId &&
+                x.BusinessProfileId == access.BusinessProfileId &&
+                !x.IsDeleted,
+                ct)
             ?? throw new InvalidOperationException("Webhook endpoint not found.");
     }
+
+    private static bool IsApplicationActive(ApiApplication application) =>
+        !application.IsDeleted &&
+        application.Status == ApiApplicationStatus.Active;
 
     private static string ValidateUrl(string value)
     {

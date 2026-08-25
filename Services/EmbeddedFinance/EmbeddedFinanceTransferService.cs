@@ -253,6 +253,10 @@ public sealed class EmbeddedFinanceTransferService : IEmbeddedFinanceTransferSer
 
         if (existingIdem is not null)
         {
+            if (!string.Equals(existingIdem.ResourceType, nameof(Transfer), StringComparison.Ordinal))
+                throw new InvalidOperationException(
+                    "The Idempotency-Key has already been used for a different operation.");
+
             if (!string.Equals(existingIdem.RequestHash, requestHash, StringComparison.OrdinalIgnoreCase))
                 throw new InvalidOperationException(
                     "The Idempotency-Key has already been used with a different request.");
@@ -378,8 +382,9 @@ public sealed class EmbeddedFinanceTransferService : IEmbeddedFinanceTransferSer
 
         await _limits.EnsureWithinLimitsAsync(transfer, ct);
 
-        await using (var tx = await _db.Database.BeginTransactionAsync(ct))
+        try
         {
+            await using var tx = await _db.Database.BeginTransactionAsync(ct);
             _db.Transfers.Add(transfer);
             _db.EmbeddedApiIdempotencyRecords.Add(new EmbeddedApiIdempotencyRecord
             {
@@ -448,6 +453,19 @@ public sealed class EmbeddedFinanceTransferService : IEmbeddedFinanceTransferSer
             await _db.SaveChangesAsync(ct);
             await tx.CommitAsync(ct);
         }
+        catch (DbUpdateException)
+        {
+            _db.ChangeTracker.Clear();
+            var recovered = await RecoverConcurrentIdempotentTransferAsync(
+                principal.ApiApplicationId,
+                principal.BusinessProfileId,
+                businessCustomerId,
+                key,
+                requestHash,
+                ct);
+            if (recovered is not null) return recovered;
+            throw;
+        }
 
         var dispatched = false;
         try
@@ -469,6 +487,44 @@ public sealed class EmbeddedFinanceTransferService : IEmbeddedFinanceTransferSer
             .FirstAsync(x => x.Id == transfer.Id, ct);
 
         return new EmbeddedTransferCreateResultDto(ToDto(fresh), dispatched);
+    }
+
+    private async Task<EmbeddedTransferCreateResultDto?> RecoverConcurrentIdempotentTransferAsync(
+        Guid apiApplicationId,
+        Guid businessProfileId,
+        Guid businessCustomerId,
+        string idempotencyKey,
+        string requestHash,
+        CancellationToken ct)
+    {
+        var idem = await _db.EmbeddedApiIdempotencyRecords
+            .AsNoTracking()
+            .FirstOrDefaultAsync(x =>
+                x.ApiApplicationId == apiApplicationId &&
+                x.IdempotencyKey == idempotencyKey &&
+                !x.IsDeleted,
+                ct);
+
+        if (idem is null) return null;
+        if (!string.Equals(idem.ResourceType, nameof(Transfer), StringComparison.Ordinal))
+            throw new InvalidOperationException(
+                "The Idempotency-Key has already been used for a different operation.");
+        if (!string.Equals(idem.RequestHash, requestHash, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException(
+                "The Idempotency-Key has already been used with a different request.");
+
+        var existing = await _db.Transfers
+            .AsNoTracking()
+            .FirstOrDefaultAsync(x =>
+                x.Id == idem.ResourceId &&
+                x.BusinessProfileId == businessProfileId &&
+                x.BusinessCustomerId == businessCustomerId &&
+                !x.IsDeleted,
+                ct)
+            ?? throw new InvalidOperationException(
+                "Idempotent embedded transfer resource was not found after concurrent creation.");
+
+        return new EmbeddedTransferCreateResultDto(ToDto(existing), false);
     }
 
     private EmbeddedFinancePrincipal RequireScope(EmbeddedFinanceScope scope)

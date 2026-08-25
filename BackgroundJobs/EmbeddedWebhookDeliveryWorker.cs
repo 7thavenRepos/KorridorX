@@ -57,7 +57,19 @@ public sealed class EmbeddedWebhookDeliveryWorker : BackgroundService
                 item.ErrorMessage = "Recovered after a stale processing lock.";
             }
         }
-        if (stale.Count > 0) await db.SaveChangesAsync(ct);
+        if (stale.Count > 0)
+        {
+            try
+            {
+                await db.SaveChangesAsync(ct);
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                // Another worker may have recovered the same stale delivery.
+                // Clear local stale state and continue claiming current due work.
+                db.ChangeTracker.Clear();
+            }
+        }
 
         var dueIds = await db.BusinessWebhookDeliveries.AsNoTracking()
             .Where(x =>
@@ -74,19 +86,44 @@ public sealed class EmbeddedWebhookDeliveryWorker : BackgroundService
 
     private static async Task ProcessOneAsync(AppDbContext db, IEmbeddedWebhookSender sender, Guid deliveryId, CancellationToken ct)
     {
-        var delivery = await db.BusinessWebhookDeliveries.Include(x => x.BusinessWebhookEndpoint)
+        var delivery = await db.BusinessWebhookDeliveries
+            .Include(x => x.BusinessWebhookEndpoint)
+                .ThenInclude(x => x.ApiApplication)
             .FirstOrDefaultAsync(x =>
                 x.Id == deliveryId &&
                 (x.Status == BusinessWebhookDeliveryStatus.Pending || x.Status == BusinessWebhookDeliveryStatus.Retry), ct);
         if (delivery is null) return;
 
         var now = DateTime.UtcNow;
-        if (delivery.BusinessWebhookEndpoint.Status != BusinessWebhookEndpointStatus.Active || delivery.BusinessWebhookEndpoint.IsDeleted)
+        if (delivery.BusinessWebhookEndpoint.Status != BusinessWebhookEndpointStatus.Active ||
+            delivery.BusinessWebhookEndpoint.IsDeleted)
         {
             delivery.Status = BusinessWebhookDeliveryStatus.DeadLetter;
             delivery.DeadLetteredAt = now;
             delivery.ErrorMessage = "Webhook endpoint is disabled.";
             delivery.NextAttemptAt = null;
+            delivery.LastUpdatedAt = now;
+            await db.SaveChangesAsync(ct);
+            return;
+        }
+
+        var application = delivery.BusinessWebhookEndpoint.ApiApplication;
+        if (application.IsDeleted || application.Status == ApiApplicationStatus.Disabled)
+        {
+            delivery.Status = BusinessWebhookDeliveryStatus.DeadLetter;
+            delivery.DeadLetteredAt = now;
+            delivery.ErrorMessage = "Webhook API application is disabled.";
+            delivery.NextAttemptAt = null;
+            delivery.LastUpdatedAt = now;
+            await db.SaveChangesAsync(ct);
+            return;
+        }
+
+        if (application.Status == ApiApplicationStatus.Suspended)
+        {
+            delivery.Status = BusinessWebhookDeliveryStatus.Retry;
+            delivery.NextAttemptAt = now.AddMinutes(5);
+            delivery.ErrorMessage = "Webhook delivery paused while API application is suspended.";
             delivery.LastUpdatedAt = now;
             await db.SaveChangesAsync(ct);
             return;

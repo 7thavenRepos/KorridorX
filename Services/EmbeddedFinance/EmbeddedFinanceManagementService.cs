@@ -33,7 +33,27 @@ public sealed class EmbeddedFinanceManagementService : IEmbeddedFinanceManagemen
     public async Task<IReadOnlyList<ApiCredentialDto>> GetCredentialsAsync(Guid userId, Guid apiApplicationId, CancellationToken ct = default)
     {
         var app = await OwnedApplication(userId, apiApplicationId, ct);
-        return await _db.ApiCredentials.AsNoTracking().Where(x => x.ApiApplicationId == app.Id && !x.IsDeleted).OrderByDescending(x => x.CreatedAt).Select(x => new ApiCredentialDto(x.Id, x.ApiApplicationId, x.Name, x.KeyId, x.SecretLastFour, x.Status, x.ExpiresAt, x.LastUsedAt, x.LastUsedIpAddress, x.CreatedAt)).ToListAsync(ct);
+        var now = DateTime.UtcNow;
+
+        var rows = await _db.ApiCredentials
+            .AsNoTracking()
+            .Where(x => x.ApiApplicationId == app.Id && !x.IsDeleted)
+            .OrderByDescending(x => x.CreatedAt)
+            .ToListAsync(ct);
+
+        return rows
+            .Select(x => new ApiCredentialDto(
+                x.Id,
+                x.ApiApplicationId,
+                x.Name,
+                x.KeyId,
+                x.SecretLastFour,
+                EffectiveCredentialStatus(x.Status, x.ExpiresAt, now),
+                x.ExpiresAt,
+                x.LastUsedAt,
+                x.LastUsedIpAddress,
+                x.CreatedAt))
+            .ToList();
     }
 
     public async Task<ApiCredentialCreatedDto> CreateCredentialAsync(Guid userId, Guid apiApplicationId, CreateApiCredentialRequestDto request, CancellationToken ct = default)
@@ -60,6 +80,16 @@ public sealed class EmbeddedFinanceManagementService : IEmbeddedFinanceManagemen
         var access = await _access.EnsurePermissionAsync(userId, BusinessPermission.ManageApiAccess, ct);
         return await _db.ApiApplications.FirstOrDefaultAsync(x => x.Id == id && x.BusinessProfileId == access.BusinessProfileId && !x.IsDeleted, ct) ?? throw new InvalidOperationException("API application not found.");
     }
+
+    private static ApiCredentialStatus EffectiveCredentialStatus(
+        ApiCredentialStatus status,
+        DateTime? expiresAt,
+        DateTime now) =>
+        status == ApiCredentialStatus.Active &&
+        expiresAt.HasValue &&
+        expiresAt.Value <= now
+            ? ApiCredentialStatus.Expired
+            : status;
 
     private static ApiApplicationDto ToDto(ApiApplication x) => new(x.Id, x.Name, x.Description, x.Scopes, x.Status, ParseRanges(x.AllowedIpRanges), x.CreatedAt, x.LastAuthenticatedAt);
     private static IReadOnlyList<string> ParseRanges(string? x) => string.IsNullOrWhiteSpace(x) ? Array.Empty<string>() : x.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);

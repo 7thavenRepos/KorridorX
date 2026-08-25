@@ -213,6 +213,8 @@ public class PayoutService : IPayoutService
 
         try
         {
+            await EnsureTransferOutboundRestrictionAsync(transfer, ct);
+
             var result = await _remittanceProvider.InitiatePayoutAsync(
                 new RemittancePayoutRequest(
                     transfer.Id,

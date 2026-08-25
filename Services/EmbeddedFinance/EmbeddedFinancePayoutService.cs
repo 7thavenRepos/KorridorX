@@ -13,6 +13,7 @@ using KorridorX.Models.Enums;
 using KorridorX.Models.Payments;
 using KorridorX.Models.Providers;
 using KorridorX.Providers.Remittance;
+using KorridorX.Services.Compliance;
 using KorridorX.Services.FinancialCore;
 using KorridorX.Services.Payments;
 using Microsoft.EntityFrameworkCore;
@@ -25,6 +26,7 @@ public sealed class EmbeddedFinancePayoutService : IEmbeddedFinancePayoutService
     private readonly AppDbContext _db;
     private readonly IEmbeddedFinanceContextAccessor _context;
     private readonly IFinancialReservationService _reservations;
+    private readonly IOutboundFundsRestrictionService? _outboundFundsRestrictions;
     private readonly IRemittanceProvider _provider;
     private readonly IPayoutStatusService _payoutStatus;
     private readonly IEmbeddedPayoutSettlementService _settlement;
@@ -39,11 +41,13 @@ public sealed class EmbeddedFinancePayoutService : IEmbeddedFinancePayoutService
         IPayoutStatusService payoutStatus,
         IEmbeddedPayoutSettlementService settlement,
         IEmbeddedWebhookPublisher webhooks,
-        IOptions<BlaaizOptions> blaaizOptions)
+        IOptions<BlaaizOptions> blaaizOptions,
+        IOutboundFundsRestrictionService? outboundFundsRestrictions = null)
     {
         _db = db;
         _context = context;
         _reservations = reservations;
+        _outboundFundsRestrictions = outboundFundsRestrictions;
         _provider = provider;
         _payoutStatus = payoutStatus;
         _settlement = settlement;
@@ -211,7 +215,7 @@ public sealed class EmbeddedFinancePayoutService : IEmbeddedFinancePayoutService
 
         if (existingIdem is not null)
         {
-            EnsureSame(existingIdem, hash);
+            EnsureSame(existingIdem, hash, nameof(Payout));
             var existing = await _db.Payouts.AsNoTracking().FirstOrDefaultAsync(x =>
                 x.Id == existingIdem.ResourceId &&
                 x.Purpose == PaymentOperationPurpose.Withdrawal &&
@@ -249,8 +253,9 @@ public sealed class EmbeddedFinancePayoutService : IEmbeddedFinancePayoutService
             ProviderCode = _provider.ProviderName
         };
 
-        await using (var tx = await _db.Database.BeginTransactionAsync(ct))
+        try
         {
+            await using var tx = await _db.Database.BeginTransactionAsync(ct);
             _db.Payouts.Add(payout);
             _db.EmbeddedApiIdempotencyRecords.Add(new EmbeddedApiIdempotencyRecord
             {
@@ -291,6 +296,14 @@ public sealed class EmbeddedFinancePayoutService : IEmbeddedFinancePayoutService
             await _db.SaveChangesAsync(ct);
             await tx.CommitAsync(ct);
         }
+        catch (DbUpdateException)
+        {
+            _db.ChangeTracker.Clear();
+            var recovered = await RecoverConcurrentIdempotentPayoutAsync(
+                principal.ApiApplicationId, businessCustomerId, key, hash, ct);
+            if (recovered is not null) return recovered;
+            throw;
+        }
 
         return await DispatchAsync(
             payout.Id,
@@ -300,6 +313,37 @@ public sealed class EmbeddedFinancePayoutService : IEmbeddedFinancePayoutService
             providerDestination,
             note,
             ct);
+    }
+
+    private async Task<EmbeddedPayoutDto?> RecoverConcurrentIdempotentPayoutAsync(
+        Guid apiApplicationId,
+        Guid businessCustomerId,
+        string idempotencyKey,
+        string requestHash,
+        CancellationToken ct)
+    {
+        var idem = await _db.EmbeddedApiIdempotencyRecords
+            .AsNoTracking()
+            .FirstOrDefaultAsync(x =>
+                x.ApiApplicationId == apiApplicationId &&
+                x.IdempotencyKey == idempotencyKey &&
+                !x.IsDeleted,
+                ct);
+
+        if (idem is null) return null;
+
+        EnsureSame(idem, requestHash, nameof(Payout));
+        var existing = await _db.Payouts.AsNoTracking().FirstOrDefaultAsync(x =>
+            x.Id == idem.ResourceId &&
+            x.Purpose == PaymentOperationPurpose.Withdrawal &&
+            x.ContextEntityType == nameof(BusinessCustomer) &&
+            x.ContextEntityId == businessCustomerId &&
+            !x.IsDeleted,
+            ct)
+            ?? throw new InvalidOperationException(
+                "Idempotent payout resource was not found after concurrent creation.");
+
+        return await ToDtoAsync(existing, ct);
     }
 
     private async Task<EmbeddedPayoutDto> DispatchAsync(
@@ -351,6 +395,14 @@ public sealed class EmbeddedFinancePayoutService : IEmbeddedFinancePayoutService
 
         try
         {
+            if (_outboundFundsRestrictions is not null)
+            {
+                await _outboundFundsRestrictions.EnsureBusinessCustomerOutboundAllowedAsync(
+                    customer.Id,
+                    "embedded_finance_payout_provider_dispatch",
+                    ct);
+            }
+
             var result = await _provider.InitiatePayoutAsync(
                 new RemittancePayoutRequest(
                     null,
@@ -599,8 +651,15 @@ public sealed class EmbeddedFinancePayoutService : IEmbeddedFinancePayoutService
         return key;
     }
 
-    private static void EnsureSame(EmbeddedApiIdempotencyRecord record, string hash)
+    private static void EnsureSame(
+        EmbeddedApiIdempotencyRecord record,
+        string hash,
+        string resourceType)
     {
+        if (!string.Equals(record.ResourceType, resourceType, StringComparison.Ordinal))
+            throw new InvalidOperationException(
+                "The Idempotency-Key has already been used for a different operation.");
+
         if (!string.Equals(record.RequestHash, hash, StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException(
                 "The Idempotency-Key has already been used with a different request.");

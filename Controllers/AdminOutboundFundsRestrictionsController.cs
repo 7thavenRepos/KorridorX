@@ -10,7 +10,7 @@ using Microsoft.AspNetCore.RateLimiting;
 
 namespace KorridorX.Controllers;
 
-[Authorize(Roles = "Compliance,InternalAudit,Admin,SuperAdmin")]
+[Authorize(Roles = "Compliance,InternalAudit,Operations,Admin,SuperAdmin")]
 [EnableRateLimiting(SecurityRateLimitPolicies.Sensitive)]
 [ApiController]
 [Route("api/admin/outbound-funds-restrictions")]
@@ -72,6 +72,7 @@ public sealed class AdminOutboundFundsRestrictionsController
             await _service.GetByIdAsync(restrictionId, ct),
             "Outbound funds restriction retrieved successfully."));
 
+    [Authorize(Roles = "Compliance,InternalAudit,Admin,SuperAdmin")]
     [HttpPost]
     public async Task<IActionResult> Apply(
         [FromBody] ApplyOutboundFundsRestrictionRequestDto request,
@@ -83,6 +84,7 @@ public sealed class AdminOutboundFundsRestrictionsController
                 ct),
             "Outbound funds restriction applied successfully."));
 
+    [Authorize(Roles = "Compliance,InternalAudit,Admin,SuperAdmin")]
     [HttpPost("{restrictionId:guid}/lift")]
     public async Task<IActionResult> Lift(
         Guid restrictionId,

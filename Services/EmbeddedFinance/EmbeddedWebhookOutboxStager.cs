@@ -38,7 +38,9 @@ public sealed class EmbeddedWebhookOutboxStager : IEmbeddedWebhookOutboxStager
             .Where(x =>
                 x.BusinessProfileId == businessProfileId &&
                 x.Status == BusinessWebhookEndpointStatus.Active &&
-                !x.IsDeleted)
+                !x.IsDeleted &&
+                !x.ApiApplication.IsDeleted &&
+                x.ApiApplication.Status == ApiApplicationStatus.Active)
             .ToList();
 
         foreach (var endpoint in endpoints.Where(x =>

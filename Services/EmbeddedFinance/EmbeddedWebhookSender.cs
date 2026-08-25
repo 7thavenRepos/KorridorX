@@ -32,6 +32,7 @@ public sealed class EmbeddedWebhookSender : IEmbeddedWebhookSender
         var delivery = await _db.BusinessWebhookDeliveries.AsNoTracking()
             .Include(x => x.BusinessWebhookEvent)
             .Include(x => x.BusinessWebhookEndpoint)
+                .ThenInclude(x => x.ApiApplication)
             .FirstOrDefaultAsync(x => x.Id == deliveryId, ct);
 
         if (delivery is null) return new(false, null, null, "Webhook delivery not found.");
@@ -39,6 +40,10 @@ public sealed class EmbeddedWebhookSender : IEmbeddedWebhookSender
         var endpoint = delivery.BusinessWebhookEndpoint;
         if (endpoint.Status != BusinessWebhookEndpointStatus.Active || endpoint.IsDeleted)
             return new(false, null, null, "Webhook endpoint is disabled.");
+
+        if (endpoint.ApiApplication.IsDeleted ||
+            endpoint.ApiApplication.Status != ApiApplicationStatus.Active)
+            return new(false, null, null, "Webhook API application is not active.");
 
         string validatedUrl;
         try { validatedUrl = await _urlSecurity.ValidateAsync(endpoint.Url, ct); }

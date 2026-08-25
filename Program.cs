@@ -322,6 +322,8 @@ builder.Services.AddScoped<IBusinessPricingService, BusinessPricingService>();
 builder.Services.AddScoped<IInstantTradingService, InstantTradingService>();
 builder.Services.AddScoped<IEmbeddedFinanceManagementService, EmbeddedFinanceManagementService>();
 builder.Services.AddScoped<IEmbeddedFinanceAdminQueryService, EmbeddedFinanceAdminQueryService>();
+builder.Services.AddScoped<IEmbeddedFinanceAdminCommandService, EmbeddedFinanceAdminCommandService>();
+builder.Services.AddScoped<IEmbeddedFinanceAdminAssuranceService, EmbeddedFinanceAdminAssuranceService>();
 builder.Services.AddScoped<IEmbeddedFinanceCustomerService, EmbeddedFinanceCustomerService>();
 builder.Services.AddScoped<IEmbeddedFinanceCredentialAuthenticator, EmbeddedFinanceCredentialAuthenticator>();
 builder.Services.AddScoped<IEmbeddedFinanceContextAccessor, HttpEmbeddedFinanceContextAccessor>();
@@ -579,8 +581,8 @@ if (runtimeHostingOptions.RequireHttpsRedirection)
     app.UseHttpsRedirection();
 
 app.UseAuthentication();
-app.UseMiddleware<EmbeddedFinanceApiKeyMiddleware>();
 app.UseRateLimiter();
+app.UseMiddleware<EmbeddedFinanceApiKeyMiddleware>();
 app.UseAuthorization();
 
 app.MapHealthChecks("/health/live", new HealthCheckOptions

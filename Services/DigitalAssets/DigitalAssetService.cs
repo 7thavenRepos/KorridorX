@@ -7,6 +7,7 @@ using KorridorX.Models.Enums;
 using KorridorX.Models.FinancialCore;
 using KorridorX.Models.Payments;
 using KorridorX.Providers.DigitalAssets;
+using KorridorX.Services.Compliance;
 using KorridorX.Services.EmbeddedFinance;
 using KorridorX.Services.FinancialCore;
 using Microsoft.EntityFrameworkCore;
@@ -23,6 +24,7 @@ public sealed class DigitalAssetService :
     private readonly IEmbeddedFinanceContextAccessor _context;
     private readonly IDigitalAssetProviderRegistry _providers;
     private readonly IFinancialReservationService _reservations;
+    private readonly IOutboundFundsRestrictionService? _outboundFundsRestrictions;
     private readonly IDigitalAssetComplianceGate _compliance;
     private readonly IEmbeddedWebhookPublisher _webhooks;
     private readonly DigitalAssetComplianceOptions _complianceOptions;
@@ -52,12 +54,14 @@ public sealed class DigitalAssetService :
         IFinancialReservationService reservations,
         IDigitalAssetComplianceGate compliance,
         IEmbeddedWebhookPublisher webhooks,
-        IOptions<DigitalAssetComplianceOptions> complianceOptions)
+        IOptions<DigitalAssetComplianceOptions> complianceOptions,
+        IOutboundFundsRestrictionService? outboundFundsRestrictions = null)
     {
         _db = db;
         _context = context;
         _providers = providers;
         _reservations = reservations;
+        _outboundFundsRestrictions = outboundFundsRestrictions;
         _compliance = compliance;
         _webhooks = webhooks;
         _complianceOptions = complianceOptions.Value;
@@ -374,6 +378,14 @@ public sealed class DigitalAssetService :
 
         try
         {
+            if (_outboundFundsRestrictions is not null)
+            {
+                await _outboundFundsRestrictions.EnsureBusinessCustomerOutboundAllowedAsync(
+                    businessCustomerId,
+                    "digital_asset_withdrawal_provider_dispatch",
+                    ct);
+            }
+
             var submission = await provider.SubmitWithdrawalAsync(
                 new DigitalAssetWithdrawalSubmissionRequest(
                     withdrawal.Id, account.AssetCode, destination.AssetNetwork.NetworkCode,

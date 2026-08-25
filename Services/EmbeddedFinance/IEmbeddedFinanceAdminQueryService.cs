@@ -46,6 +46,50 @@ public interface IEmbeddedFinanceAdminQueryService
         int pageSize,
         CancellationToken ct = default);
 
+    Task<IReadOnlyList<EmbeddedFinanceAdminProviderMappingDto>> GetProviderMappingsAsync(
+        Guid collectionAccountId,
+        CancellationToken ct = default);
+
+    Task<PagedResult<EmbeddedFinanceAdminActivityDto>> GetActivityAsync(
+        Guid? businessProfileId,
+        Guid? businessCustomerId,
+        Guid? collectionAccountId,
+        string? activityType,
+        string? assetCode,
+        string? providerCode,
+        string? search,
+        DateTime? fromUtc,
+        DateTime? toUtc,
+        int page,
+        int pageSize,
+        CancellationToken ct = default,
+        Guid? activityId = null);
+
+    Task<EmbeddedFinanceAdminActivityDetailDto> GetActivityDetailAsync(
+        string activityType,
+        Guid activityId,
+        CancellationToken ct = default);
+
+    Task<PagedResult<EmbeddedFinanceAdminExceptionDto>> GetExceptionsAsync(
+        Guid? businessProfileId,
+        string? sourceType,
+        string? search,
+        int page,
+        int pageSize,
+        CancellationToken ct = default);
+
+    Task<byte[]> ExportActivityCsvAsync(
+        Guid? businessProfileId,
+        Guid? businessCustomerId,
+        Guid? collectionAccountId,
+        string? activityType,
+        string? assetCode,
+        string? providerCode,
+        string? search,
+        DateTime? fromUtc,
+        DateTime? toUtc,
+        CancellationToken ct = default);
+
     Task<PagedResult<EmbeddedFinanceAdminWebhookEndpointDto>> GetWebhookEndpointsAsync(
         Guid? businessProfileId,
         BusinessWebhookEndpointStatus? status,

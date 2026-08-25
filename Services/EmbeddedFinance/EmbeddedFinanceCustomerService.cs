@@ -44,13 +44,23 @@ public sealed class EmbeddedFinanceCustomerService : IEmbeddedFinanceCustomerSer
             throw new InvalidOperationException("Business customer country is not supported.");
 
         var hash = Hash(normalized); var idem = await FindIdem(p.ApiApplicationId,key,ct);
-        if (idem is not null) { Same(idem,hash); return await _db.BusinessCustomers.AsNoTracking().Where(x => x.Id == idem.ResourceId && x.BusinessProfileId == p.BusinessProfileId).Select(x => ToCustomerDto(x)).SingleAsync(ct); }
+        if (idem is not null) { Same(idem,hash,nameof(BusinessCustomer)); return await _db.BusinessCustomers.AsNoTracking().Where(x => x.Id == idem.ResourceId && x.BusinessProfileId == p.BusinessProfileId).Select(x => ToCustomerDto(x)).SingleAsync(ct); }
         if (await _db.BusinessCustomers.AnyAsync(x => x.BusinessProfileId == p.BusinessProfileId && x.ExternalReference == normalized.ExternalReference && !x.IsDeleted,ct)) throw new InvalidOperationException("A business customer with this external reference already exists.");
-        await using var tx = await _db.Database.BeginTransactionAsync(ct);
         var customer = new BusinessCustomer { BusinessProfileId=p.BusinessProfileId, ExternalReference=normalized.ExternalReference, DisplayName=normalized.DisplayName, Email=normalized.Email, PhoneNumber=normalized.PhoneNumber, CountryCode=normalized.CountryCode, MetadataJson=normalized.MetadataJson, Status=BusinessCustomerStatus.Active };
-        _db.BusinessCustomers.Add(customer); _db.EmbeddedApiIdempotencyRecords.Add(new EmbeddedApiIdempotencyRecord { ApiApplicationId=p.ApiApplicationId, IdempotencyKey=key, RequestHash=hash, ResourceType=nameof(BusinessCustomer), ResourceId=customer.Id });
-        await _db.SaveChangesAsync(ct);
-        await tx.CommitAsync(ct);
+        try
+        {
+            await using var tx = await _db.Database.BeginTransactionAsync(ct);
+            _db.BusinessCustomers.Add(customer); _db.EmbeddedApiIdempotencyRecords.Add(new EmbeddedApiIdempotencyRecord { ApiApplicationId=p.ApiApplicationId, IdempotencyKey=key, RequestHash=hash, ResourceType=nameof(BusinessCustomer), ResourceId=customer.Id });
+            await _db.SaveChangesAsync(ct);
+            await tx.CommitAsync(ct);
+        }
+        catch (DbUpdateException)
+        {
+            _db.ChangeTracker.Clear();
+            var recovered = await RecoverCustomerIdempotencyRaceAsync(p.ApiApplicationId, p.BusinessProfileId, key, hash, ct);
+            if (recovered is not null) return recovered;
+            throw;
+        }
 
         await _webhooks.PublishAsync(
             p.BusinessProfileId,
@@ -83,16 +93,26 @@ public sealed class EmbeddedFinanceCustomerService : IEmbeddedFinanceCustomerSer
         if (customer.Status != BusinessCustomerStatus.Active) throw new InvalidOperationException("Business customer must be active.");
         var normalized = new { BusinessCustomerId=businessCustomerId, ExternalReference=Required(request.ExternalReference,150,"External reference"), AssetCode=Required(request.AssetCode,20,"Asset code").ToUpperInvariant() };
         var hash=Hash(normalized); var idem=await FindIdem(p.ApiApplicationId,key,ct);
-        if (idem is not null) { Same(idem,hash); return await _db.CollectionAccounts.AsNoTracking().Where(x => x.Id == idem.ResourceId && x.BusinessProfileId == p.BusinessProfileId).Select(x => ToAccountDto(x)).SingleAsync(ct); }
+        if (idem is not null) { Same(idem,hash,nameof(CollectionAccount)); return await _db.CollectionAccounts.AsNoTracking().Where(x => x.Id == idem.ResourceId && x.BusinessProfileId == p.BusinessProfileId).Select(x => ToAccountDto(x)).SingleAsync(ct); }
         var asset = await _db.Assets.AsNoTracking().FirstOrDefaultAsync(x => x.Code == normalized.AssetCode && x.IsSupported,ct) ?? throw new InvalidOperationException($"Asset '{normalized.AssetCode}' is not supported.");
         if (await _db.CollectionAccounts.AnyAsync(x => x.BusinessCustomerId == businessCustomerId && x.AssetCode == asset.Code && !x.IsDeleted,ct)) throw new InvalidOperationException($"The business customer already has a {asset.Code} collection account.");
         if (await _db.CollectionAccounts.AnyAsync(x => x.BusinessProfileId == p.BusinessProfileId && x.ExternalReference == normalized.ExternalReference && !x.IsDeleted,ct)) throw new InvalidOperationException("A collection account with this external reference already exists.");
-        await using var tx = await _db.Database.BeginTransactionAsync(ct);
         var fa = new FinancialAccount { OwnerType=FinancialAccountOwnerType.BusinessCustomer, OwnerId=customer.Id, AccountCode=BuildAccountCode(customer.Id,asset.Code), AssetCode=asset.Code, AccountType=FinancialAccountType.Customer, Status=FinancialAccountStatus.Active, SettledBalance=0m, AvailableBalance=0m, HeldBalance=0m };
         var ca = new CollectionAccount { BusinessProfileId=p.BusinessProfileId, BusinessCustomerId=customer.Id, ExternalReference=normalized.ExternalReference, AssetCode=asset.Code, FinancialAccountId=fa.Id, FinancialAccount=fa, Status=CollectionAccountStatus.Pending };
-        _db.FinancialAccounts.Add(fa); _db.CollectionAccounts.Add(ca); _db.EmbeddedApiIdempotencyRecords.Add(new EmbeddedApiIdempotencyRecord { ApiApplicationId=p.ApiApplicationId, IdempotencyKey=key, RequestHash=hash, ResourceType=nameof(CollectionAccount), ResourceId=ca.Id });
-        await _db.SaveChangesAsync(ct);
-        await tx.CommitAsync(ct);
+        try
+        {
+            await using var tx = await _db.Database.BeginTransactionAsync(ct);
+            _db.FinancialAccounts.Add(fa); _db.CollectionAccounts.Add(ca); _db.EmbeddedApiIdempotencyRecords.Add(new EmbeddedApiIdempotencyRecord { ApiApplicationId=p.ApiApplicationId, IdempotencyKey=key, RequestHash=hash, ResourceType=nameof(CollectionAccount), ResourceId=ca.Id });
+            await _db.SaveChangesAsync(ct);
+            await tx.CommitAsync(ct);
+        }
+        catch (DbUpdateException)
+        {
+            _db.ChangeTracker.Clear();
+            var recovered = await RecoverCollectionAccountIdempotencyRaceAsync(p.ApiApplicationId, p.BusinessProfileId, key, hash, ct);
+            if (recovered is not null) return recovered;
+            throw;
+        }
 
         await _webhooks.PublishAsync(
             p.BusinessProfileId,
@@ -115,7 +135,9 @@ public sealed class EmbeddedFinanceCustomerService : IEmbeddedFinanceCustomerSer
     private EmbeddedFinancePrincipal RequireScope(EmbeddedFinanceScope scope) { var p=_context.GetRequiredPrincipal(); if(!p.HasScope(scope)) throw new UnauthorizedAccessException($"API application does not have required scope '{scope}'."); return p; }
     private async Task<BusinessCustomer> EnsureCustomer(Guid businessId,Guid customerId,CancellationToken ct)=>await _db.BusinessCustomers.FirstOrDefaultAsync(x=>x.Id==customerId&&x.BusinessProfileId==businessId&&!x.IsDeleted,ct)??throw new InvalidOperationException("Business customer not found.");
     private async Task<EmbeddedApiIdempotencyRecord?> FindIdem(Guid appId,string key,CancellationToken ct)=>await _db.EmbeddedApiIdempotencyRecords.AsNoTracking().FirstOrDefaultAsync(x=>x.ApiApplicationId==appId&&x.IdempotencyKey==key&&!x.IsDeleted,ct);
-    private static void Same(EmbeddedApiIdempotencyRecord r,string h){if(!string.Equals(r.RequestHash,h,StringComparison.OrdinalIgnoreCase))throw new InvalidOperationException("The Idempotency-Key has already been used with a different request.");}
+    private async Task<BusinessCustomerDto?> RecoverCustomerIdempotencyRaceAsync(Guid appId,Guid businessId,string key,string hash,CancellationToken ct){var idem=await FindIdem(appId,key,ct);if(idem is null)return null;Same(idem,hash,nameof(BusinessCustomer));return await _db.BusinessCustomers.AsNoTracking().Where(x=>x.Id==idem.ResourceId&&x.BusinessProfileId==businessId&&!x.IsDeleted).Select(x=>ToCustomerDto(x)).SingleAsync(ct);}
+    private async Task<CollectionAccountDto?> RecoverCollectionAccountIdempotencyRaceAsync(Guid appId,Guid businessId,string key,string hash,CancellationToken ct){var idem=await FindIdem(appId,key,ct);if(idem is null)return null;Same(idem,hash,nameof(CollectionAccount));return await _db.CollectionAccounts.AsNoTracking().Where(x=>x.Id==idem.ResourceId&&x.BusinessProfileId==businessId&&!x.IsDeleted).Select(x=>ToAccountDto(x)).SingleAsync(ct);}
+    private static void Same(EmbeddedApiIdempotencyRecord r,string h,string resourceType){if(!string.Equals(r.ResourceType,resourceType,StringComparison.Ordinal))throw new InvalidOperationException("The Idempotency-Key has already been used for a different operation.");if(!string.Equals(r.RequestHash,h,StringComparison.OrdinalIgnoreCase))throw new InvalidOperationException("The Idempotency-Key has already been used with a different request.");}
     private static string NormalizeKey(string v){var x=(v??"").Trim();if(x.Length==0)throw new InvalidOperationException("Idempotency-Key header is required.");if(x.Length>200)throw new InvalidOperationException("Idempotency-Key cannot exceed 200 characters.");return x;}
     private static string Hash<T>(T value)=>Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(value))));
     private static string BuildAccountCode(Guid id,string asset){var x=$"BC-{id:N}-{asset}";return x.Length<=80?x:x[..80];}
