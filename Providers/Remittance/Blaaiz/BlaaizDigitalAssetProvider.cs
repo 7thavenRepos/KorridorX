@@ -213,7 +213,7 @@ public sealed class BlaaizDigitalAssetProvider :
 
     private async Task<string> ResolveVerifiedProviderCustomerIdAsync(
         Guid businessProfileId,
-        Guid businessCustomerId,
+        Guid? businessCustomerId,
         CancellationToken ct)
     {
         var providerCustomer = await _db.ProviderCustomers.AsNoTracking()
@@ -223,10 +223,16 @@ public sealed class BlaaizDigitalAssetProvider :
                 x.BusinessCustomerId == businessCustomerId &&
                 !x.IsDeleted,
                 ct)
-            ?? throw new InvalidOperationException("The business customer does not have a Blaaiz provider-customer mapping.");
+            ?? throw new InvalidOperationException(
+                businessCustomerId.HasValue
+                    ? "The business customer does not have a Blaaiz provider-customer mapping."
+                    : "The business profile does not have a Blaaiz provider-customer mapping.");
 
         if (!string.Equals(providerCustomer.ProviderStatus, "VERIFIED", StringComparison.OrdinalIgnoreCase))
-            throw new InvalidOperationException("The Blaaiz business customer must be VERIFIED before crypto activity can be initiated.");
+            throw new InvalidOperationException(
+                businessCustomerId.HasValue
+                    ? "The Blaaiz business customer must be VERIFIED before crypto activity can be initiated."
+                    : "The Blaaiz business profile must be VERIFIED before crypto activity can be initiated.");
 
         return Required(providerCustomer.ProviderCustomerId, "Blaaiz provider customer ID");
     }

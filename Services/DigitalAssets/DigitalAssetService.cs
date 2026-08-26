@@ -570,8 +570,10 @@ public sealed class DigitalAssetService :
             FinancialAccount = account,
             RelatedEntityType = nameof(DigitalAssetDepositIntent),
             RelatedEntityId = intent.Id,
-            ContextEntityType = nameof(BusinessCustomer),
-            ContextEntityId = intent.BusinessCustomerId,
+            ContextEntityType = intent.BusinessCustomerId.HasValue
+                ? nameof(BusinessCustomer)
+                : nameof(KorridorX.Models.Customers.BusinessProfile),
+            ContextEntityId = intent.BusinessCustomerId ?? intent.BusinessProfileId,
             Reference = $"DAX-COL-{Guid.NewGuid():N}"[..40],
             CurrencyCode = intent.AssetCode,
             Amount = intent.Amount,
@@ -636,19 +638,22 @@ public sealed class DigitalAssetService :
         await _db.SaveChangesAsync(ct);
         await tx.CommitAsync(ct);
 
-        await _webhooks.PublishAsync(intent.BusinessProfileId, "digital_asset.deposit.completed", new
+        if (intent.BusinessCustomerId.HasValue)
         {
-            id = intent.Id,
-            collectionId = collection.Id,
-            businessCustomerId = intent.BusinessCustomerId,
-            financialAccountId = account.Id,
-            assetCode = intent.AssetCode,
-            networkCode = intent.NetworkCode,
-            amount = intent.Amount,
-            address = intent.Address,
-            providerCollectionId = intent.ProviderCollectionId,
-            providerReference = intent.ProviderReference
-        }, ct);
+            await _webhooks.PublishAsync(intent.BusinessProfileId, "digital_asset.deposit.completed", new
+            {
+                id = intent.Id,
+                collectionId = collection.Id,
+                businessCustomerId = intent.BusinessCustomerId.Value,
+                financialAccountId = account.Id,
+                assetCode = intent.AssetCode,
+                networkCode = intent.NetworkCode,
+                amount = intent.Amount,
+                address = intent.Address,
+                providerCollectionId = intent.ProviderCollectionId,
+                providerReference = intent.ProviderReference
+            }, ct);
+        }
 
         return true;
     }
@@ -802,21 +807,24 @@ public sealed class DigitalAssetService :
         await _db.SaveChangesAsync(ct);
         await tx.CommitAsync(ct);
 
-        await _webhooks.PublishAsync(withdrawal.BusinessProfileId,
-            networkTx.Status == DigitalAssetTransactionStatus.Confirmed
-                ? "digital_asset.withdrawal.completed"
-                : networkTx.Status == DigitalAssetTransactionStatus.Failed
-                    ? "digital_asset.withdrawal.failed"
-                    : "digital_asset.withdrawal.confirming",
-            new
-            {
-                id = withdrawal.Id, payoutId = withdrawal.PayoutId,
-                businessCustomerId = withdrawal.BusinessCustomerId,
-                assetCode = withdrawal.AssetCode, amount = withdrawal.Amount,
-                networkFee = networkTx.NetworkFee, confirmations = networkTx.Confirmations,
-                requiredConfirmations = networkTx.RequiredConfirmations,
-                transactionHash = networkTx.TransactionHash, status = withdrawal.Status.ToString()
-            }, ct);
+        if (withdrawal.BusinessCustomerId.HasValue)
+        {
+            await _webhooks.PublishAsync(withdrawal.BusinessProfileId,
+                networkTx.Status == DigitalAssetTransactionStatus.Confirmed
+                    ? "digital_asset.withdrawal.completed"
+                    : networkTx.Status == DigitalAssetTransactionStatus.Failed
+                        ? "digital_asset.withdrawal.failed"
+                        : "digital_asset.withdrawal.confirming",
+                new
+                {
+                    id = withdrawal.Id, payoutId = withdrawal.PayoutId,
+                    businessCustomerId = withdrawal.BusinessCustomerId.Value,
+                    assetCode = withdrawal.AssetCode, amount = withdrawal.Amount,
+                    networkFee = networkTx.NetworkFee, confirmations = networkTx.Confirmations,
+                    requiredConfirmations = networkTx.RequiredConfirmations,
+                    transactionHash = networkTx.TransactionHash, status = withdrawal.Status.ToString()
+                }, ct);
+        }
     }
 
     private async Task UpdateInboundTransactionAsync(DigitalAssetNetworkTransaction existing, DigitalAssetInboundNotification notification, CancellationToken ct)
@@ -865,8 +873,10 @@ public sealed class DigitalAssetService :
             FinancialAccount = account,
             RelatedEntityType = nameof(DigitalAssetDepositAddress),
             RelatedEntityId = address.Id,
-            ContextEntityType = nameof(BusinessCustomer),
-            ContextEntityId = address.BusinessCustomerId,
+            ContextEntityType = address.BusinessCustomerId.HasValue
+                ? nameof(BusinessCustomer)
+                : nameof(KorridorX.Models.Customers.BusinessProfile),
+            ContextEntityId = address.BusinessCustomerId ?? address.BusinessProfileId,
             Reference = $"DAX-DEP-{Guid.NewGuid():N}"[..40],
             CurrencyCode = account.AssetCode,
             Amount = networkTx.Amount,
@@ -922,14 +932,17 @@ public sealed class DigitalAssetService :
         networkTx.Status = DigitalAssetTransactionStatus.Confirmed;
         networkTx.ConfirmedAt = now;
 
-        await _webhooks.PublishAsync(address.BusinessProfileId, "digital_asset.deposit.completed", new
+        if (address.BusinessCustomerId.HasValue)
         {
-            id = networkTx.Id, collectionId = collection.Id,
-            businessCustomerId = address.BusinessCustomerId, financialAccountId = account.Id,
-            assetCode = account.AssetCode, networkCode = address.AssetNetwork.NetworkCode,
-            amount = networkTx.Amount, confirmations = networkTx.Confirmations,
-            requiredConfirmations = networkTx.RequiredConfirmations, transactionHash = networkTx.TransactionHash
-        }, ct);
+            await _webhooks.PublishAsync(address.BusinessProfileId, "digital_asset.deposit.completed", new
+            {
+                id = networkTx.Id, collectionId = collection.Id,
+                businessCustomerId = address.BusinessCustomerId.Value, financialAccountId = account.Id,
+                assetCode = account.AssetCode, networkCode = address.AssetNetwork.NetworkCode,
+                amount = networkTx.Amount, confirmations = networkTx.Confirmations,
+                requiredConfirmations = networkTx.RequiredConfirmations, transactionHash = networkTx.TransactionHash
+            }, ct);
+        }
     }
 
     private async Task<BusinessCustomer> EnsureCustomerAsync(Guid businessProfileId, Guid businessCustomerId, CancellationToken ct) =>

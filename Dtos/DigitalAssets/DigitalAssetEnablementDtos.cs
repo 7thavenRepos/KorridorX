@@ -66,6 +66,41 @@ public sealed class UpdateDigitalAssetEnablementRequestDto
     public string Reason { get; set; } = "";
 }
 
+public sealed class CreateDigitalAssetNetworkRequestDto
+{
+    [Required, MaxLength(50)]
+    public string NetworkCode { get; set; } = "";
+
+    [Required, MaxLength(100)]
+    public string Name { get; set; } = "";
+
+    [MaxLength(20)]
+    public string? NativeAssetCode { get; set; }
+
+    [MaxLength(200)]
+    public string? ContractAddress { get; set; }
+
+    public AssetNetworkStatus Status { get; set; }
+
+    [Range(0, 1_000_000)]
+    public int RequiredConfirmations { get; set; }
+
+    [Range(typeof(decimal), "0", "999999999999999999")]
+    public decimal MinimumDeposit { get; set; }
+
+    [Range(typeof(decimal), "0", "999999999999999999")]
+    public decimal MinimumWithdrawal { get; set; }
+
+    [Range(typeof(decimal), "0", "999999999999999999")]
+    public decimal WithdrawalFee { get; set; }
+
+    public bool DepositEnabled { get; set; }
+    public bool WithdrawalEnabled { get; set; }
+
+    [Required, MaxLength(1000)]
+    public string Reason { get; set; } = "";
+}
+
 public sealed class UpdateDigitalAssetNetworkRequestDto
 {
     public AssetNetworkStatus Status { get; set; }

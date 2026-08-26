@@ -13,6 +13,12 @@ public interface IDigitalAssetEnablementService
         UpdateDigitalAssetEnablementRequestDto request,
         CancellationToken ct = default);
 
+    Task<DigitalAssetAdminNetworkDto> CreateNetworkAsync(
+        string assetCode,
+        Guid userId,
+        CreateDigitalAssetNetworkRequestDto request,
+        CancellationToken ct = default);
+
     Task<DigitalAssetAdminNetworkDto> UpdateNetworkAsync(
         Guid assetNetworkId,
         Guid userId,

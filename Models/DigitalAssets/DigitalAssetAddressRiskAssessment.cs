@@ -7,7 +7,7 @@ namespace KorridorX.Models.DigitalAssets;
 public sealed class DigitalAssetAddressRiskAssessment : AuditableEntity
 {
     public Guid BusinessProfileId { get; set; }
-    public Guid BusinessCustomerId { get; set; }
+    public Guid? BusinessCustomerId { get; set; }
 
     public Guid AssetNetworkId { get; set; }
     public AssetNetwork AssetNetwork { get; set; } = null!;

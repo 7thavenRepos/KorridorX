@@ -6,7 +6,7 @@ namespace KorridorX.Models.DigitalAssets;
 public sealed class DigitalAssetTravelRuleRecord : AuditableEntity
 {
     public Guid BusinessProfileId { get; set; }
-    public Guid BusinessCustomerId { get; set; }
+    public Guid? BusinessCustomerId { get; set; }
     public Guid DigitalAssetWithdrawalId { get; set; }
     public DigitalAssetWithdrawal DigitalAssetWithdrawal { get; set; } = null!;
 

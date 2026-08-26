@@ -221,7 +221,11 @@ public class BusinessAccessService : IBusinessAccessService
                 BusinessPermission.ViewReports |
                 BusinessPermission.ViewWallets |
                 BusinessPermission.ManageFunding |
-                BusinessPermission.ViewEmbeddedFinance,
+                BusinessPermission.ViewEmbeddedFinance |
+                BusinessPermission.ViewTrading |
+                BusinessPermission.Trade |
+                BusinessPermission.ViewDigitalAssets |
+                BusinessPermission.ManageDigitalAssets,
             BusinessUserRole.Compliance =>
                 BusinessPermission.ViewBeneficiaries |
                 BusinessPermission.ViewTransfers |
@@ -229,11 +233,15 @@ public class BusinessAccessService : IBusinessAccessService
                 BusinessPermission.ViewBatches |
                 BusinessPermission.ApproveBatches |
                 BusinessPermission.ViewReports |
-                BusinessPermission.ViewWallets,
+                BusinessPermission.ViewWallets |
+                BusinessPermission.ViewTrading |
+                BusinessPermission.ViewDigitalAssets,
             _ =>
                 BusinessPermission.ViewBeneficiaries |
                 BusinessPermission.ViewTransfers |
                 BusinessPermission.ViewBatches |
-                BusinessPermission.ViewWallets
+                BusinessPermission.ViewWallets |
+                BusinessPermission.ViewTrading |
+                BusinessPermission.ViewDigitalAssets
         };
 }

@@ -59,6 +59,20 @@ public sealed class AdminDigitalAssetsController : ControllerBase
                 ct),
             "Digital-asset country availability updated successfully."));
 
+    [HttpPost("assets/{assetCode}/networks")]
+    [Authorize(Roles = "Admin,SuperAdmin,Operations")]
+    public async Task<IActionResult> CreateNetwork(
+        string assetCode,
+        [FromBody] CreateDigitalAssetNetworkRequestDto request,
+        CancellationToken ct) =>
+        Ok(ApiResponses.Ok(
+            await _service.CreateNetworkAsync(
+                assetCode,
+                GetUserId(),
+                request,
+                ct),
+            "Digital-asset network created successfully."));
+
     [HttpPut("networks/{assetNetworkId:guid}")]
     [Authorize(Roles = "Admin,SuperAdmin,Operations")]
     public async Task<IActionResult> UpdateNetwork(

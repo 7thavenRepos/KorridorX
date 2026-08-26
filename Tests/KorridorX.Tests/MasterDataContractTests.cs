@@ -37,6 +37,17 @@ public sealed class MasterDataContractTests
     }
 
     [Fact]
+    public void Digital_asset_admin_exposes_network_creation_route()
+    {
+        var methods = typeof(AdminDigitalAssetsController)
+            .GetMethods(BindingFlags.Instance | BindingFlags.Public);
+
+        Assert.Contains(methods, x =>
+            x.GetCustomAttribute<HttpPostAttribute>()?.Template ==
+            "assets/{assetCode}/networks");
+    }
+
+    [Fact]
     public void Fiat_and_crypto_share_the_existing_asset_master()
     {
         Assert.Equal(1, (int)AssetType.Fiat);
@@ -57,5 +68,7 @@ public sealed class MasterDataContractTests
             x.GetCustomAttribute<HttpGetAttribute>()?.Template == "countries");
         Assert.Contains(methods, x =>
             x.GetCustomAttribute<HttpGetAttribute>()?.Template == "assets");
+        Assert.Contains(methods, x =>
+            x.GetCustomAttribute<HttpGetAttribute>()?.Template == "asset-networks");
     }
 }

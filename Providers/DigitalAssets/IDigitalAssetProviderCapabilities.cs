@@ -32,7 +32,7 @@ public interface IDigitalAssetCollectionProvider
 public sealed record DigitalAssetCollectionIntentRequest(
     Guid DepositIntentId,
     Guid BusinessProfileId,
-    Guid BusinessCustomerId,
+    Guid? BusinessCustomerId,
     Guid FinancialAccountId,
     string AssetCode,
     string NetworkCode,

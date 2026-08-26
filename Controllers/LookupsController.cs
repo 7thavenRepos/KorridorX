@@ -1,5 +1,6 @@
-﻿using KorridorX.Data;
+using KorridorX.Data;
 using KorridorX.Infrastructure;
+using KorridorX.Models.Enums;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -59,6 +60,47 @@ public class LookupsController : ControllerBase
             .ToListAsync(ct);
 
         return Ok(ApiResponses.Ok(assets, "Assets retrieved successfully."));
+    }
+
+    [HttpGet("asset-networks")]
+    public async Task<IActionResult> GetAssetNetworks(
+        [FromQuery] string? assetCode,
+        CancellationToken ct)
+    {
+        var normalizedAssetCode = string.IsNullOrWhiteSpace(assetCode)
+            ? null
+            : assetCode.Trim().ToUpperInvariant();
+
+        var query = _db.AssetNetworks
+            .AsNoTracking()
+            .Include(x => x.Asset)
+            .Where(x =>
+                x.Asset.Type == AssetType.Crypto &&
+                x.Asset.IsSupported);
+
+        if (normalizedAssetCode is not null)
+        {
+            query = query.Where(x => x.AssetCode == normalizedAssetCode);
+        }
+
+        var networks = await query
+            .OrderBy(x => x.AssetCode)
+            .ThenBy(x => x.NetworkCode)
+            .Select(x => new
+            {
+                x.Id,
+                x.AssetCode,
+                x.NetworkCode,
+                x.Name,
+                x.Status,
+                x.DepositEnabled,
+                x.WithdrawalEnabled
+            })
+            .ToListAsync(ct);
+
+        return Ok(ApiResponses.Ok(
+            networks,
+            "Asset networks retrieved successfully."));
     }
 
     [HttpGet("corridors")]

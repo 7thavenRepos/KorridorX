@@ -8,7 +8,7 @@ namespace KorridorX.Models.DigitalAssets;
 public sealed class DigitalAssetDepositAddress : AuditableEntity
 {
     public Guid BusinessProfileId { get; set; }
-    public Guid BusinessCustomerId { get; set; }
+    public Guid? BusinessCustomerId { get; set; }
     public Guid FinancialAccountId { get; set; }
     public FinancialAccount FinancialAccount { get; set; } = null!;
     public Guid AssetNetworkId { get; set; }

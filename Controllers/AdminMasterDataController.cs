@@ -160,6 +160,16 @@ public sealed class AdminMasterDataController : ControllerBase
         var code = NormalizeAssetCode(request.Code);
         var decimalPlaces = ValidateDecimalPlaces(request.DecimalPlaces);
 
+        ValidateOperationalFlags(
+            request.Type,
+            request.IsSupported,
+            request.DepositEnabled,
+            request.WithdrawalEnabled,
+            request.TradingEnabled,
+            request.InstantEnabled,
+            hasActiveDepositNetwork: false,
+            hasActiveWithdrawalNetwork: false);
+
         if (await _db.Assets.AnyAsync(x => x.Code == code, ct))
             throw new InvalidOperationException($"Asset '{code}' already exists.");
 
@@ -195,8 +205,23 @@ public sealed class AdminMasterDataController : ControllerBase
     {
         var code = NormalizeAssetCode(assetCode);
         var asset = await _db.Assets
+            .Include(x => x.Networks)
             .SingleOrDefaultAsync(x => x.Code == code, ct)
             ?? throw new KeyNotFoundException($"Asset '{code}' was not found.");
+
+        ValidateOperationalFlags(
+            asset.Type,
+            request.IsSupported,
+            request.DepositEnabled,
+            request.WithdrawalEnabled,
+            request.TradingEnabled,
+            request.InstantEnabled,
+            asset.Networks.Any(x =>
+                x.Status == AssetNetworkStatus.Active &&
+                x.DepositEnabled),
+            asset.Networks.Any(x =>
+                x.Status == AssetNetworkStatus.Active &&
+                x.WithdrawalEnabled));
 
         asset.Name = RequiredText(request.Name, 100, "Asset name");
         asset.Symbol = RequiredText(request.Symbol, 20, "Asset symbol");
@@ -284,6 +309,42 @@ public sealed class AdminMasterDataController : ControllerBase
             throw new ArgumentException($"{fieldName} is required and cannot exceed {maxLength} characters.");
 
         return text;
+    }
+
+    private static void ValidateOperationalFlags(
+        AssetType type,
+        bool isSupported,
+        bool depositEnabled,
+        bool withdrawalEnabled,
+        bool tradingEnabled,
+        bool instantEnabled,
+        bool hasActiveDepositNetwork,
+        bool hasActiveWithdrawalNetwork)
+    {
+        if (!isSupported &&
+            (depositEnabled ||
+             withdrawalEnabled ||
+             tradingEnabled ||
+             instantEnabled))
+        {
+            throw new InvalidOperationException(
+                "An unsupported asset cannot keep deposits, withdrawals, trading or instant trading enabled.");
+        }
+
+        if (type != AssetType.Crypto)
+            return;
+
+        if (depositEnabled && !hasActiveDepositNetwork)
+        {
+            throw new InvalidOperationException(
+                "Configure at least one active deposit-enabled network before enabling crypto deposits.");
+        }
+
+        if (withdrawalEnabled && !hasActiveWithdrawalNetwork)
+        {
+            throw new InvalidOperationException(
+                "Configure at least one active withdrawal-enabled network before enabling crypto withdrawals.");
+        }
     }
 
     private static int ValidateDecimalPlaces(int decimalPlaces)

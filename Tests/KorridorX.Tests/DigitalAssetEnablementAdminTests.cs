@@ -1,5 +1,7 @@
+using KorridorX.Controllers;
 using KorridorX.Data;
 using KorridorX.Dtos.DigitalAssets;
+using KorridorX.Dtos.MasterData;
 using KorridorX.Models.Enums;
 using KorridorX.Models.Lookups;
 using KorridorX.Services.DigitalAssets;
@@ -18,6 +20,120 @@ public sealed class DigitalAssetEnablementAdminTests
         ReleaseCandidateDatabaseFixture fixture)
     {
         _fixture = fixture;
+    }
+
+    [DatabaseIntegrationFact]
+    public async Task Administrator_can_create_network_then_enable_new_crypto_asset()
+    {
+        await using var scope = _fixture.Factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        var assetCode = $"M{Guid.NewGuid():N}"[..12].ToUpperInvariant();
+        var controller = new AdminMasterDataController(db);
+
+        var blocked = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            controller.CreateAsset(
+                new CreateAssetRequestDto(
+                    assetCode,
+                    $"Master Crypto {assetCode}",
+                    assetCode,
+                    AssetType.Crypto,
+                    8,
+                    false,
+                    true,
+                    true,
+                    true,
+                    true,
+                    false),
+                CancellationToken.None));
+
+        Assert.Contains(
+            "active deposit-enabled network",
+            blocked.Message,
+            StringComparison.OrdinalIgnoreCase);
+
+        await controller.CreateAsset(
+            new CreateAssetRequestDto(
+                assetCode,
+                $"Master Crypto {assetCode}",
+                assetCode,
+                AssetType.Crypto,
+                8,
+                false,
+                true,
+                false,
+                false,
+                true,
+                false),
+            CancellationToken.None);
+
+        var service = new DigitalAssetEnablementService(db);
+        var networkCode = $"N{Guid.NewGuid():N}"[..12].ToUpperInvariant();
+
+        var created = await service.CreateNetworkAsync(
+            assetCode,
+            Guid.NewGuid(),
+            new CreateDigitalAssetNetworkRequestDto
+            {
+                NetworkCode = networkCode,
+                Name = $"Master Network {networkCode}",
+                NativeAssetCode = "TEST",
+                Status = AssetNetworkStatus.Active,
+                RequiredConfirmations = 3,
+                MinimumDeposit = 1m,
+                MinimumWithdrawal = 2m,
+                WithdrawalFee = 0.25m,
+                DepositEnabled = true,
+                WithdrawalEnabled = true,
+                Reason = "Create network for master-data acceptance."
+            });
+
+        Assert.Equal(assetCode, created.AssetCode);
+        Assert.Equal(networkCode, created.NetworkCode);
+        Assert.True(created.DepositEnabled);
+        Assert.True(created.WithdrawalEnabled);
+
+        var updated = await controller.UpdateAsset(
+            assetCode,
+            new UpdateAssetRequestDto(
+                $"Master Crypto {assetCode}",
+                assetCode,
+                8,
+                false,
+                true,
+                true,
+                true,
+                true,
+                false),
+            CancellationToken.None);
+
+        Assert.NotNull(updated);
+
+        var persisted = await db.Assets
+            .AsNoTracking()
+            .SingleAsync(x => x.Code == assetCode);
+
+        Assert.True(persisted.DepositEnabled);
+        Assert.True(persisted.WithdrawalEnabled);
+
+        var duplicate = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            service.CreateNetworkAsync(
+                assetCode,
+                Guid.NewGuid(),
+                new CreateDigitalAssetNetworkRequestDto
+                {
+                    NetworkCode = networkCode,
+                    Name = "Duplicate",
+                    Status = AssetNetworkStatus.Disabled,
+                    DepositEnabled = false,
+                    WithdrawalEnabled = false,
+                    Reason = "Duplicate network rejection."
+                }));
+
+        Assert.Contains(
+            "already exists",
+            duplicate.Message,
+            StringComparison.OrdinalIgnoreCase);
     }
 
     [DatabaseIntegrationFact]

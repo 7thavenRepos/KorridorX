@@ -45,9 +45,8 @@ public sealed class DigitalAssetWithdrawalDestinationConfiguration : IEntityType
 {
     public void Configure(EntityTypeBuilder<DigitalAssetWithdrawalDestination> builder)
     {
-        // Enforce destination uniqueness correctly for both tagged and untagged
-        // addresses. A single nullable unique index is insufficient on PostgreSQL
-        // because multiple NULL values are allowed.
+        // Embedded Finance customer destinations remain unique within
+        // (business profile + business customer + network + address/tag).
         builder.HasIndex(x => new
         {
             x.BusinessProfileId,
@@ -57,7 +56,7 @@ public sealed class DigitalAssetWithdrawalDestinationConfiguration : IEntityType
             x.DestinationTag
         })
             .IsUnique()
-            .HasFilter("\"DestinationTag\" IS NOT NULL");
+            .HasFilter("\"BusinessCustomerId\" IS NOT NULL AND \"DestinationTag\" IS NOT NULL");
 
         builder.HasIndex(x => new
         {
@@ -67,8 +66,31 @@ public sealed class DigitalAssetWithdrawalDestinationConfiguration : IEntityType
             x.Address
         })
             .IsUnique()
-            .HasFilter("\"DestinationTag\" IS NULL");
+            .HasFilter("\"BusinessCustomerId\" IS NOT NULL AND \"DestinationTag\" IS NULL");
 
+        // Direct BusinessProfile destinations have BusinessCustomerId = NULL.
+        // PostgreSQL treats NULLs as distinct in normal unique indexes, so use
+        // separate filtered indexes that omit BusinessCustomerId from the key.
+        builder.HasIndex(x => new
+        {
+            x.BusinessProfileId,
+            x.AssetNetworkId,
+            x.Address,
+            x.DestinationTag
+        })
+            .IsUnique()
+            .HasFilter("\"BusinessCustomerId\" IS NULL AND \"DestinationTag\" IS NOT NULL");
+
+        builder.HasIndex(x => new
+        {
+            x.BusinessProfileId,
+            x.AssetNetworkId,
+            x.Address
+        })
+            .IsUnique()
+            .HasFilter("\"BusinessCustomerId\" IS NULL AND \"DestinationTag\" IS NULL");
+
+        builder.HasIndex(x => new { x.BusinessProfileId, x.BusinessCustomerId });
         builder.Property(x => x.AssetCode).HasMaxLength(20);
         builder.Property(x => x.Address).HasMaxLength(300);
         builder.Property(x => x.DestinationTag).HasMaxLength(150);

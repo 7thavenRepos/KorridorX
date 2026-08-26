@@ -108,6 +108,115 @@ public sealed class DigitalAssetEnablementService : IDigitalAssetEnablementServi
         return await GetAssetAsync(asset.Code, ct);
     }
 
+    public async Task<DigitalAssetAdminNetworkDto> CreateNetworkAsync(
+        string assetCode,
+        Guid userId,
+        CreateDigitalAssetNetworkRequestDto request,
+        CancellationToken ct = default)
+    {
+        var reason = RequiredReason(request.Reason);
+        var normalizedAsset = Required(assetCode, 20).ToUpperInvariant();
+        var networkCode = Required(request.NetworkCode, 50).ToUpperInvariant();
+        var name = Required(request.Name, 100);
+        var nativeAssetCode = Clean(request.NativeAssetCode, 20)?.ToUpperInvariant();
+        var contractAddress = Clean(request.ContractAddress, 200);
+
+        var asset = await _db.Assets
+            .SingleOrDefaultAsync(x =>
+                x.Code == normalizedAsset &&
+                x.Type == AssetType.Crypto,
+                ct)
+            ?? throw new InvalidOperationException(
+                $"Digital asset '{normalizedAsset}' was not found.");
+
+        if (!Enum.IsDefined(request.Status))
+            throw new InvalidOperationException(
+                "Invalid digital-asset network status.");
+
+        if (request.RequiredConfirmations < 0 ||
+            request.MinimumDeposit < 0m ||
+            request.MinimumWithdrawal < 0m ||
+            request.WithdrawalFee < 0m)
+        {
+            throw new InvalidOperationException(
+                "Digital-asset network confirmations, minimums and fees cannot be negative.");
+        }
+
+        if (request.Status != AssetNetworkStatus.Active &&
+            (request.DepositEnabled || request.WithdrawalEnabled))
+        {
+            throw new InvalidOperationException(
+                "Deposit and withdrawal flags must be disabled when a digital-asset network is not active.");
+        }
+
+        if (request.Status == AssetNetworkStatus.Active &&
+            !asset.IsSupported)
+        {
+            throw new InvalidOperationException(
+                "A network cannot be activated while its digital asset is unsupported.");
+        }
+
+        if (await _db.AssetNetworks.AsNoTracking().AnyAsync(x =>
+                x.AssetCode == normalizedAsset &&
+                x.NetworkCode == networkCode,
+                ct))
+        {
+            throw new InvalidOperationException(
+                $"Network '{networkCode}' already exists for digital asset '{normalizedAsset}'.");
+        }
+
+        var network = new AssetNetwork
+        {
+            AssetCode = normalizedAsset,
+            Asset = asset,
+            NetworkCode = networkCode,
+            Name = name,
+            NativeAssetCode = nativeAssetCode,
+            ContractAddress = contractAddress,
+            Status = request.Status,
+            RequiredConfirmations = request.RequiredConfirmations,
+            MinimumDeposit = request.MinimumDeposit,
+            MinimumWithdrawal = request.MinimumWithdrawal,
+            WithdrawalFee = request.WithdrawalFee,
+            DepositEnabled = request.DepositEnabled,
+            WithdrawalEnabled = request.WithdrawalEnabled,
+            CreatedAt = DateTime.UtcNow
+        };
+
+        _db.AssetNetworks.Add(network);
+
+        _audit?.Stage(new AuditRecordRequest(
+            Action: "DIGITAL_ASSET_NETWORK_CREATED",
+            Category: "DigitalAssets",
+            EntityName: nameof(AssetNetwork),
+            EntityId: network.Id.ToString(),
+            OldValues: null,
+            NewValues: new
+            {
+                network.AssetCode,
+                network.NetworkCode,
+                network.Name,
+                network.NativeAssetCode,
+                network.ContractAddress,
+                network.Status,
+                network.RequiredConfirmations,
+                network.MinimumDeposit,
+                network.MinimumWithdrawal,
+                network.WithdrawalFee,
+                network.DepositEnabled,
+                network.WithdrawalEnabled
+            },
+            Metadata: new
+            {
+                Reason = reason
+            },
+            UserId: userId));
+
+        await _db.SaveChangesAsync(ct);
+
+        return ToNetworkDto(network);
+    }
+
     public async Task<DigitalAssetAdminNetworkDto> UpdateNetworkAsync(
         Guid assetNetworkId,
         Guid userId,

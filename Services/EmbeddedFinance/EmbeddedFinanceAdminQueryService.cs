@@ -717,7 +717,7 @@ public sealed class EmbeddedFinanceAdminQueryService : IEmbeddedFinanceAdminQuer
                 .Select(x => new ActivitySourceRow(
                     x.Intent.Id, "DigitalAssetDeposit", "Inbound",
                     x.Intent.BusinessProfileId, x.Business.BusinessName,
-                    x.Intent.BusinessCustomerId, x.Customer.DisplayName,
+                    x.Intent.BusinessCustomerId.GetValueOrDefault(), x.Customer.DisplayName,
                     x.Account == null ? null : (Guid?)x.Account.Id,
                     x.Account == null ? null : x.Account.ExternalReference,
                     x.Intent.FinancialAccountId,
@@ -787,7 +787,7 @@ public sealed class EmbeddedFinanceAdminQueryService : IEmbeddedFinanceAdminQuer
                 .Select(x => new ActivitySourceRow(
                     x.Withdrawal.Id, "DigitalAssetWithdrawal", "Outbound",
                     x.Withdrawal.BusinessProfileId, x.Business.BusinessName,
-                    x.Withdrawal.BusinessCustomerId, x.Customer.DisplayName,
+                    x.Withdrawal.BusinessCustomerId.GetValueOrDefault(), x.Customer.DisplayName,
                     x.Account == null ? null : (Guid?)x.Account.Id,
                     x.Account == null ? null : x.Account.ExternalReference,
                     x.Withdrawal.FinancialAccountId,

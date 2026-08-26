@@ -309,6 +309,7 @@ builder.Services.AddScoped<IDigitalAssetComplianceGate, DigitalAssetComplianceGa
 builder.Services.AddScoped<IEmbeddedDigitalAssetService, DigitalAssetService>();
 builder.Services.AddScoped<IDigitalAssetSettlementService, DigitalAssetService>();
 builder.Services.AddScoped<IDigitalAssetDepositIntentSettlementService, DigitalAssetService>();
+builder.Services.AddScoped<KorridorX.Services.BusinessDigitalAssets.IBusinessDigitalAssetService, KorridorX.Services.BusinessDigitalAssets.BusinessDigitalAssetService>();
 builder.Services.AddScoped<IDigitalAssetReconciliationService, DigitalAssetReconciliationService>();
 builder.Services.AddScoped<IDigitalAssetProviderOperationsService, DigitalAssetProviderOperationsService>();
 builder.Services.AddScoped<IDigitalAssetEnablementService, DigitalAssetEnablementService>();
@@ -318,6 +319,7 @@ builder.Services.AddScoped<IMarketplaceOperationsService, MarketplaceOperationsS
 builder.Services.AddScoped<IMarketplaceMatchingEngine, MarketplaceMatchingEngine>();
 builder.Services.AddScoped<IMarketplaceOrderService, MarketplaceOrderService>();
 builder.Services.AddScoped<IBusinessTradingRfqService, BusinessTradingRfqService>();
+builder.Services.AddScoped<KorridorX.Services.BusinessTrading.IBusinessTradingService, KorridorX.Services.BusinessTrading.BusinessTradingService>();
 builder.Services.AddScoped<IBusinessPricingService, BusinessPricingService>();
 builder.Services.AddScoped<IInstantTradingService, InstantTradingService>();
 builder.Services.AddScoped<IEmbeddedFinanceManagementService, EmbeddedFinanceManagementService>();

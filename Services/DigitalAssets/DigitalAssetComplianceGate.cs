@@ -32,7 +32,7 @@ public sealed class DigitalAssetComplianceGate : IDigitalAssetComplianceGate
 
     public Task EnsureDepositAllowedAsync(
         Guid businessProfileId,
-        Guid businessCustomerId,
+        Guid? businessCustomerId,
         string assetCode,
         string networkCode,
         decimal amount,
@@ -50,7 +50,7 @@ public sealed class DigitalAssetComplianceGate : IDigitalAssetComplianceGate
 
     public Task EnsureWithdrawalAllowedAsync(
         Guid businessProfileId,
-        Guid businessCustomerId,
+        Guid? businessCustomerId,
         string assetCode,
         string networkCode,
         decimal amount,
@@ -68,7 +68,7 @@ public sealed class DigitalAssetComplianceGate : IDigitalAssetComplianceGate
 
     private async Task ScreenIfRequiredAsync(
         Guid businessProfileId,
-        Guid businessCustomerId,
+        Guid? businessCustomerId,
         string assetCode,
         string networkCode,
         decimal amount,
