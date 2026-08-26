@@ -406,7 +406,7 @@ public class AuthService : IAuthService
         {
             await transaction.RollbackAsync(ct);
             await RecordFailedMfaAttemptAsync(user, redemption, "Invalid MFA code", ct);
-            throw InvalidMfaCode();
+             throw InvalidMfaCode();
         }
 
         var enrollmentEpoch = await _mfaChallenges.GetEnrollmentEpochAsync(user.Id, ct);
