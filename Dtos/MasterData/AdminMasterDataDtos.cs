@@ -64,3 +64,30 @@ public sealed record UpdateAssetRequestDto(
     bool WithdrawalEnabled,
     bool TradingEnabled,
     bool InstantEnabled);
+
+public sealed record AdminCountryAssetDto(
+    Guid Id,
+    string CountryCode,
+    string CountryName,
+    bool CountrySupported,
+    string AssetCode,
+    string AssetName,
+    AssetType AssetType,
+    bool AssetSupported,
+    bool CanSend,
+    bool CanReceive,
+    bool CanDeposit,
+    bool CanWithdraw,
+    bool CanTrade,
+    bool CanUseInstant,
+    bool IsDefault);
+
+public sealed record UpsertCountryAssetRequestDto(
+    bool CanSend,
+    bool CanReceive,
+    bool CanDeposit,
+    bool CanWithdraw,
+    bool CanTrade,
+    bool CanUseInstant,
+    bool IsDefault,
+    string Reason);

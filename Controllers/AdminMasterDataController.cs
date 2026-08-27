@@ -1,10 +1,13 @@
+using System.Security.Claims;
 using System.Text.RegularExpressions;
 using KorridorX.Configuration;
 using KorridorX.Data;
+using KorridorX.Dtos.Audit;
 using KorridorX.Dtos.MasterData;
 using KorridorX.Infrastructure;
 using KorridorX.Models.Enums;
 using KorridorX.Models.Lookups;
+using KorridorX.Services.Audit;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
@@ -28,10 +31,14 @@ public sealed class AdminMasterDataController : ControllerBase
         new("^[A-Z0-9._-]{2,20}$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
     private readonly AppDbContext _db;
+    private readonly IAuditService? _audit;
 
-    public AdminMasterDataController(AppDbContext db)
+    public AdminMasterDataController(
+        AppDbContext db,
+        IAuditService? audit = null)
     {
         _db = db;
+        _audit = audit;
     }
 
     [HttpGet("countries")]
@@ -102,6 +109,22 @@ public sealed class AdminMasterDataController : ControllerBase
         country.IsSupported = request.IsSupported;
         country.IsSendCountry = request.IsSendCountry;
         country.IsReceiveCountry = request.IsReceiveCountry;
+
+        var mappings = await _db.CountryAssets
+            .Where(x => x.CountryCode == code)
+            .ToListAsync(ct);
+
+        foreach (var mapping in mappings)
+        {
+            if (!country.IsSupported)
+            {
+                DisableAll(mapping);
+                continue;
+            }
+
+            if (!country.IsSendCountry) mapping.CanSend = false;
+            if (!country.IsReceiveCountry) mapping.CanReceive = false;
+        }
 
         await _db.SaveChangesAsync(ct);
 
@@ -234,11 +257,203 @@ public sealed class AdminMasterDataController : ControllerBase
         asset.InstantEnabled = request.InstantEnabled;
         asset.LastUpdatedAt = DateTime.UtcNow;
 
+        var mappings = await _db.CountryAssets
+            .Where(x => x.AssetCode == code)
+            .ToListAsync(ct);
+
+        foreach (var mapping in mappings)
+        {
+            if (!asset.IsSupported)
+            {
+                DisableAll(mapping);
+                continue;
+            }
+
+            if (!asset.DepositEnabled) mapping.CanDeposit = false;
+            if (!asset.WithdrawalEnabled) mapping.CanWithdraw = false;
+            if (!asset.TradingEnabled) mapping.CanTrade = false;
+            if (!asset.InstantEnabled) mapping.CanUseInstant = false;
+        }
+
         await _db.SaveChangesAsync(ct);
 
         return Ok(ApiResponses.Ok(
             ToDto(asset),
             "Asset updated successfully."));
+    }
+
+    [HttpGet("country-assets")]
+    public async Task<IActionResult> GetCountryAssets(
+        [FromQuery] string? countryCode,
+        [FromQuery] string? assetCode,
+        [FromQuery] AssetType? assetType,
+        CancellationToken ct)
+    {
+        var normalizedCountry = string.IsNullOrWhiteSpace(countryCode)
+            ? null
+            : NormalizeCountryCode(countryCode);
+        var normalizedAsset = string.IsNullOrWhiteSpace(assetCode)
+            ? null
+            : NormalizeAssetCode(assetCode);
+
+        if (assetType.HasValue && !Enum.IsDefined(assetType.Value))
+            throw new ArgumentException("Unsupported asset type.");
+
+        var query = _db.CountryAssets
+            .AsNoTracking()
+            .Include(x => x.Country)
+            .Include(x => x.Asset)
+            .AsQueryable();
+
+        if (normalizedCountry is not null)
+            query = query.Where(x => x.CountryCode == normalizedCountry);
+
+        if (normalizedAsset is not null)
+            query = query.Where(x => x.AssetCode == normalizedAsset);
+
+        if (assetType.HasValue)
+            query = query.Where(x => x.Asset.Type == assetType.Value);
+
+        var mappings = await query
+            .OrderBy(x => x.Country.Name)
+            .ThenBy(x => x.Asset.Type)
+            .ThenBy(x => x.Asset.Code)
+            .Select(x => new AdminCountryAssetDto(
+                x.Id,
+                x.CountryCode,
+                x.Country.Name,
+                x.Country.IsSupported,
+                x.AssetCode,
+                x.Asset.Name,
+                x.Asset.Type,
+                x.Asset.IsSupported,
+                x.CanSend,
+                x.CanReceive,
+                x.CanDeposit,
+                x.CanWithdraw,
+                x.CanTrade,
+                x.CanUseInstant,
+                x.IsDefault))
+            .ToListAsync(ct);
+
+        return Ok(ApiResponses.Ok(
+            mappings,
+            "Country and asset corridor mappings retrieved successfully."));
+    }
+
+    [HttpPut("country-assets/{countryCode}/{assetCode}")]
+    public async Task<IActionResult> UpsertCountryAsset(
+        string countryCode,
+        string assetCode,
+        [FromBody] UpsertCountryAssetRequestDto request,
+        CancellationToken ct)
+    {
+        var normalizedCountry = NormalizeCountryCode(countryCode);
+        var normalizedAsset = NormalizeAssetCode(assetCode);
+        var reason = RequiredText(request.Reason, 1000, "Change reason");
+
+        var country = await _db.Countries
+            .SingleOrDefaultAsync(x => x.Code == normalizedCountry, ct)
+            ?? throw new KeyNotFoundException(
+                $"Country '{normalizedCountry}' was not found.");
+        var asset = await _db.Assets
+            .SingleOrDefaultAsync(x => x.Code == normalizedAsset, ct)
+            ?? throw new KeyNotFoundException(
+                $"Asset '{normalizedAsset}' was not found.");
+
+        ValidateCountryAssetRequest(country, asset, request);
+
+        var mapping = await _db.CountryAssets
+            .SingleOrDefaultAsync(x =>
+                x.CountryCode == normalizedCountry &&
+                x.AssetCode == normalizedAsset,
+                ct);
+
+        var oldValues = mapping is null
+            ? null
+            : new
+            {
+                mapping.CanSend,
+                mapping.CanReceive,
+                mapping.CanDeposit,
+                mapping.CanWithdraw,
+                mapping.CanTrade,
+                mapping.CanUseInstant,
+                mapping.IsDefault
+            };
+
+        if (mapping is null)
+        {
+            mapping = new CountryAsset
+            {
+                CountryCode = normalizedCountry,
+                Country = country,
+                AssetCode = normalizedAsset,
+                Asset = asset
+            };
+            _db.CountryAssets.Add(mapping);
+        }
+
+        var clearedDefaultAssetCodes = new List<string>();
+
+        if (request.IsDefault)
+        {
+            var otherDefaults = await _db.CountryAssets
+                .Where(x =>
+                    x.CountryCode == normalizedCountry &&
+                    x.AssetCode != normalizedAsset &&
+                    x.IsDefault)
+                .ToListAsync(ct);
+
+            foreach (var other in otherDefaults)
+            {
+                other.IsDefault = false;
+                clearedDefaultAssetCodes.Add(other.AssetCode);
+            }
+        }
+
+        mapping.CanSend = request.CanSend;
+        mapping.CanReceive = request.CanReceive;
+        mapping.CanDeposit = request.CanDeposit;
+        mapping.CanWithdraw = request.CanWithdraw;
+        mapping.CanTrade = request.CanTrade;
+        mapping.CanUseInstant = request.CanUseInstant;
+        mapping.IsDefault = request.IsDefault;
+
+        _audit?.Stage(new AuditRecordRequest(
+            Action: oldValues is null
+                ? "COUNTRY_ASSET_MAPPING_CREATED"
+                : "COUNTRY_ASSET_MAPPING_UPDATED",
+            Category: "MasterData",
+            EntityName: nameof(CountryAsset),
+            EntityId: mapping.Id.ToString(),
+            OldValues: oldValues,
+            NewValues: new
+            {
+                mapping.CountryCode,
+                mapping.AssetCode,
+                mapping.CanSend,
+                mapping.CanReceive,
+                mapping.CanDeposit,
+                mapping.CanWithdraw,
+                mapping.CanTrade,
+                mapping.CanUseInstant,
+                mapping.IsDefault
+            },
+            Metadata: new
+            {
+                Reason = reason,
+                ClearedDefaultAssetCodes = clearedDefaultAssetCodes
+            },
+            UserId: GetUserId()));
+
+        await _db.SaveChangesAsync(ct);
+
+        return Ok(ApiResponses.Ok(
+            ToDto(mapping, country, asset),
+            oldValues is null
+                ? "Country and asset corridor mapping created successfully."
+                : "Country and asset corridor mapping updated successfully."));
     }
 
     private static AdminCountryDto ToDto(Country country) =>
@@ -266,6 +481,27 @@ public sealed class AdminMasterDataController : ControllerBase
             asset.InstantEnabled,
             asset.CreatedAt,
             asset.LastUpdatedAt);
+
+    private static AdminCountryAssetDto ToDto(
+        CountryAsset mapping,
+        Country country,
+        Asset asset) =>
+        new(
+            mapping.Id,
+            country.Code,
+            country.Name,
+            country.IsSupported,
+            asset.Code,
+            asset.Name,
+            asset.Type,
+            asset.IsSupported,
+            mapping.CanSend,
+            mapping.CanReceive,
+            mapping.CanDeposit,
+            mapping.CanWithdraw,
+            mapping.CanTrade,
+            mapping.CanUseInstant,
+            mapping.IsDefault);
 
     private static string NormalizeCountryCode(string value)
     {
@@ -353,5 +589,80 @@ public sealed class AdminMasterDataController : ControllerBase
             throw new ArgumentException("Decimal places must be between 0 and 18.");
 
         return decimalPlaces;
+    }
+
+    private static void ValidateCountryAssetRequest(
+        Country country,
+        Asset asset,
+        UpsertCountryAssetRequestDto request)
+    {
+        var anyCapability = request.CanSend ||
+            request.CanReceive ||
+            request.CanDeposit ||
+            request.CanWithdraw ||
+            request.CanTrade ||
+            request.CanUseInstant;
+
+        if (anyCapability && !country.IsSupported)
+            throw new InvalidOperationException(
+                "Capabilities cannot be enabled for an unsupported country.");
+
+        if (anyCapability && !asset.IsSupported)
+            throw new InvalidOperationException(
+                "Capabilities cannot be enabled for an unsupported asset.");
+
+        if (request.CanSend && !country.IsSendCountry)
+            throw new InvalidOperationException(
+                "Sending cannot be enabled because the country is not a send country.");
+
+        if (request.CanReceive && !country.IsReceiveCountry)
+            throw new InvalidOperationException(
+                "Receiving cannot be enabled because the country is not a receive country.");
+
+        if (request.CanDeposit && !asset.DepositEnabled)
+            throw new InvalidOperationException(
+                "Deposits cannot be enabled because the asset has deposits disabled.");
+
+        if (request.CanWithdraw && !asset.WithdrawalEnabled)
+            throw new InvalidOperationException(
+                "Withdrawals cannot be enabled because the asset has withdrawals disabled.");
+
+        if (request.CanTrade && !asset.TradingEnabled)
+            throw new InvalidOperationException(
+                "Trading cannot be enabled because the asset has trading disabled.");
+
+        if (request.CanUseInstant && !asset.InstantEnabled)
+            throw new InvalidOperationException(
+                "Instant use cannot be enabled because the asset has instant operations disabled.");
+
+        if (request.IsDefault && (!country.IsSupported || !asset.IsSupported))
+            throw new InvalidOperationException(
+                "The default mapping must use a supported country and asset.");
+
+        if (request.IsDefault && !anyCapability)
+            throw new InvalidOperationException(
+                "The default mapping must have at least one active capability.");
+    }
+
+    private static void DisableAll(CountryAsset mapping)
+    {
+        mapping.CanSend = false;
+        mapping.CanReceive = false;
+        mapping.CanDeposit = false;
+        mapping.CanWithdraw = false;
+        mapping.CanTrade = false;
+        mapping.CanUseInstant = false;
+        mapping.IsDefault = false;
+    }
+
+    private Guid? GetUserId()
+    {
+        if (_audit is null)
+            return null;
+
+        var value = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        return Guid.TryParse(value, out var userId)
+            ? userId
+            : throw new UnauthorizedAccessException("Invalid authenticated user.");
     }
 }

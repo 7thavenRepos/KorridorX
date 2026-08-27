@@ -110,15 +110,31 @@ public class LookupsController : ControllerBase
             .AsNoTracking()
             .Include(x => x.Country)
             .Include(x => x.Asset)
+            .Where(x =>
+                x.Country.IsSupported &&
+                x.Asset.IsSupported &&
+                (x.CanSend ||
+                 x.CanReceive ||
+                 x.CanDeposit ||
+                 x.CanWithdraw ||
+                 x.CanTrade ||
+                 x.CanUseInstant))
             .OrderBy(x => x.Country.Name)
+            .ThenBy(x => x.Asset.Type)
+            .ThenBy(x => x.Asset.Code)
             .Select(x => new
             {
                 CountryCode = x.Country.Code,
                 CountryName = x.Country.Name,
                 AssetCode = x.Asset.Code,
                 AssetName = x.Asset.Name,
+                x.Asset.Type,
                 x.CanSend,
                 x.CanReceive,
+                x.CanDeposit,
+                x.CanWithdraw,
+                x.CanTrade,
+                x.CanUseInstant,
                 x.IsDefault
             })
             .ToListAsync(ct);

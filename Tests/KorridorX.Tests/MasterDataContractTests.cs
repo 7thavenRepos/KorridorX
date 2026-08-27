@@ -34,6 +34,11 @@ public sealed class MasterDataContractTests
             x.GetCustomAttribute<HttpPostAttribute>()?.Template == "assets");
         Assert.Contains(methods, x =>
             x.GetCustomAttribute<HttpPutAttribute>()?.Template == "assets/{assetCode}");
+        Assert.Contains(methods, x =>
+            x.GetCustomAttribute<HttpGetAttribute>()?.Template == "country-assets");
+        Assert.Contains(methods, x =>
+            x.GetCustomAttribute<HttpPutAttribute>()?.Template ==
+            "country-assets/{countryCode}/{assetCode}");
     }
 
     [Fact]
@@ -70,5 +75,7 @@ public sealed class MasterDataContractTests
             x.GetCustomAttribute<HttpGetAttribute>()?.Template == "assets");
         Assert.Contains(methods, x =>
             x.GetCustomAttribute<HttpGetAttribute>()?.Template == "asset-networks");
+        Assert.Contains(methods, x =>
+            x.GetCustomAttribute<HttpGetAttribute>()?.Template == "corridors");
     }
 }
