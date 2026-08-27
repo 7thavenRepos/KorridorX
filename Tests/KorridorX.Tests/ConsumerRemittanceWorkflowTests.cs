@@ -1,4 +1,5 @@
 using System.Net;
+using System.Net.Http.Json;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.EntityFrameworkCore;
 using KorridorX.Data;
@@ -40,6 +41,11 @@ public sealed class ConsumerRemittanceWorkflowTests
                 "US",
                 UserType.Consumer));
         client.UseBearerToken(authentication.AccessToken);
+
+        var pinResponse = await client.PutAsJsonAsync(
+            "/api/auth/transaction-pin",
+            new SetTransactionPinRequestDto("ReleaseCandidate!123", "2468"));
+        Assert.Equal(HttpStatusCode.OK, pinResponse.StatusCode);
 
         await using (var scope = _fixture.Factory.Services.CreateAsyncScope())
         {
@@ -168,7 +174,8 @@ public sealed class ConsumerRemittanceWorkflowTests
             bankAccount.Id,
             null,
             TransferPurpose.FamilySupport,
-            "Release candidate end-to-end test");
+            "Release candidate end-to-end test",
+            "2468");
 
         var transferResponse = await client.PostJsonAsync("/api/transfers", transferRequest);
         await transferResponse.EnsureSuccessWithBodyAsync();

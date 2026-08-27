@@ -17,7 +17,16 @@ public sealed class SecurityOptions
     public SessionSecurityOptions Sessions { get; set; } = new();
     public AccountSecurityOptions Accounts { get; set; } = new();
     public MfaSecurityOptions Mfa { get; set; } = new();
+    public TransactionPinSecurityOptions TransactionPin { get; set; } = new();
     public TransferRiskOptions TransferRisk { get; set; } = new();
+}
+
+public sealed class TransactionPinSecurityOptions
+{
+    public int MinimumLength { get; set; } = 4;
+    public int MaximumLength { get; set; } = 6;
+    public int MaximumVerificationAttempts { get; set; } = 5;
+    public int LockoutMinutes { get; set; } = 15;
 }
 
 public sealed class RateLimitOptions
@@ -121,6 +130,18 @@ public sealed class SecurityOptionsValidator : IValidateOptions<SecurityOptions>
         {
             errors.Add("Security:Mfa:CodeReplayPepper must contain at least 32 characters.");
         }
+
+        if (options.TransactionPin.MinimumLength is < 4 or > 6)
+            errors.Add("Security:TransactionPin:MinimumLength must be between 4 and 6.");
+        if (options.TransactionPin.MaximumLength is < 4 or > 6 ||
+            options.TransactionPin.MaximumLength < options.TransactionPin.MinimumLength)
+        {
+            errors.Add("Security:TransactionPin:MaximumLength must be between MinimumLength and 6.");
+        }
+        if (options.TransactionPin.MaximumVerificationAttempts is < 3 or > 10)
+            errors.Add("Security:TransactionPin:MaximumVerificationAttempts must be between 3 and 10.");
+        if (options.TransactionPin.LockoutMinutes is < 1 or > 1440)
+            errors.Add("Security:TransactionPin:LockoutMinutes must be between 1 and 1440.");
 
         if (options.TransferRisk.ReviewScore < 0 || options.TransferRisk.ReviewScore > 100)
             errors.Add("Security:TransferRisk:ReviewScore must be between 0 and 100.");

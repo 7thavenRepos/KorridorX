@@ -11,6 +11,7 @@ public class ApplicationUserConfiguration : IEntityTypeConfiguration<Application
         builder.Property(x => x.FirstName).HasMaxLength(100);
         builder.Property(x => x.LastName).HasMaxLength(100);
         builder.Property(x => x.CountryCode).HasMaxLength(10);
+        builder.Property(x => x.TransactionPinHash).HasMaxLength(1000);
 
         builder.HasMany(x => x.RefreshTokens)
             .WithOne(x => x.User)

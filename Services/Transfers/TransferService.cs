@@ -22,6 +22,7 @@ public class TransferService : ITransferService
     private readonly IComplianceScreeningService _screeningService;
     private readonly ITransactionMonitoringService _transactionMonitoringService;
     private readonly IOutboundFundsRestrictionService _outboundFundsRestrictions;
+    private readonly ITransactionPinService _transactionPinService;
 
     public TransferService(
         AppDbContext db,
@@ -31,7 +32,8 @@ public class TransferService : ITransferService
         ITransferRiskService transferRiskService,
         IComplianceScreeningService screeningService,
         ITransactionMonitoringService transactionMonitoringService,
-        IOutboundFundsRestrictionService outboundFundsRestrictions)
+        IOutboundFundsRestrictionService outboundFundsRestrictions,
+        ITransactionPinService transactionPinService)
     {
         _db = db;
         _referenceGenerator = referenceGenerator;
@@ -41,6 +43,7 @@ public class TransferService : ITransferService
         _screeningService = screeningService;
         _transactionMonitoringService = transactionMonitoringService;
         _outboundFundsRestrictions = outboundFundsRestrictions;
+        _transactionPinService = transactionPinService;
     }
 
     public async Task<TransferDetailsDto> CreateTransferAsync(
@@ -173,6 +176,13 @@ public class TransferService : ITransferService
                 throw new InvalidOperationException("Recipient mobile wallet is not valid for this transfer.");
             }
         }
+
+        // Verify the PIN only after the quote and destination are valid, so malformed
+        // requests cannot consume the user's failed-attempt budget.
+        await _transactionPinService.VerifyForTransactionAsync(
+            userId,
+            request.TransactionPin,
+            ct);
 
         var reference = await GenerateUniqueTransferReferenceAsync(ct);
 

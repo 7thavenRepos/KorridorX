@@ -1,4 +1,4 @@
-﻿using KorridorX.Models.Enums;
+using KorridorX.Models.Enums;
 using Microsoft.AspNetCore.Identity;
 
 namespace KorridorX.Models.Identity;
@@ -15,6 +15,12 @@ public class ApplicationUser : IdentityUser<Guid>
 
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime? LastUpdatedAt { get; set; }
+
+    // This is a separate Identity hash, never the user's password or plaintext PIN.
+    public string? TransactionPinHash { get; set; }
+    public int TransactionPinFailedAttempts { get; set; }
+    public DateTime? TransactionPinLockedUntil { get; set; }
+    public DateTime? TransactionPinUpdatedAt { get; set; }
 
     public ICollection<RefreshToken> RefreshTokens { get; set; } = new List<RefreshToken>();
     public ICollection<LoginHistory> LoginHistories { get; set; } = new List<LoginHistory>();

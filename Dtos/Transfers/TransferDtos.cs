@@ -1,4 +1,4 @@
-﻿using KorridorX.Models.Enums;
+using KorridorX.Models.Enums;
 
 namespace KorridorX.Dtos.Transfers;
 
@@ -9,7 +9,8 @@ public record CreateTransferRequestDto
 	Guid? RecipientBankAccountId,
 	Guid? RecipientMobileWalletId,
 	TransferPurpose Purpose,
-	string? PurposeNote
+	string? PurposeNote,
+	string? TransactionPin = null
 );
 
 public record CancelTransferRequestDto
