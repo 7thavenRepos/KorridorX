@@ -9,7 +9,7 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace KorridorX.Controllers;
 
-[Authorize]
+[Authorize(Roles = "Business,BusinessAdmin")]
 [EnableRateLimiting(SecurityRateLimitPolicies.Sensitive)]
 [ApiController]
 [Route("api/business-kyb")]

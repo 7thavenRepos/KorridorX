@@ -2,11 +2,14 @@ using System.Text.Json;
 using KorridorX.Configuration;
 using KorridorX.Data;
 using KorridorX.Dtos.Compliance;
+using KorridorX.Exceptions;
 using KorridorX.Models.Compliance;
 using KorridorX.Models.Customers;
 using KorridorX.Models.Enums;
 using KorridorX.Models.Providers;
 using KorridorX.Providers.Remittance;
+using KorridorX.Services.BusinessTransfers;
+using KorridorX.Services.BusinessContext;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
@@ -44,13 +47,17 @@ public class BusinessKybService : IBusinessKybService
     private readonly IDataProtector _identityProtector;
     private readonly BlaaizOptions _blaaizOptions;
     private readonly IComplianceScreeningService _screeningService;
+    private readonly IBusinessAccessService _businessAccess;
+    private readonly IBusinessContextAccessor _businessContext;
 
     public BusinessKybService(
         AppDbContext db,
         IRemittanceProvider provider,
         IDataProtectionProvider dataProtectionProvider,
         IOptions<BlaaizOptions> blaaizOptions,
-        IComplianceScreeningService screeningService)
+        IComplianceScreeningService screeningService,
+        IBusinessAccessService businessAccess,
+        IBusinessContextAccessor businessContext)
     {
         _db = db;
         _provider = provider;
@@ -58,6 +65,8 @@ public class BusinessKybService : IBusinessKybService
             "KorridorX.BusinessKyb.OwnerIdentity.v1");
         _blaaizOptions = blaaizOptions.Value;
         _screeningService = screeningService;
+        _businessAccess = businessAccess;
+        _businessContext = businessContext;
     }
 
     public async Task<BusinessKybApplicationDto> StartAsync(
@@ -71,31 +80,7 @@ public class BusinessKybService : IBusinessKybService
                 "MINIMAL business KYB is disabled. Use FULL KYB unless the provider has explicitly allow-listed this platform.");
         }
 
-        var profile = await _db.BusinessProfiles
-            .Include(x => x.Users)
-            .FirstOrDefaultAsync(x =>
-                !x.IsDeleted &&
-                (x.OwnerUserId == userId || x.Users.Any(u => u.UserId == userId && u.IsActive && !u.IsDeleted)),
-                ct);
-
-        if (profile is null)
-        {
-            profile = new BusinessProfile
-            {
-                OwnerUserId = userId,
-                CreatedByUserId = userId
-            };
-            _db.BusinessProfiles.Add(profile);
-
-            profile.Users.Add(new BusinessUser
-            {
-                BusinessProfileId = profile.Id,
-                UserId = userId,
-                Role = BusinessUserRole.Owner,
-                IsActive = true,
-                CreatedByUserId = userId
-            });
-        }
+        var profile = await GetOrCreateStartProfileAsync(userId, ct);
 
         var current = await _db.BusinessKybApplications
             .Include(x => x.Owners)
@@ -665,6 +650,10 @@ public class BusinessKybService : IBusinessKybService
         bool tracking,
         CancellationToken ct)
     {
+        var access = tracking
+            ? await EnsureManageAccessAsync(userId, ct)
+            : await EnsureReadAccessAsync(userId, ct);
+
         IQueryable<BusinessKybApplication> query = _db.BusinessKybApplications
             .Include(x => x.BusinessProfile)
             .ThenInclude(x => x.Users)
@@ -675,10 +664,9 @@ public class BusinessKybService : IBusinessKybService
 
         var application = await query.FirstOrDefaultAsync(x =>
             x.Id == applicationId &&
+            x.BusinessProfileId == access.BusinessProfileId &&
             !x.IsDeleted &&
-            !x.BusinessProfile.IsDeleted &&
-            (x.BusinessProfile.OwnerUserId == userId ||
-             x.BusinessProfile.Users.Any(u => u.UserId == userId && u.IsActive && !u.IsDeleted)),
+            !x.BusinessProfile.IsDeleted,
             ct);
 
         return application ?? throw new InvalidOperationException("Business KYB application not found.");
@@ -689,15 +677,94 @@ public class BusinessKybService : IBusinessKybService
         bool tracking,
         CancellationToken ct)
     {
+        var access = tracking
+            ? await EnsureManageAccessAsync(userId, ct)
+            : await EnsureReadAccessAsync(userId, ct);
+
         IQueryable<BusinessProfile> query = _db.BusinessProfiles.Include(x => x.Users);
         if (!tracking) query = query.AsNoTracking();
 
         var profile = await query.FirstOrDefaultAsync(x =>
-            !x.IsDeleted &&
-            (x.OwnerUserId == userId || x.Users.Any(u => u.UserId == userId && u.IsActive && !u.IsDeleted)),
+            x.Id == access.BusinessProfileId && !x.IsDeleted,
             ct);
 
         return profile ?? throw new InvalidOperationException("Business profile not found.");
+    }
+
+    private async Task<BusinessAccessContext> EnsureReadAccessAsync(
+        Guid userId,
+        CancellationToken ct)
+    {
+        var access = await _businessAccess.GetAccessAsync(userId, ct);
+        if (!BusinessKybAccessPolicy.CanRead(access))
+        {
+            throw new ForbiddenException(
+                "Only business owners, administrators, and compliance users can view business KYB.");
+        }
+
+        return access;
+    }
+
+    private async Task<BusinessProfile> GetOrCreateStartProfileAsync(
+        Guid userId,
+        CancellationToken ct)
+    {
+        var hasAvailableBusiness = await _db.BusinessProfiles
+            .AsNoTracking()
+            .AnyAsync(x => x.OwnerUserId == userId && !x.IsDeleted, ct) ||
+            await _db.BusinessUsers
+                .AsNoTracking()
+                .AnyAsync(x =>
+                    x.UserId == userId &&
+                    x.IsActive &&
+                    !x.IsDeleted &&
+                    !x.BusinessProfile.IsDeleted,
+                    ct);
+
+        if (!hasAvailableBusiness)
+        {
+            if (_businessContext.GetSelectedBusinessProfileId().HasValue)
+            {
+                throw new ForbiddenException(
+                    "The selected business profile is not available to the authenticated user.");
+            }
+
+            var created = new BusinessProfile
+            {
+                OwnerUserId = userId,
+                CreatedByUserId = userId
+            };
+            created.Users.Add(new BusinessUser
+            {
+                BusinessProfileId = created.Id,
+                UserId = userId,
+                Role = BusinessUserRole.Owner,
+                IsActive = true,
+                CreatedByUserId = userId
+            });
+            _db.BusinessProfiles.Add(created);
+            return created;
+        }
+
+        var access = await EnsureManageAccessAsync(userId, ct);
+        return await _db.BusinessProfiles
+            .Include(x => x.Users)
+            .FirstOrDefaultAsync(x => x.Id == access.BusinessProfileId && !x.IsDeleted, ct)
+            ?? throw new InvalidOperationException("Business profile not found.");
+    }
+
+    private async Task<BusinessAccessContext> EnsureManageAccessAsync(
+        Guid userId,
+        CancellationToken ct)
+    {
+        var access = await _businessAccess.GetAccessAsync(userId, ct);
+        if (!BusinessKybAccessPolicy.CanManage(access))
+        {
+            throw new ForbiddenException(
+                "Only business owners and administrators can manage business KYB.");
+        }
+
+        return access;
     }
 
     private async Task<RemittanceBusinessCustomerResult> SyncProviderAsync(
