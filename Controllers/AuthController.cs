@@ -22,14 +22,35 @@ public class AuthController : ControllerBase
     }
 
     [EnableRateLimiting(SecurityRateLimitPolicies.Authentication)]
-    [HttpPost("register")]
-    public async Task<IActionResult> Register(RegisterRequestDto request, CancellationToken ct)
+    [HttpPost("register/consumer")]
+    public async Task<IActionResult> RegisterConsumer(
+        ChannelRegistrationRequestDto request,
+        CancellationToken ct)
     {
-        var response = await _authService.RegisterAsync(
+        var response = await _authService.RegisterConsumerAsync(
             request,
             HttpContext.Connection.RemoteIpAddress?.ToString(),
             ct);
 
+        return RegistrationResponse(response);
+    }
+
+    [EnableRateLimiting(SecurityRateLimitPolicies.Authentication)]
+    [HttpPost("register/business")]
+    public async Task<IActionResult> RegisterBusiness(
+        ChannelRegistrationRequestDto request,
+        CancellationToken ct)
+    {
+        var response = await _authService.RegisterBusinessAsync(
+            request,
+            HttpContext.Connection.RemoteIpAddress?.ToString(),
+            ct);
+
+        return RegistrationResponse(response);
+    }
+
+    private IActionResult RegistrationResponse(RegistrationResultDto response)
+    {
         var message = response.EmailConfirmationRequired
             ? "Registration successful. Check your email to confirm your account."
             : "Registration successful.";

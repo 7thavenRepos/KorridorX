@@ -4,8 +4,13 @@ namespace KorridorX.Services.Auth;
 
 public interface IAuthService
 {
-    Task<RegistrationResultDto> RegisterAsync(
-        RegisterRequestDto request,
+    Task<RegistrationResultDto> RegisterConsumerAsync(
+        ChannelRegistrationRequestDto request,
+        string? ipAddress,
+        CancellationToken ct = default);
+
+    Task<RegistrationResultDto> RegisterBusinessAsync(
+        ChannelRegistrationRequestDto request,
         string? ipAddress,
         CancellationToken ct = default);
 

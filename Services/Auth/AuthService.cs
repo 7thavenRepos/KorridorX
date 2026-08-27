@@ -49,12 +49,25 @@ public class AuthService : IAuthService
         _mfaOptions = securityOptions.Value.Mfa;
     }
 
-    public async Task<RegistrationResultDto> RegisterAsync(
-        RegisterRequestDto request,
+    public Task<RegistrationResultDto> RegisterConsumerAsync(
+        ChannelRegistrationRequestDto request,
         string? ipAddress,
-        CancellationToken ct = default)
+        CancellationToken ct = default) =>
+        RegisterAsync(request, UserType.Consumer, ipAddress, ct);
+
+    public Task<RegistrationResultDto> RegisterBusinessAsync(
+        ChannelRegistrationRequestDto request,
+        string? ipAddress,
+        CancellationToken ct = default) =>
+        RegisterAsync(request, UserType.Business, ipAddress, ct);
+
+    private async Task<RegistrationResultDto> RegisterAsync(
+        ChannelRegistrationRequestDto request,
+        UserType assignedUserType,
+        string? ipAddress,
+        CancellationToken ct)
     {
-        var roleName = RegistrationSecurityPolicy.ResolvePublicRole(request.UserType);
+        var roleName = RegistrationSecurityPolicy.ResolvePublicRole(assignedUserType);
         var email = request.Email.Trim().ToLowerInvariant();
 
         var existing = await _userManager.FindByEmailAsync(email);
@@ -69,7 +82,7 @@ public class AuthService : IAuthService
             LastName = request.LastName.Trim(),
             PhoneNumber = request.PhoneNumber,
             CountryCode = request.CountryCode,
-            UserType = request.UserType,
+            UserType = assignedUserType,
             Status = UserStatus.Active
         };
 
@@ -93,7 +106,7 @@ public class AuthService : IAuthService
                     : errors);
         }
 
-        if (request.UserType == UserType.Consumer)
+        if (assignedUserType == UserType.Consumer)
         {
             _db.CustomerProfiles.Add(new CustomerProfile
             {

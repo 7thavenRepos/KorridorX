@@ -31,7 +31,7 @@ public sealed partial class AccountSecurityWorkflowTests
         const string newPassword = "ChangedPassword!456";
 
         using var registerResponse = await client.PostJsonAsync(
-            "/api/auth/register",
+            "/api/auth/register/consumer",
             new RegisterRequestDto(
                 "Security",
                 "Tester",

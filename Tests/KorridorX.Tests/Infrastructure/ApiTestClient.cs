@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using KorridorX.Dtos.Auth;
 using KorridorX.Infrastructure;
+using KorridorX.Models.Enums;
 using KorridorX.Models.Identity;
 using KorridorX.Services.Auth;
 using Microsoft.AspNetCore.Identity;
@@ -66,7 +67,11 @@ public static class ApiTestClient
         RegisterRequestDto request,
         CancellationToken ct = default)
     {
-        using var registerResponse = await client.PostJsonAsync("/api/auth/register", request, ct);
+        var (registrationPath, registrationPayload) = ToChannelRegistration(request);
+        using var registerResponse = await client.PostJsonAsync(
+            registrationPath,
+            registrationPayload,
+            ct);
         await registerResponse.EnsureSuccessWithBodyAsync(ct);
 
         var registerEnvelope = await registerResponse
@@ -107,7 +112,11 @@ public static class ApiTestClient
             RegisterRequestDto request,
             CancellationToken ct = default)
     {
-        using var registerResponse = await client.PostJsonAsync("/api/auth/register", request, ct);
+        var (registrationPath, registrationPayload) = ToChannelRegistration(request);
+        using var registerResponse = await client.PostJsonAsync(
+            registrationPath,
+            registrationPayload,
+            ct);
         await registerResponse.EnsureSuccessWithBodyAsync(ct);
         var registerEnvelope = await registerResponse.ReadApiResponseAsync<RegistrationResultDto>(ct);
         var registration = registerEnvelope.Data
@@ -147,5 +156,27 @@ public static class ApiTestClient
             ?? throw new InvalidOperationException("Login returned no authentication data.");
 
         return (registration, authentication);
+    }
+
+    private static (string Path, ChannelRegistrationRequestDto Payload)
+        ToChannelRegistration(RegisterRequestDto request)
+    {
+        var path = request.UserType switch
+        {
+            UserType.Consumer => "/api/auth/register/consumer",
+            UserType.Business => "/api/auth/register/business",
+            _ => throw new InvalidOperationException(
+                $"The test registration helper does not support {request.UserType} registration.")
+        };
+
+        return (
+            path,
+            new ChannelRegistrationRequestDto(
+                request.FirstName,
+                request.LastName,
+                request.Email,
+                request.Password,
+                request.PhoneNumber,
+                request.CountryCode));
     }
 }

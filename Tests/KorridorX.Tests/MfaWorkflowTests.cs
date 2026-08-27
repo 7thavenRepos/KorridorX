@@ -31,7 +31,7 @@ public sealed class MfaWorkflowTests
         const string password = "ReleaseCandidate!123";
 
         using var registerResponse = await client.PostJsonAsync(
-            "/api/auth/register",
+            "/api/auth/register/business",
             new RegisterRequestDto(
                 "MFA",
                 "Business",
