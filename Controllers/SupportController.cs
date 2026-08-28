@@ -47,7 +47,9 @@ public sealed class SupportController : ControllerBase
     }
 
     [HttpPost("tickets/{ticketId:guid}/evidence")]
-    public async Task<IActionResult> AddTicketEvidence(Guid ticketId, [FromBody] AddSupportEvidenceRequestDto request, CancellationToken ct)
+    [Consumes("multipart/form-data")]
+    [RequestSizeLimit(27_262_976)]
+    public async Task<IActionResult> AddTicketEvidence(Guid ticketId, [FromForm] UploadSupportEvidenceRequestDto request, CancellationToken ct)
     {
         var result = await _service.AddTicketEvidenceAsync(GetUserId(), ticketId, request, ct);
         return Ok(ApiResponses.Ok(result, "Support evidence added successfully."));
@@ -75,10 +77,27 @@ public sealed class SupportController : ControllerBase
     }
 
     [HttpPost("disputes/{disputeId:guid}/evidence")]
-    public async Task<IActionResult> AddDisputeEvidence(Guid disputeId, [FromBody] AddSupportEvidenceRequestDto request, CancellationToken ct)
+    [Consumes("multipart/form-data")]
+    [RequestSizeLimit(27_262_976)]
+    public async Task<IActionResult> AddDisputeEvidence(Guid disputeId, [FromForm] UploadSupportEvidenceRequestDto request, CancellationToken ct)
     {
         var result = await _service.AddDisputeEvidenceAsync(GetUserId(), disputeId, request, ct);
         return Ok(ApiResponses.Ok(result, "Dispute evidence added successfully."));
+    }
+
+    [HttpGet("evidence/{evidenceId:guid}/download")]
+    public async Task<IActionResult> DownloadEvidence(Guid evidenceId, CancellationToken ct)
+    {
+        var canManageSupport = User.IsInRole("Admin") ||
+            User.IsInRole("SuperAdmin") ||
+            User.IsInRole("Support") ||
+            User.IsInRole("Operations");
+        var result = await _service.DownloadEvidenceAsync(
+            GetUserId(),
+            evidenceId,
+            canManageSupport,
+            ct);
+        return File(result.Content, result.MimeType, result.FileName, enableRangeProcessing: true);
     }
 
     private Guid GetUserId()

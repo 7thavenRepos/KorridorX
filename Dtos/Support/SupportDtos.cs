@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using KorridorX.Models.Enums;
+using Microsoft.AspNetCore.Http;
 
 namespace KorridorX.Dtos.Support;
 
@@ -75,6 +76,15 @@ public sealed class UpdateTransferInvestigationRequestDto
     public string Reason { get; set; } = "";
 }
 
+public sealed class UploadSupportEvidenceRequestDto
+{
+    [MaxLength(2000)] public string? Description { get; set; }
+    [Required, MaxLength(100)] public string MimeType { get; set; } = "";
+    [Required] public IFormFile File { get; set; } = null!;
+}
+
+// Retained for the existing administrator investigation-evidence workflow.
+// Consumer ticket and dispute uploads must use UploadSupportEvidenceRequestDto.
 public sealed class AddSupportEvidenceRequestDto
 {
     [Required, MaxLength(255)] public string Name { get; set; } = "";
@@ -83,6 +93,11 @@ public sealed class AddSupportEvidenceRequestDto
     [Required, MaxLength(1000)] public string StorageKey { get; set; } = "";
     [MaxLength(2000)] public string? StorageUrl { get; set; }
 }
+
+public sealed record SupportEvidenceDownloadDto(
+    Stream Content,
+    string MimeType,
+    string FileName);
 
 public sealed class ProcessSupportSlaRequestDto
 {

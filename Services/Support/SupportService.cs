@@ -23,6 +23,7 @@ public sealed class SupportService : ISupportService
     private readonly INotificationQueueService _notifications;
     private readonly IAuditService _audit;
     private readonly IBusinessContextAccessor _businessContext;
+    private readonly ISupportEvidenceStorage _evidenceStorage;
     private readonly SupportOptions _options;
 
     public SupportService(
@@ -31,6 +32,7 @@ public sealed class SupportService : ISupportService
         INotificationQueueService notifications,
         IAuditService audit,
         IBusinessContextAccessor businessContext,
+        ISupportEvidenceStorage evidenceStorage,
         IOptions<SupportOptions> options)
     {
         _db = db;
@@ -38,6 +40,7 @@ public sealed class SupportService : ISupportService
         _notifications = notifications;
         _audit = audit;
         _businessContext = businessContext;
+        _evidenceStorage = evidenceStorage;
         _options = options.Value;
     }
 
@@ -155,15 +158,23 @@ public sealed class SupportService : ISupportService
         return await GetMyTicketAsync(userId, ticketId, ct);
     }
 
-    public async Task<SupportEvidenceDto> AddTicketEvidenceAsync(Guid userId, Guid ticketId, AddSupportEvidenceRequestDto request, CancellationToken ct = default)
+    public async Task<SupportEvidenceDto> AddTicketEvidenceAsync(Guid userId, Guid ticketId, UploadSupportEvidenceRequestDto request, CancellationToken ct = default)
     {
-        var exists = await _db.SupportTickets.AnyAsync(x => x.Id == ticketId && x.UserId == userId && !x.IsDeleted, ct);
-        if (!exists) throw new InvalidOperationException("Support ticket not found.");
-        var evidence = CreateEvidence(userId, request, ticketId, null, null);
-        _db.SupportEvidence.Add(evidence);
-        _audit.Stage(new AuditRecordRequest("SupportEvidenceAdded", "Support", nameof(SupportEvidence), evidence.Id.ToString(), Metadata: new { ticketId }, UserId: userId));
-        await _db.SaveChangesAsync(ct);
-        return ToEvidenceDto(evidence);
+        var ticket = await _db.SupportTickets
+            .AsNoTracking()
+            .FirstOrDefaultAsync(x => x.Id == ticketId && x.UserId == userId && !x.IsDeleted, ct)
+            ?? throw new InvalidOperationException("Support ticket not found.");
+        if (ticket.Status == SupportTicketStatus.Closed)
+            throw new InvalidOperationException("Evidence cannot be added to a closed support ticket.");
+
+        return await SaveEvidenceAsync(
+            userId,
+            request,
+            ticketId,
+            null,
+            "SupportEvidenceAdded",
+            new { ticketId },
+            ct);
     }
 
     public async Task<TransferDisputeDto> CreateDisputeAsync(Guid userId, Guid transferId, CreateTransferDisputeRequestDto request, CancellationToken ct = default)
@@ -264,15 +275,45 @@ public sealed class SupportService : ISupportService
         return ToDisputeDto(dispute);
     }
 
-    public async Task<SupportEvidenceDto> AddDisputeEvidenceAsync(Guid userId, Guid disputeId, AddSupportEvidenceRequestDto request, CancellationToken ct = default)
+    public async Task<SupportEvidenceDto> AddDisputeEvidenceAsync(Guid userId, Guid disputeId, UploadSupportEvidenceRequestDto request, CancellationToken ct = default)
     {
         var dispute = await _db.TransferDisputes.AsNoTracking().FirstOrDefaultAsync(x => x.Id == disputeId && x.UserId == userId && !x.IsDeleted, ct)
             ?? throw new InvalidOperationException("Transfer dispute not found.");
-        var evidence = CreateEvidence(userId, request, dispute.SupportTicketId, dispute.Id, null);
-        _db.SupportEvidence.Add(evidence);
-        _audit.Stage(new AuditRecordRequest("DisputeEvidenceAdded", "Support", nameof(SupportEvidence), evidence.Id.ToString(), Metadata: new { disputeId }, UserId: userId));
-        await _db.SaveChangesAsync(ct);
-        return ToEvidenceDto(evidence);
+        if (dispute.Status is TransferDisputeStatus.Resolved or TransferDisputeStatus.Rejected or TransferDisputeStatus.Withdrawn)
+            throw new InvalidOperationException("Evidence cannot be added to a closed transfer dispute.");
+
+        return await SaveEvidenceAsync(
+            userId,
+            request,
+            dispute.SupportTicketId,
+            dispute.Id,
+            "DisputeEvidenceAdded",
+            new { disputeId },
+            ct);
+    }
+
+    public async Task<SupportEvidenceDownloadDto> DownloadEvidenceAsync(
+        Guid userId,
+        Guid evidenceId,
+        bool canManageSupport,
+        CancellationToken ct = default)
+    {
+        var evidence = await _db.SupportEvidence
+            .AsNoTracking()
+            .FirstOrDefaultAsync(x =>
+                x.Id == evidenceId &&
+                !x.IsDeleted &&
+                (canManageSupport ||
+                 (x.SupportTicket != null && x.SupportTicket.UserId == userId && !x.SupportTicket.IsDeleted) ||
+                 (x.TransferDispute != null && x.TransferDispute.UserId == userId && !x.TransferDispute.IsDeleted)),
+                ct)
+            ?? throw new InvalidOperationException("Support evidence not found.");
+
+        var opened = await _evidenceStorage.OpenReadAsync(
+            evidence.StorageKey,
+            evidence.MimeType ?? "application/octet-stream",
+            ct);
+        return new SupportEvidenceDownloadDto(opened.Content, opened.MimeType, evidence.Name);
     }
 
     private IQueryable<Transfer> OwnedTransfers(Guid userId) => _db.Transfers
@@ -312,7 +353,47 @@ public sealed class SupportService : ISupportService
     internal static TransferInvestigationDto ToInvestigationDto(TransferInvestigation x) => new(x.Id, x.Reference, x.TransferId, x.Transfer != null ? x.Transfer.Reference : "", x.TransferDisputeId, x.SupportTicketId, x.Status, x.Outcome, x.AssignedToUserId, x.Summary, x.Findings, x.ProviderCaseReference, x.StartedAt, x.DueAt, x.ResolvedAt, x.CreatedAt);
     internal static SupportEvidenceDto ToEvidenceDto(SupportEvidence x) => new(x.Id, x.Name, x.Description, x.MimeType, x.StorageKey, x.StorageUrl, x.SubmittedByUserId, x.CreatedAt);
 
-    private static SupportEvidence CreateEvidence(Guid userId, AddSupportEvidenceRequestDto r, Guid? ticketId, Guid? disputeId, Guid? investigationId) => new() { SupportTicketId = ticketId, TransferDisputeId = disputeId, TransferInvestigationId = investigationId, SubmittedByUserId = userId, Name = r.Name.Trim(), Description = r.Description?.Trim(), MimeType = r.MimeType?.Trim(), StorageKey = r.StorageKey.Trim(), StorageUrl = r.StorageUrl?.Trim() };
+    private async Task<SupportEvidenceDto> SaveEvidenceAsync(
+        Guid userId,
+        UploadSupportEvidenceRequestDto request,
+        Guid? ticketId,
+        Guid? disputeId,
+        string auditAction,
+        object auditMetadata,
+        CancellationToken ct)
+    {
+        var stored = await _evidenceStorage.SaveAsync(request.File, request.MimeType, ct);
+        try
+        {
+            var evidence = new SupportEvidence
+            {
+                SupportTicketId = ticketId,
+                TransferDisputeId = disputeId,
+                SubmittedByUserId = userId,
+                Name = stored.FileName,
+                Description = request.Description?.Trim(),
+                MimeType = stored.MimeType,
+                StorageKey = stored.StorageKey,
+                StorageUrl = null
+            };
+            evidence.StorageUrl = $"/api/support/evidence/{evidence.Id}/download";
+            _db.SupportEvidence.Add(evidence);
+            _audit.Stage(new AuditRecordRequest(
+                auditAction,
+                "Support",
+                nameof(SupportEvidence),
+                evidence.Id.ToString(),
+                Metadata: auditMetadata,
+                UserId: userId));
+            await _db.SaveChangesAsync(ct);
+            return ToEvidenceDto(evidence);
+        }
+        catch
+        {
+            await _evidenceStorage.DeleteIfExistsAsync(stored.StorageKey, CancellationToken.None);
+            throw;
+        }
+    }
 
     private static void ApplyOperationalHold(Transfer transfer, string reason)
     {

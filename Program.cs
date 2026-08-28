@@ -378,6 +378,7 @@ builder.Services.AddScoped<IComplianceManagementReportService, ComplianceManagem
 builder.Services.AddScoped<IComplianceOperationsQueryService, ComplianceOperationsQueryService>();
 builder.Services.AddScoped<ITransferRiskService, TransferRiskService>();
 builder.Services.AddScoped<ISupportService, SupportService>();
+builder.Services.AddSingleton<ISupportEvidenceStorage, FileSystemSupportEvidenceStorage>();
 builder.Services.AddScoped<IAdminSupportService, AdminSupportService>();
 builder.Services.AddSingleton<ConfiguredWatchlistScreeningProvider>();
 builder.Services.AddSingleton<OpenSanctionsScreeningProvider>();
