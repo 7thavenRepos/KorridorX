@@ -49,6 +49,7 @@ public sealed class SupportService : ISupportService
         CreateSupportTicketRequestDto request,
         CancellationToken ct = default)
     {
+        var selectedBusinessProfileId = await ResolveSelectedBusinessAsync(userId, ct);
         var now = DateTime.UtcNow;
         Guid? customerProfileId = null;
         Guid? businessProfileId = null;
@@ -56,11 +57,15 @@ public sealed class SupportService : ISupportService
 
         if (request.TransferId.HasValue)
         {
-            transfer = await OwnedTransfers(userId)
+            transfer = await OwnedTransfers(userId, selectedBusinessProfileId)
                 .FirstOrDefaultAsync(x => x.Id == request.TransferId.Value, ct)
                 ?? throw new InvalidOperationException("Transfer not found or is not accessible to the authenticated user.");
             customerProfileId = transfer.CustomerProfileId;
             businessProfileId = transfer.BusinessProfileId;
+        }
+        else if (selectedBusinessProfileId.HasValue)
+        {
+            businessProfileId = selectedBusinessProfileId;
         }
         else
         {
@@ -69,7 +74,6 @@ public sealed class SupportService : ISupportService
                 .Where(x => x.UserId == userId && !x.IsDeleted)
                 .Select(x => (Guid?)x.Id)
                 .FirstOrDefaultAsync(ct);
-            businessProfileId = await ResolveSelectedBusinessAsync(userId, ct);
         }
 
         var target = GetSlaTarget(request.Priority);
@@ -109,10 +113,11 @@ public sealed class SupportService : ISupportService
 
     public async Task<PagedResult<SupportTicketListItemDto>> GetMyTicketsAsync(Guid userId, int page, int pageSize, CancellationToken ct = default)
     {
+        var selectedBusinessProfileId = await ResolveSelectedBusinessAsync(userId, ct);
         var paged = await _db.SupportTickets
             .AsNoTracking()
             .Include(x => x.Transfer)
-            .Where(x => x.UserId == userId && !x.IsDeleted)
+            .Where(x => x.UserId == userId && !x.IsDeleted && x.BusinessProfileId == selectedBusinessProfileId)
             .OrderByDescending(x => x.CreatedAt)
             .PaginateAsync(page, pageSize, ct);
         return new PagedResult<SupportTicketListItemDto>
@@ -124,15 +129,17 @@ public sealed class SupportService : ISupportService
 
     public async Task<SupportTicketDetailsDto> GetMyTicketAsync(Guid userId, Guid ticketId, CancellationToken ct = default)
     {
+        var selectedBusinessProfileId = await ResolveSelectedBusinessAsync(userId, ct);
         var ticket = await TicketDetailsQuery()
-            .FirstOrDefaultAsync(x => x.Id == ticketId && x.UserId == userId, ct)
+            .FirstOrDefaultAsync(x => x.Id == ticketId && x.UserId == userId && x.BusinessProfileId == selectedBusinessProfileId, ct)
             ?? throw new InvalidOperationException("Support ticket not found.");
         return ToDetailsDto(ticket, includeInternalMessages: false);
     }
 
     public async Task<SupportTicketDetailsDto> AddCustomerMessageAsync(Guid userId, Guid ticketId, AddSupportMessageRequestDto request, CancellationToken ct = default)
     {
-        var ticket = await _db.SupportTickets.FirstOrDefaultAsync(x => x.Id == ticketId && x.UserId == userId && !x.IsDeleted, ct)
+        var selectedBusinessProfileId = await ResolveSelectedBusinessAsync(userId, ct);
+        var ticket = await _db.SupportTickets.FirstOrDefaultAsync(x => x.Id == ticketId && x.UserId == userId && !x.IsDeleted && x.BusinessProfileId == selectedBusinessProfileId, ct)
             ?? throw new InvalidOperationException("Support ticket not found.");
         if (ticket.Status == SupportTicketStatus.Closed)
             throw new InvalidOperationException("A closed support ticket cannot receive new messages.");
@@ -160,9 +167,10 @@ public sealed class SupportService : ISupportService
 
     public async Task<SupportEvidenceDto> AddTicketEvidenceAsync(Guid userId, Guid ticketId, UploadSupportEvidenceRequestDto request, CancellationToken ct = default)
     {
+        var selectedBusinessProfileId = await ResolveSelectedBusinessAsync(userId, ct);
         var ticket = await _db.SupportTickets
             .AsNoTracking()
-            .FirstOrDefaultAsync(x => x.Id == ticketId && x.UserId == userId && !x.IsDeleted, ct)
+            .FirstOrDefaultAsync(x => x.Id == ticketId && x.UserId == userId && !x.IsDeleted && x.BusinessProfileId == selectedBusinessProfileId, ct)
             ?? throw new InvalidOperationException("Support ticket not found.");
         if (ticket.Status == SupportTicketStatus.Closed)
             throw new InvalidOperationException("Evidence cannot be added to a closed support ticket.");
@@ -179,7 +187,8 @@ public sealed class SupportService : ISupportService
 
     public async Task<TransferDisputeDto> CreateDisputeAsync(Guid userId, Guid transferId, CreateTransferDisputeRequestDto request, CancellationToken ct = default)
     {
-        var transfer = await OwnedTransfers(userId).FirstOrDefaultAsync(x => x.Id == transferId, ct)
+        var selectedBusinessProfileId = await ResolveSelectedBusinessAsync(userId, ct);
+        var transfer = await OwnedTransfers(userId, selectedBusinessProfileId).FirstOrDefaultAsync(x => x.Id == transferId, ct)
             ?? throw new InvalidOperationException("Transfer not found or is not accessible to the authenticated user.");
         if (transfer.Status is TransferStatus.Draft or TransferStatus.Quoted)
             throw new InvalidOperationException("A dispute cannot be opened before a transfer has been submitted for payment.");
@@ -190,7 +199,7 @@ public sealed class SupportService : ISupportService
         SupportTicket ticket;
         if (request.SupportTicketId.HasValue)
         {
-            ticket = await _db.SupportTickets.FirstOrDefaultAsync(x => x.Id == request.SupportTicketId.Value && x.UserId == userId && !x.IsDeleted, ct)
+            ticket = await _db.SupportTickets.FirstOrDefaultAsync(x => x.Id == request.SupportTicketId.Value && x.UserId == userId && !x.IsDeleted && x.BusinessProfileId == selectedBusinessProfileId, ct)
                 ?? throw new InvalidOperationException("Support ticket not found.");
         }
         else
@@ -244,10 +253,11 @@ public sealed class SupportService : ISupportService
 
     public async Task<PagedResult<TransferDisputeDto>> GetMyDisputesAsync(Guid userId, int page, int pageSize, CancellationToken ct = default)
     {
+        var selectedBusinessProfileId = await ResolveSelectedBusinessAsync(userId, ct);
         var paged = await _db.TransferDisputes
             .AsNoTracking()
             .Include(x => x.Transfer)
-            .Where(x => x.UserId == userId && !x.IsDeleted)
+            .Where(x => x.UserId == userId && !x.IsDeleted && x.BusinessProfileId == selectedBusinessProfileId)
             .OrderByDescending(x => x.CreatedAt)
             .PaginateAsync(page, pageSize, ct);
         return new PagedResult<TransferDisputeDto>
@@ -259,7 +269,8 @@ public sealed class SupportService : ISupportService
 
     public async Task<TransferDisputeDto> WithdrawDisputeAsync(Guid userId, Guid disputeId, CancellationToken ct = default)
     {
-        var dispute = await _db.TransferDisputes.Include(x => x.Transfer).FirstOrDefaultAsync(x => x.Id == disputeId && x.UserId == userId && !x.IsDeleted, ct)
+        var selectedBusinessProfileId = await ResolveSelectedBusinessAsync(userId, ct);
+        var dispute = await _db.TransferDisputes.Include(x => x.Transfer).FirstOrDefaultAsync(x => x.Id == disputeId && x.UserId == userId && !x.IsDeleted && x.BusinessProfileId == selectedBusinessProfileId, ct)
             ?? throw new InvalidOperationException("Transfer dispute not found.");
         if (dispute.Status is TransferDisputeStatus.Resolved or TransferDisputeStatus.Rejected or TransferDisputeStatus.Withdrawn)
             return ToDisputeDto(dispute);
@@ -277,7 +288,8 @@ public sealed class SupportService : ISupportService
 
     public async Task<SupportEvidenceDto> AddDisputeEvidenceAsync(Guid userId, Guid disputeId, UploadSupportEvidenceRequestDto request, CancellationToken ct = default)
     {
-        var dispute = await _db.TransferDisputes.AsNoTracking().FirstOrDefaultAsync(x => x.Id == disputeId && x.UserId == userId && !x.IsDeleted, ct)
+        var selectedBusinessProfileId = await ResolveSelectedBusinessAsync(userId, ct);
+        var dispute = await _db.TransferDisputes.AsNoTracking().FirstOrDefaultAsync(x => x.Id == disputeId && x.UserId == userId && !x.IsDeleted && x.BusinessProfileId == selectedBusinessProfileId, ct)
             ?? throw new InvalidOperationException("Transfer dispute not found.");
         if (dispute.Status is TransferDisputeStatus.Resolved or TransferDisputeStatus.Rejected or TransferDisputeStatus.Withdrawn)
             throw new InvalidOperationException("Evidence cannot be added to a closed transfer dispute.");
@@ -298,14 +310,15 @@ public sealed class SupportService : ISupportService
         bool canManageSupport,
         CancellationToken ct = default)
     {
+        var selectedBusinessProfileId = canManageSupport ? null : await ResolveSelectedBusinessAsync(userId, ct);
         var evidence = await _db.SupportEvidence
             .AsNoTracking()
             .FirstOrDefaultAsync(x =>
                 x.Id == evidenceId &&
                 !x.IsDeleted &&
                 (canManageSupport ||
-                 (x.SupportTicket != null && x.SupportTicket.UserId == userId && !x.SupportTicket.IsDeleted) ||
-                 (x.TransferDispute != null && x.TransferDispute.UserId == userId && !x.TransferDispute.IsDeleted)),
+                 (x.SupportTicket != null && x.SupportTicket.UserId == userId && !x.SupportTicket.IsDeleted && x.SupportTicket.BusinessProfileId == selectedBusinessProfileId) ||
+                 (x.TransferDispute != null && x.TransferDispute.UserId == userId && !x.TransferDispute.IsDeleted && x.TransferDispute.BusinessProfileId == selectedBusinessProfileId)),
                 ct)
             ?? throw new InvalidOperationException("Support evidence not found.");
 
@@ -316,10 +329,12 @@ public sealed class SupportService : ISupportService
         return new SupportEvidenceDownloadDto(opened.Content, opened.MimeType, evidence.Name);
     }
 
-    private IQueryable<Transfer> OwnedTransfers(Guid userId) => _db.Transfers
+    private IQueryable<Transfer> OwnedTransfers(Guid userId, Guid? selectedBusinessProfileId) => _db.Transfers
         .Include(x => x.CustomerProfile)
         .Include(x => x.BusinessProfile)
-        .Where(x => !x.IsDeleted && ((x.CustomerProfileId != null && x.CustomerProfile!.UserId == userId) || (x.BusinessProfileId != null && (x.BusinessProfile!.OwnerUserId == userId || x.BusinessProfile.Users.Any(u => u.UserId == userId && u.IsActive && !u.IsDeleted)))));
+        .Where(x => !x.IsDeleted && (selectedBusinessProfileId.HasValue
+            ? x.BusinessProfileId == selectedBusinessProfileId && x.BusinessProfile != null && (x.BusinessProfile.OwnerUserId == userId || x.BusinessProfile.Users.Any(u => u.UserId == userId && u.IsActive && !u.IsDeleted))
+            : x.BusinessProfileId == null && x.CustomerProfileId != null && x.CustomerProfile!.UserId == userId));
 
     private async Task<Guid?> ResolveSelectedBusinessAsync(Guid userId, CancellationToken ct)
     {
