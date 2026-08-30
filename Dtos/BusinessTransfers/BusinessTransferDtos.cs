@@ -107,6 +107,28 @@ public record BusinessUserDto(
     bool IsOwner,
     DateTime CreatedAt);
 
+public record CreateBusinessInvitationRequestDto(
+    string Email,
+    BusinessUserRole Role,
+    BusinessPermission Permissions);
+
+public record BusinessInvitationDto(
+    Guid Id,
+    string Email,
+    BusinessUserRole Role,
+    BusinessPermission Permissions,
+    string Status,
+    DateTime ExpiresAt,
+    DateTime LastSentAt,
+    int SendCount,
+    DateTime CreatedAt);
+
+public record BusinessInvitationPreviewDto(
+    string BusinessName,
+    string Email,
+    BusinessUserRole Role,
+    DateTime ExpiresAt);
+
 public record UpdateBusinessApprovalPolicyRequestDto(
     bool RequiresTransferApproval,
     int RequiredTransferApprovals,

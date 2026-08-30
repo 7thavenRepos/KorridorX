@@ -55,4 +55,5 @@ public class BusinessProfile : AuditableEntity
     public bool AllowTransferCreatorApproval { get; set; } = false;
 
     public ICollection<BusinessUser> Users { get; set; } = new List<BusinessUser>();
+    public ICollection<BusinessInvitation> Invitations { get; set; } = new List<BusinessInvitation>();
 }

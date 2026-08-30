@@ -296,6 +296,7 @@ builder.Services.AddScoped<IRecipientService, RecipientService>();
 builder.Services.AddScoped<IBusinessBeneficiaryService, BusinessBeneficiaryService>();
 builder.Services.AddScoped<IBusinessAccessService, BusinessAccessService>();
 builder.Services.AddScoped<IBusinessUserService, BusinessUserService>();
+builder.Services.AddScoped<IBusinessInvitationService, BusinessInvitationService>();
 builder.Services.AddScoped<IBusinessTransferService, BusinessTransferService>();
 builder.Services.AddScoped<IBusinessPaymentBatchService, BusinessPaymentBatchService>();
 builder.Services.AddScoped<IBusinessReportExportService, BusinessReportExportService>();

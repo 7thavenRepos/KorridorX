@@ -13,10 +13,44 @@ namespace KorridorX.Controllers;
 public class BusinessUsersController : ControllerBase
 {
     private readonly IBusinessUserService _service;
+    private readonly IBusinessInvitationService _invitations;
 
-    public BusinessUsersController(IBusinessUserService service)
+    public BusinessUsersController(
+        IBusinessUserService service,
+        IBusinessInvitationService invitations)
     {
         _service = service;
+        _invitations = invitations;
+    }
+
+    [HttpGet("invitations")]
+    public async Task<IActionResult> GetInvitations(CancellationToken ct)
+    {
+        var result = await _invitations.GetInvitationsAsync(GetUserId(), ct);
+        return Ok(ApiResponses.Ok(result, "Business invitations retrieved successfully."));
+    }
+
+    [HttpPost("invitations")]
+    public async Task<IActionResult> CreateInvitation(
+        [FromBody] CreateBusinessInvitationRequestDto request,
+        CancellationToken ct)
+    {
+        var result = await _invitations.CreateAsync(GetUserId(), request, ct);
+        return Ok(ApiResponses.Ok(result, "Business invitation sent successfully."));
+    }
+
+    [HttpPost("invitations/{invitationId:guid}/resend")]
+    public async Task<IActionResult> ResendInvitation(Guid invitationId, CancellationToken ct)
+    {
+        var result = await _invitations.ResendAsync(GetUserId(), invitationId, ct);
+        return Ok(ApiResponses.Ok(result, "Business invitation resent successfully."));
+    }
+
+    [HttpDelete("invitations/{invitationId:guid}")]
+    public async Task<IActionResult> RevokeInvitation(Guid invitationId, CancellationToken ct)
+    {
+        await _invitations.RevokeAsync(GetUserId(), invitationId, ct);
+        return Ok(ApiResponses.Ok(new { revoked = true }, "Business invitation revoked successfully."));
     }
 
     [HttpGet]
@@ -24,15 +58,6 @@ public class BusinessUsersController : ControllerBase
     {
         var result = await _service.GetUsersAsync(GetUserId(), ct);
         return Ok(ApiResponses.Ok(result, "Business users retrieved successfully."));
-    }
-
-    [HttpPost]
-    public async Task<IActionResult> AddUser(
-        [FromBody] AddBusinessUserRequestDto request,
-        CancellationToken ct)
-    {
-        var result = await _service.AddUserAsync(GetUserId(), request, ct);
-        return Ok(ApiResponses.Ok(result, "Business user added successfully."));
     }
 
     [HttpPut("{businessUserId:guid}/access")]

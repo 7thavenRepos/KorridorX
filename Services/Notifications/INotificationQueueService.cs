@@ -21,6 +21,14 @@ public interface INotificationQueueService
         Guid? relatedEntityId = null,
         CancellationToken ct = default);
 
+    Task QueueEmailAsync(
+        string email,
+        string subject,
+        string body,
+        string? relatedEntityType = null,
+        Guid? relatedEntityId = null,
+        CancellationToken ct = default);
+
     Task<PagedResult<NotificationMessageDto>> GetMyNotificationsAsync(
         Guid userId,
         int page,

@@ -98,6 +98,27 @@ public class NotificationQueueService : INotificationQueueService
             relatedEntityId?.ToString());
     }
 
+    public Task QueueEmailAsync(
+        string email,
+        string subject,
+        string body,
+        string? relatedEntityType = null,
+        Guid? relatedEntityId = null,
+        CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(email))
+            throw new InvalidOperationException("Notification email is required.");
+
+        AddEmail(
+            null,
+            email.Trim().ToLowerInvariant(),
+            subject,
+            body,
+            relatedEntityType,
+            relatedEntityId?.ToString());
+        return Task.CompletedTask;
+    }
+
     public async Task<PagedResult<NotificationMessageDto>> GetMyNotificationsAsync(
         Guid userId,
         int page,
@@ -153,7 +174,7 @@ public class NotificationQueueService : INotificationQueueService
     }
 
     private void AddEmail(
-        Guid userId,
+        Guid? userId,
         string email,
         string subject,
         string body,

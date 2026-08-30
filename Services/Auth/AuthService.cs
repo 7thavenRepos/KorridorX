@@ -7,6 +7,7 @@ using KorridorX.Models.Customers;
 using KorridorX.Models.Enums;
 using KorridorX.Models.Identity;
 using KorridorX.Services.Audit;
+using KorridorX.Services.BusinessTransfers;
 using KorridorX.Services.Notifications;
 using KorridorX.Services.Security;
 using Microsoft.AspNetCore.Identity;
@@ -25,6 +26,7 @@ public class AuthService : IAuthService
     private readonly INotificationQueueService _notifications;
     private readonly IAuditService _audit;
     private readonly IMfaChallengeStore _mfaChallenges;
+    private readonly IBusinessInvitationService _businessInvitations;
     private readonly SessionSecurityOptions _sessionOptions;
     private readonly AccountSecurityOptions _accountOptions;
     private readonly MfaSecurityOptions _mfaOptions;
@@ -36,6 +38,7 @@ public class AuthService : IAuthService
         INotificationQueueService notifications,
         IAuditService audit,
         IMfaChallengeStore mfaChallenges,
+        IBusinessInvitationService businessInvitations,
         IOptions<SecurityOptions> securityOptions)
     {
         _userManager = userManager;
@@ -44,6 +47,7 @@ public class AuthService : IAuthService
         _notifications = notifications;
         _audit = audit;
         _mfaChallenges = mfaChallenges;
+        _businessInvitations = businessInvitations;
         _sessionOptions = securityOptions.Value.Sessions;
         _accountOptions = securityOptions.Value.Accounts;
         _mfaOptions = securityOptions.Value.Mfa;
@@ -69,6 +73,13 @@ public class AuthService : IAuthService
     {
         var roleName = RegistrationSecurityPolicy.ResolvePublicRole(assignedUserType);
         var email = request.Email.Trim().ToLowerInvariant();
+
+        if (!string.IsNullOrWhiteSpace(request.InvitationToken))
+        {
+            if (assignedUserType != UserType.Business)
+                throw new InvalidOperationException("Business invitations can only be used on the business web registration channel.");
+            await _businessInvitations.ValidateForRegistrationAsync(request.InvitationToken, email, ct);
+        }
 
         var existing = await _userManager.FindByEmailAsync(email);
         if (existing is not null)
@@ -104,6 +115,16 @@ public class AuthService : IAuthService
                 string.IsNullOrWhiteSpace(errors)
                     ? "Unable to assign the account role."
                     : errors);
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.InvitationToken))
+        {
+            await _businessInvitations.AcceptAsync(
+                request.InvitationToken,
+                user.Id,
+                email,
+                saveChanges: false,
+                ct: ct);
         }
 
         if (assignedUserType == UserType.Consumer)

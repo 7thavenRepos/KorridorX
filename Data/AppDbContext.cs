@@ -38,6 +38,7 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<Guid
     public DbSet<CustomerProfile> CustomerProfiles => Set<CustomerProfile>();
     public DbSet<BusinessProfile> BusinessProfiles => Set<BusinessProfile>();
     public DbSet<BusinessUser> BusinessUsers => Set<BusinessUser>();
+    public DbSet<BusinessInvitation> BusinessInvitations => Set<BusinessInvitation>();
 
     public DbSet<ApiApplication> ApiApplications => Set<ApiApplication>();
     public DbSet<ApiCredential> ApiCredentials => Set<ApiCredential>();

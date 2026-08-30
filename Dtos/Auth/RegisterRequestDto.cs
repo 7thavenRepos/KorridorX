@@ -9,7 +9,8 @@ public record ChannelRegistrationRequestDto
     string Email,
     string Password,
     string? PhoneNumber,
-    string? CountryCode
+    string? CountryCode,
+    string? InvitationToken = null
 );
 
 // Integration-test input retained outside the public controller contract. Public
