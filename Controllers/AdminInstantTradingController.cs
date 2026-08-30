@@ -20,6 +20,22 @@ public sealed class AdminInstantTradingController : ControllerBase
         _service = service;
     }
 
+    [HttpGet("pairs")]
+    public async Task<IActionResult> Pairs(
+        [FromQuery] InstantPairStatus? status = null,
+        CancellationToken ct = default) =>
+        Ok(ApiResponses.Ok(
+            await _service.GetAdminPairsAsync(status, ct),
+            "Instant trading pairs retrieved successfully."));
+
+    [HttpGet("house-accounts")]
+    public async Task<IActionResult> HouseAccounts(
+        [FromQuery] string? assetCode = null,
+        CancellationToken ct = default) =>
+        Ok(ApiResponses.Ok(
+            await _service.GetHouseAccountsAsync(assetCode, ct),
+            "Instant house accounts retrieved successfully."));
+
     [HttpPost("pairs")]
     public async Task<IActionResult> CreatePair(
         [FromBody] CreateInstantPairRequestDto request,

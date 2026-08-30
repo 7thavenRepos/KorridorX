@@ -14,8 +14,28 @@ public interface IBusinessFundingService
         int pageSize,
         CancellationToken ct = default);
 
+    Task<PagedResult<AdminBusinessWalletDto>> GetAdminWalletsAsync(
+        Guid? businessProfileId,
+        string? search,
+        string? currencyCode,
+        FinancialAccountStatus? status,
+        int page,
+        int pageSize,
+        CancellationToken ct = default);
+
+    Task<IReadOnlyList<AdminBusinessWalletSubjectDto>> SearchAdminBusinessesAsync(
+        string? search,
+        int take,
+        CancellationToken ct = default);
+
     Task<PagedResult<BusinessLedgerTransactionDto>> GetLedgerAsync(
         Guid userId,
+        Guid walletId,
+        int page,
+        int pageSize,
+        CancellationToken ct = default);
+
+    Task<PagedResult<BusinessLedgerTransactionDto>> GetAdminLedgerAsync(
         Guid walletId,
         int page,
         int pageSize,

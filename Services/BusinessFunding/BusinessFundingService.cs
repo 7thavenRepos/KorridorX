@@ -70,6 +70,91 @@ public class BusinessFundingService : IBusinessFundingService
             .PaginateAsync(page, pageSize, ct);
     }
 
+    public async Task<PagedResult<AdminBusinessWalletDto>> GetAdminWalletsAsync(
+        Guid? businessProfileId,
+        string? search,
+        string? currencyCode,
+        FinancialAccountStatus? status,
+        int page,
+        int pageSize,
+        CancellationToken ct = default)
+    {
+        var query =
+            from account in _db.FinancialAccounts.AsNoTracking()
+            join business in _db.BusinessProfiles.AsNoTracking()
+                on account.OwnerId equals business.Id
+            where account.OwnerType == FinancialAccountOwnerType.Business &&
+                  !account.IsDeleted &&
+                  !business.IsDeleted
+            select new AdminBusinessWalletDto(
+                account.Id,
+                business.Id,
+                business.BusinessName,
+                business.TradingName,
+                business.ContactEmail,
+                business.CountryCode,
+                account.AssetCode,
+                account.Status,
+                account.SettledBalance,
+                account.AvailableBalance,
+                account.HeldBalance,
+                account.CreatedAt,
+                account.LastUpdatedAt);
+
+        if (businessProfileId.HasValue)
+            query = query.Where(x => x.BusinessProfileId == businessProfileId.Value);
+        if (!string.IsNullOrWhiteSpace(currencyCode))
+        {
+            var normalizedCurrency = NormalizeCode(currencyCode);
+            query = query.Where(x => x.CurrencyCode == normalizedCurrency);
+        }
+        if (status.HasValue)
+            query = query.Where(x => x.Status == status.Value);
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var normalizedSearch = search.Trim().ToLower();
+            query = query.Where(x =>
+                x.BusinessName.ToLower().Contains(normalizedSearch) ||
+                (x.TradingName != null && x.TradingName.ToLower().Contains(normalizedSearch)) ||
+                (x.ContactEmail != null && x.ContactEmail.ToLower().Contains(normalizedSearch)));
+        }
+
+        return await query
+            .OrderBy(x => x.BusinessName)
+            .ThenBy(x => x.CurrencyCode)
+            .PaginateAsync(page, pageSize, ct);
+    }
+
+    public async Task<IReadOnlyList<AdminBusinessWalletSubjectDto>> SearchAdminBusinessesAsync(
+        string? search,
+        int take,
+        CancellationToken ct = default)
+    {
+        take = Math.Clamp(take, 1, 100);
+        var query = _db.BusinessProfiles.AsNoTracking().Where(x => !x.IsDeleted);
+
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var normalizedSearch = search.Trim().ToLower();
+            query = query.Where(x =>
+                x.BusinessName.ToLower().Contains(normalizedSearch) ||
+                (x.TradingName != null && x.TradingName.ToLower().Contains(normalizedSearch)) ||
+                (x.ContactEmail != null && x.ContactEmail.ToLower().Contains(normalizedSearch)));
+        }
+
+        return await query
+            .OrderBy(x => x.BusinessName)
+            .Take(take)
+            .Select(x => new AdminBusinessWalletSubjectDto(
+                x.Id,
+                x.BusinessName,
+                x.TradingName,
+                x.CountryCode,
+                x.ContactEmail,
+                x.KybStatus))
+            .ToListAsync(ct);
+    }
+
     public async Task<PagedResult<BusinessLedgerTransactionDto>> GetLedgerAsync(
         Guid userId,
         Guid walletId,
@@ -125,6 +210,35 @@ public class BusinessFundingService : IBusinessFundingService
                 x.ReversedByTransactionId,
                 x.ReversedAt,
                 x.ReversalReason)).ToList(),
+            Meta = paged.Meta
+        };
+    }
+
+    public async Task<PagedResult<BusinessLedgerTransactionDto>> GetAdminLedgerAsync(
+        Guid walletId,
+        int page,
+        int pageSize,
+        CancellationToken ct = default)
+    {
+        var walletExists = await _db.FinancialAccounts.AsNoTracking().AnyAsync(x =>
+            x.Id == walletId &&
+            x.OwnerType == FinancialAccountOwnerType.Business &&
+            !x.IsDeleted,
+            ct);
+
+        if (!walletExists)
+            throw new InvalidOperationException("Business wallet not found.");
+
+        var paged = await _db.LedgerTransactions
+            .AsNoTracking()
+            .Include(x => x.Postings)
+            .Where(x => x.Postings.Any(y => y.FinancialAccountId == walletId) && !x.IsDeleted)
+            .OrderByDescending(x => x.PostedAt)
+            .PaginateAsync(page, pageSize, ct);
+
+        return new PagedResult<BusinessLedgerTransactionDto>
+        {
+            Items = paged.Items.Select(ToLedgerDto).ToList(),
             Meta = paged.Meta
         };
     }

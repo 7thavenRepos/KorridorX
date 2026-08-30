@@ -7,6 +7,12 @@ namespace KorridorX.Services.Instant;
 public interface IInstantTradingService
 {
     Task<IReadOnlyList<InstantPairDto>> GetPairsAsync(CancellationToken ct = default);
+    Task<IReadOnlyList<InstantPairAdminDto>> GetAdminPairsAsync(
+        InstantPairStatus? status = null,
+        CancellationToken ct = default);
+    Task<IReadOnlyList<InstantHouseAccountDto>> GetHouseAccountsAsync(
+        string? assetCode = null,
+        CancellationToken ct = default);
     Task<InstantQuoteDto> CreateQuoteAsync(Guid userId, CreateInstantQuoteRequestDto request, CancellationToken ct = default);
     Task<InstantTradeDto> ExecuteQuoteAsync(Guid userId, Guid quoteId, CancellationToken ct = default);
     Task<PagedResult<InstantTradeDto>> GetMyTradesAsync(Guid userId, int page = 1, int pageSize = 20, CancellationToken ct = default);

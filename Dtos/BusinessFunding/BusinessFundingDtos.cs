@@ -14,6 +14,29 @@ public record BusinessWalletDto(
     DateTime CreatedAt,
     DateTime? LastUpdatedAt);
 
+public record AdminBusinessWalletDto(
+    Guid Id,
+    Guid BusinessProfileId,
+    string BusinessName,
+    string? TradingName,
+    string? ContactEmail,
+    string CountryCode,
+    string CurrencyCode,
+    FinancialAccountStatus Status,
+    decimal SettledBalance,
+    decimal AvailableBalance,
+    decimal HeldBalance,
+    DateTime CreatedAt,
+    DateTime? LastUpdatedAt);
+
+public record AdminBusinessWalletSubjectDto(
+    Guid Id,
+    string BusinessName,
+    string? TradingName,
+    string CountryCode,
+    string? ContactEmail,
+    KybStatus KybStatus);
+
 public record BusinessLedgerEntryDto(
     Guid Id,
     LedgerBalanceBucket AccountType,

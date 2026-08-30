@@ -46,6 +46,62 @@ public sealed class InstantTradingService : IInstantTradingService
             .ToListAsync(ct);
     }
 
+    public async Task<IReadOnlyList<InstantPairAdminDto>> GetAdminPairsAsync(
+        InstantPairStatus? status = null,
+        CancellationToken ct = default)
+    {
+        var query = _db.InstantPairs.AsNoTracking().Where(x => !x.IsDeleted);
+        if (status.HasValue)
+            query = query.Where(x => x.Status == status.Value);
+
+        return await query
+            .OrderBy(x => x.Code)
+            .Select(x => new InstantPairAdminDto(
+                x.Id,
+                x.Code,
+                x.SourceAssetCode,
+                x.DestinationAssetCode,
+                x.Status,
+                x.HouseSourceFinancialAccountId,
+                x.HouseDestinationFinancialAccountId,
+                x.MinimumSourceAmount,
+                x.MaximumSourceAmount,
+                x.SourceAmountIncrement,
+                x.QuoteValiditySeconds))
+            .ToListAsync(ct);
+    }
+
+    public async Task<IReadOnlyList<InstantHouseAccountDto>> GetHouseAccountsAsync(
+        string? assetCode = null,
+        CancellationToken ct = default)
+    {
+        var query = _db.FinancialAccounts.AsNoTracking().Where(x =>
+            !x.IsDeleted &&
+            x.AccountType == FinancialAccountType.House &&
+            (x.OwnerType == FinancialAccountOwnerType.Treasury ||
+             x.OwnerType == FinancialAccountOwnerType.Platform));
+
+        if (!string.IsNullOrWhiteSpace(assetCode))
+        {
+            var normalizedAsset = NormalizeAssetCode(assetCode);
+            query = query.Where(x => x.AssetCode == normalizedAsset);
+        }
+
+        return await query
+            .OrderBy(x => x.AssetCode)
+            .ThenBy(x => x.AccountCode)
+            .Select(x => new InstantHouseAccountDto(
+                x.Id,
+                x.AccountCode,
+                x.AssetCode,
+                x.OwnerType,
+                x.Status,
+                x.SettledBalance,
+                x.AvailableBalance,
+                x.HeldBalance))
+            .ToListAsync(ct);
+    }
+
     public async Task<InstantQuoteDto> CreateQuoteAsync(
         Guid userId,
         CreateInstantQuoteRequestDto request,

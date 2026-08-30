@@ -13,6 +13,29 @@ public record InstantPairDto(
     decimal SourceAmountIncrement,
     int QuoteValiditySeconds);
 
+public record InstantPairAdminDto(
+    Guid Id,
+    string Code,
+    string SourceAssetCode,
+    string DestinationAssetCode,
+    InstantPairStatus Status,
+    Guid HouseSourceFinancialAccountId,
+    Guid HouseDestinationFinancialAccountId,
+    decimal MinimumSourceAmount,
+    decimal? MaximumSourceAmount,
+    decimal SourceAmountIncrement,
+    int QuoteValiditySeconds);
+
+public record InstantHouseAccountDto(
+    Guid Id,
+    string AccountCode,
+    string AssetCode,
+    FinancialAccountOwnerType OwnerType,
+    FinancialAccountStatus Status,
+    decimal SettledBalance,
+    decimal AvailableBalance,
+    decimal HeldBalance);
+
 public record CreateInstantPairRequestDto(
     string SourceAssetCode,
     string DestinationAssetCode,

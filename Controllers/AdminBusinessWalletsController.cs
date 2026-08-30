@@ -23,6 +23,47 @@ public class AdminBusinessWalletsController : ControllerBase
         _service = service;
     }
 
+    [HttpGet]
+    public async Task<IActionResult> GetWallets(
+        [FromQuery] Guid? businessProfileId,
+        [FromQuery] string? search,
+        [FromQuery] string? currencyCode,
+        [FromQuery] FinancialAccountStatus? status,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 50,
+        CancellationToken ct = default)
+    {
+        var result = await _service.GetAdminWalletsAsync(
+            businessProfileId,
+            search,
+            currencyCode,
+            status,
+            page,
+            pageSize,
+            ct);
+        return Ok(ApiResponses.OkPaged(result.Items, result.Meta, "Business wallets retrieved successfully."));
+    }
+
+    [HttpGet("businesses")]
+    public async Task<IActionResult> SearchBusinesses(
+        [FromQuery] string? search,
+        [FromQuery] int take = 50,
+        CancellationToken ct = default) =>
+        Ok(ApiResponses.Ok(
+            await _service.SearchAdminBusinessesAsync(search, take, ct),
+            "Business wallet subjects retrieved successfully."));
+
+    [HttpGet("{walletId:guid}/ledger")]
+    public async Task<IActionResult> GetLedger(
+        Guid walletId,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 50,
+        CancellationToken ct = default)
+    {
+        var result = await _service.GetAdminLedgerAsync(walletId, page, pageSize, ct);
+        return Ok(ApiResponses.OkPaged(result.Items, result.Meta, "Business wallet ledger retrieved successfully."));
+    }
+
     [HttpPost("credit")]
     public async Task<IActionResult> Credit(
         [FromBody] AdminCreditBusinessWalletRequestDto request,

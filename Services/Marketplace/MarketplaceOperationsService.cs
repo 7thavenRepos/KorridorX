@@ -11,6 +11,9 @@ namespace KorridorX.Services.Marketplace;
 
 public interface IMarketplaceOperationsService
 {
+    Task<IReadOnlyList<MarketplacePairDto>> GetPairsAsync(
+        MarketplacePairStatus? status = null,
+        CancellationToken ct = default);
     Task<MarketplacePairDto> CreatePairAsync(CreateMarketplacePairRequestDto request, Guid? actionedByUserId, CancellationToken ct = default);
     Task<MarketplacePairDto> UpdatePairAsync(Guid pairId, UpdateMarketplacePairRequestDto request, Guid? actionedByUserId, CancellationToken ct = default);
     Task<MarketplacePairDto> SetPairStatusAsync(Guid pairId, MarketplacePairStatus status, Guid? actionedByUserId, CancellationToken ct = default);
@@ -44,6 +47,29 @@ public class MarketplaceOperationsService : IMarketplaceOperationsService
         _db = db;
         _reservationService = reservationService;
         _settlementService = settlementService;
+    }
+
+    public async Task<IReadOnlyList<MarketplacePairDto>> GetPairsAsync(
+        MarketplacePairStatus? status = null,
+        CancellationToken ct = default)
+    {
+        var query = _db.MarketplacePairs.AsNoTracking().Where(x => !x.IsDeleted);
+        if (status.HasValue)
+            query = query.Where(x => x.Status == status.Value);
+
+        return await query
+            .OrderBy(x => x.Code)
+            .Select(x => new MarketplacePairDto(
+                x.Id,
+                x.Code,
+                x.BaseAssetCode,
+                x.QuoteAssetCode,
+                x.Status,
+                x.MinimumOrderQuantity,
+                x.MaximumOrderQuantity,
+                x.QuantityIncrement,
+                x.PriceIncrement))
+            .ToListAsync(ct);
     }
 
     public async Task<MarketplacePairDto> CreatePairAsync(

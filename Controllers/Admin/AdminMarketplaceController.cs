@@ -23,6 +23,14 @@ public class AdminMarketplaceController : ControllerBase
         _marketplace = marketplace;
     }
 
+    [HttpGet("pairs")]
+    public async Task<IActionResult> GetPairs(
+        [FromQuery] MarketplacePairStatus? status = null,
+        CancellationToken ct = default) =>
+        Ok(ApiResponses.Ok(
+            await _marketplace.GetPairsAsync(status, ct),
+            "Marketplace pairs retrieved successfully."));
+
     [HttpPost("pairs")]
     public async Task<IActionResult> CreatePair(
         [FromBody] CreateMarketplacePairRequestDto request,
