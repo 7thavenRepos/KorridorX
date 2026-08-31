@@ -816,11 +816,18 @@ public class AuthService : IAuthService
                 return;
 
             var token = await _userManager.GeneratePasswordResetTokenAsync(user);
-            var message = AccountSecurityEmailFactory.CreatePasswordReset(
-                _accountOptions.FrontendBaseUrl,
-                user.Id,
-                IdentityTokenCodec.Encode(token),
-                user.FirstName);
+            var encodedToken = IdentityTokenCodec.Encode(token);
+            var message = user.UserType == UserType.Consumer
+                ? AccountSecurityEmailFactory.CreateMobilePasswordReset(
+                    _accountOptions.MobileDeepLinkBaseUrl,
+                    user.Id,
+                    encodedToken,
+                    user.FirstName)
+                : AccountSecurityEmailFactory.CreatePasswordReset(
+                    _accountOptions.FrontendBaseUrl,
+                    user.Id,
+                    encodedToken,
+                    user.FirstName);
 
             await _notifications.QueueUserAsync(
                 user.Id,
@@ -1173,11 +1180,18 @@ public class AuthService : IAuthService
         CancellationToken ct)
     {
         var token = await _userManager.GenerateEmailConfirmationTokenAsync(user);
-        var message = AccountSecurityEmailFactory.CreateEmailConfirmation(
-            _accountOptions.FrontendBaseUrl,
-            user.Id,
-            IdentityTokenCodec.Encode(token),
-            user.FirstName);
+        var encodedToken = IdentityTokenCodec.Encode(token);
+        var message = user.UserType == UserType.Consumer
+            ? AccountSecurityEmailFactory.CreateMobileEmailConfirmation(
+                _accountOptions.MobileDeepLinkBaseUrl,
+                user.Id,
+                encodedToken,
+                user.FirstName)
+            : AccountSecurityEmailFactory.CreateEmailConfirmation(
+                _accountOptions.FrontendBaseUrl,
+                user.Id,
+                encodedToken,
+                user.FirstName);
 
         await _notifications.QueueUserAsync(
             user.Id,

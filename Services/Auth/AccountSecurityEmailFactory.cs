@@ -29,6 +29,30 @@ public static class AccountSecurityEmailFactory
                 "If you did not create this account, you can ignore this message."));
     }
 
+    public static (string Subject, string Body) CreateMobileEmailConfirmation(
+        string mobileDeepLinkBaseUrl,
+        Guid userId,
+        string encodedToken,
+        string firstName)
+    {
+        var link = BuildFragmentLink(
+            $"{mobileDeepLinkBaseUrl.TrimEnd('/')}/confirm-email",
+            new Dictionary<string, string?>
+            {
+                ["userId"] = userId.ToString(),
+                ["token"] = encodedToken
+            });
+
+        return (
+            "Confirm your KorridorX email address",
+            CreateBody(
+                firstName,
+                "Confirm your email address in the KorridorX app",
+                "Open KorridorX",
+                link,
+                "If you did not create this account, you can ignore this message."));
+    }
+
     public static (string Subject, string Body) CreatePasswordReset(
         string frontendBaseUrl,
         Guid userId,
@@ -49,6 +73,30 @@ public static class AccountSecurityEmailFactory
                 firstName,
                 "Reset your password",
                 "Reset password",
+                link,
+                "If you did not request a password reset, secure your email account and contact KorridorX support."));
+    }
+
+    public static (string Subject, string Body) CreateMobilePasswordReset(
+        string mobileDeepLinkBaseUrl,
+        Guid userId,
+        string encodedToken,
+        string firstName)
+    {
+        var link = BuildFragmentLink(
+            $"{mobileDeepLinkBaseUrl.TrimEnd('/')}/reset-password",
+            new Dictionary<string, string?>
+            {
+                ["userId"] = userId.ToString(),
+                ["token"] = encodedToken
+            });
+
+        return (
+            "Reset your KorridorX password",
+            CreateBody(
+                firstName,
+                "Reset your password in the KorridorX app",
+                "Open KorridorX",
                 link,
                 "If you did not request a password reset, secure your email account and contact KorridorX support."));
     }

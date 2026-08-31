@@ -50,6 +50,7 @@ public sealed class AccountSecurityOptions
 {
     public bool RequireConfirmedEmail { get; set; } = true;
     public string FrontendBaseUrl { get; set; } = "http://localhost:4200";
+    public string MobileDeepLinkBaseUrl { get; set; } = "korridorx://account-security";
     public int TokenLifespanMinutes { get; set; } = 120;
 }
 
@@ -112,6 +113,17 @@ public sealed class SecurityOptionsValidator : IValidateOptions<SecurityOptions>
             !string.IsNullOrEmpty(frontendUri.Fragment))
         {
             errors.Add("Security:Accounts:FrontendBaseUrl must be an absolute HTTP or HTTPS URL without a query or fragment.");
+        }
+
+        if (!Uri.TryCreate(options.Accounts.MobileDeepLinkBaseUrl, UriKind.Absolute, out var mobileUri) ||
+            !string.Equals(mobileUri.Scheme, "korridorx", StringComparison.OrdinalIgnoreCase) ||
+            !string.Equals(mobileUri.Host, "account-security", StringComparison.OrdinalIgnoreCase) ||
+            !string.IsNullOrEmpty(mobileUri.UserInfo) ||
+            !string.IsNullOrEmpty(mobileUri.Query) ||
+            !string.IsNullOrEmpty(mobileUri.Fragment) ||
+            (mobileUri.AbsolutePath.Length > 1 && mobileUri.AbsolutePath != "/"))
+        {
+            errors.Add("Security:Accounts:MobileDeepLinkBaseUrl must be korridorx://account-security without a path, query, or fragment.");
         }
 
         if (options.Accounts.TokenLifespanMinutes is < 15 or > 1440)
