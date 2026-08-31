@@ -285,4 +285,123 @@ public class ProviderOperationsQueryService : IProviderOperationsQueryService
                 x.CreatedAt))
             .PaginateAsync(page, pageSize, ct);
     }
+
+    public async Task<PagedResult<PendingPayoutDispatchDto>> GetPendingPayoutsAsync(
+        string? search,
+        int page,
+        int pageSize,
+        CancellationToken ct = default)
+    {
+        var query = _db.Transfers
+            .AsNoTracking()
+            .Where(x =>
+                !x.IsDeleted &&
+                (x.Status == TransferStatus.PaymentReceived || x.Status == TransferStatus.Processing) &&
+                !_db.Payouts.Any(p => p.TransferId == x.Id && !p.IsDeleted));
+
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var value = search.Trim().ToLower();
+            query = query.Where(x =>
+                x.Reference.ToLower().Contains(value) ||
+                (x.ExternalReference != null && x.ExternalReference.ToLower().Contains(value)) ||
+                x.SourceCurrencyCode.ToLower().Contains(value) ||
+                x.DestinationCurrencyCode.ToLower().Contains(value));
+        }
+
+        return await query
+            .OrderBy(x => x.PaymentReceivedAt ?? x.CreatedAt)
+            .Select(x => new PendingPayoutDispatchDto(
+                x.Id,
+                x.Reference,
+                x.BusinessProfileId != null ? "Business" : "Consumer",
+                x.Status,
+                x.SourceCurrencyCode,
+                x.SourceAmount,
+                x.DestinationCurrencyCode,
+                x.DestinationAmount,
+                x.IsComplianceHold,
+                x.ComplianceHoldReason,
+                x.IsOperationalHold,
+                x.OperationalHoldReason,
+                !x.IsComplianceHold && !x.IsOperationalHold,
+                x.PaymentReceivedAt,
+                x.CreatedAt))
+            .PaginateAsync(page, pageSize, ct);
+    }
+
+    public async Task<PagedResult<RefundOperationDto>> GetRefundOperationsAsync(
+        string? search,
+        CollectionStatus? status,
+        int page,
+        int pageSize,
+        CancellationToken ct = default)
+    {
+        var query = _db.Collections
+            .AsNoTracking()
+            .Where(x =>
+                !x.IsDeleted &&
+                x.Purpose == PaymentOperationPurpose.Remittance &&
+                (x.Status == CollectionStatus.Successful ||
+                 x.Status == CollectionStatus.RefundPending ||
+                 x.Status == CollectionStatus.RefundFailed ||
+                 x.Status == CollectionStatus.Refunded));
+
+        if (status.HasValue)
+        {
+            query = query.Where(x => x.Status == status.Value);
+        }
+
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var value = search.Trim().ToLower();
+            query = query.Where(x =>
+                x.Reference.ToLower().Contains(value) ||
+                (x.ProviderCollectionId != null && x.ProviderCollectionId.ToLower().Contains(value)) ||
+                (x.ProviderRefundId != null && x.ProviderRefundId.ToLower().Contains(value)) ||
+                (x.Transfer != null && x.Transfer.Reference.ToLower().Contains(value)) ||
+                x.CurrencyCode.ToLower().Contains(value));
+        }
+
+        var refundWindowStart = DateTime.UtcNow.AddDays(-7);
+
+        return await query
+            .OrderByDescending(x => x.RefundInitiatedAt ?? x.ConfirmedAt ?? x.CreatedAt)
+            .Select(x => new RefundOperationDto(
+                x.Id,
+                x.TransferId,
+                x.Transfer == null ? null : x.Transfer.Reference,
+                x.Reference,
+                x.CurrencyCode,
+                x.Amount,
+                x.Status,
+                x.ProviderCode,
+                x.ProviderCollectionId,
+                x.ProviderReference,
+                x.ProviderRefundId,
+                x.ProviderRefundReference,
+                x.RefundReason,
+                x.RefundFailureReason,
+                x.Status == CollectionStatus.Successful &&
+                    (x.CurrencyCode == "EUR" || x.CurrencyCode == "GBP") &&
+                    x.ProviderCollectionId != null &&
+                    (x.ConfirmedAt ?? x.LastUpdatedAt ?? x.CreatedAt) >= refundWindowStart,
+                x.ProviderRefundId != null &&
+                    (x.Status == CollectionStatus.RefundPending || x.Status == CollectionStatus.RefundFailed),
+                x.Status != CollectionStatus.Successful
+                    ? null
+                    : x.CurrencyCode != "EUR" && x.CurrencyCode != "GBP"
+                        ? "Provider refunds support only EUR and GBP collections."
+                        : x.ProviderCollectionId == null
+                            ? "The collection has no provider transaction ID."
+                            : (x.ConfirmedAt ?? x.LastUpdatedAt ?? x.CreatedAt) < refundWindowStart
+                                ? "The seven-day provider refund window has expired."
+                                : null,
+                x.ConfirmedAt,
+                x.RefundInitiatedAt,
+                x.RefundedAt,
+                x.LastRefundSyncedAt,
+                x.CreatedAt))
+            .PaginateAsync(page, pageSize, ct);
+    }
 }

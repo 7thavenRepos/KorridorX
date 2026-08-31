@@ -215,6 +215,35 @@ public class AdminProviderRecoveryController : ControllerBase
             "Failed payout recovery queue retrieved successfully."));
     }
 
+    [HttpGet("~/api/admin/payouts/pending")]
+    public async Task<IActionResult> GetPendingPayouts(
+        [FromQuery] string? search,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 20,
+        CancellationToken ct = default)
+    {
+        var result = await _queryService.GetPendingPayoutsAsync(search, page, pageSize, ct);
+        return Ok(ApiResponses.OkPaged(
+            result.Items,
+            result.Meta,
+            "Pending payout dispatch queue retrieved successfully."));
+    }
+
+    [HttpGet("~/api/admin/refunds")]
+    public async Task<IActionResult> GetRefundOperations(
+        [FromQuery] string? search,
+        [FromQuery] CollectionStatus? status,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 20,
+        CancellationToken ct = default)
+    {
+        var result = await _queryService.GetRefundOperationsAsync(search, status, page, pageSize, ct);
+        return Ok(ApiResponses.OkPaged(
+            result.Items,
+            result.Meta,
+            "Refund operations queue retrieved successfully."));
+    }
+
     [HttpPost("transactions/{providerTransactionRowId:guid}/reconcile")]
     public async Task<IActionResult> ReconcileTransaction(
         Guid providerTransactionRowId,

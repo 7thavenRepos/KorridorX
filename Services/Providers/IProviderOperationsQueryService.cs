@@ -1,5 +1,6 @@
 using KorridorX.Dtos.Providers;
 using KorridorX.Infrastructure;
+using KorridorX.Models.Enums;
 
 namespace KorridorX.Services.Providers;
 
@@ -37,6 +38,19 @@ public interface IProviderOperationsQueryService
 
     Task<PagedResult<FailedPayoutRecoveryDto>> GetFailedPayoutsAsync(
         string? search,
+        int page,
+        int pageSize,
+        CancellationToken ct = default);
+
+    Task<PagedResult<PendingPayoutDispatchDto>> GetPendingPayoutsAsync(
+        string? search,
+        int page,
+        int pageSize,
+        CancellationToken ct = default);
+
+    Task<PagedResult<RefundOperationDto>> GetRefundOperationsAsync(
+        string? search,
+        CollectionStatus? status,
         int page,
         int pageSize,
         CancellationToken ct = default);

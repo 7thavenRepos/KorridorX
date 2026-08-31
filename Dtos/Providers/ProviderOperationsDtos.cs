@@ -123,5 +123,46 @@ public record FailedPayoutRecoveryDto(
     int AttemptCount,
     DateTime CreatedAt);
 
+public record PendingPayoutDispatchDto(
+    Guid TransferId,
+    string TransferReference,
+    string OwnerType,
+    TransferStatus TransferStatus,
+    string SourceCurrencyCode,
+    decimal SourceAmount,
+    string DestinationCurrencyCode,
+    decimal DestinationAmount,
+    bool IsComplianceHold,
+    string? ComplianceHoldReason,
+    bool IsOperationalHold,
+    string? OperationalHoldReason,
+    bool CanDispatch,
+    DateTime? PaymentReceivedAt,
+    DateTime CreatedAt);
+
+public record RefundOperationDto(
+    Guid CollectionId,
+    Guid? TransferId,
+    string? TransferReference,
+    string CollectionReference,
+    string CurrencyCode,
+    decimal Amount,
+    CollectionStatus Status,
+    string ProviderCode,
+    string? ProviderCollectionId,
+    string? ProviderReference,
+    string? ProviderRefundId,
+    string? ProviderRefundReference,
+    string? RefundReason,
+    string? RefundFailureReason,
+    bool CanInitiate,
+    bool CanRefresh,
+    string? IneligibilityReason,
+    DateTime? ConfirmedAt,
+    DateTime? RefundInitiatedAt,
+    DateTime? RefundedAt,
+    DateTime? LastRefundSyncedAt,
+    DateTime CreatedAt);
+
 public sealed record ProviderAdminActionRequestDto(
     string Reason);

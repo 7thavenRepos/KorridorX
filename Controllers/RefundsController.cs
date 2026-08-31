@@ -2,6 +2,9 @@ using KorridorX.Configuration;
 using System.Security.Claims;
 using KorridorX.Dtos.Payments;
 using KorridorX.Infrastructure;
+using KorridorX.Dtos.Audit;
+using KorridorX.Dtos.Providers;
+using KorridorX.Services.Audit;
 using KorridorX.Services.Payments;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.RateLimiting;
@@ -16,10 +19,12 @@ namespace KorridorX.Controllers;
 public class RefundsController : ControllerBase
 {
     private readonly IRefundService _refundService;
+    private readonly IAuditService _audit;
 
-    public RefundsController(IRefundService refundService)
+    public RefundsController(IRefundService refundService, IAuditService audit)
     {
         _refundService = refundService;
+        _audit = audit;
     }
 
     [HttpGet]
@@ -35,15 +40,58 @@ public class RefundsController : ControllerBase
         InitiateRefundRequestDto request,
         CancellationToken ct)
     {
-        var result = await _refundService.InitiateAsync(collectionId, request.Reason, GetUserId(), ct);
+        var reason = NormalizeReason(request.Reason);
+        var userId = GetUserId();
+        var result = await _refundService.InitiateAsync(collectionId, reason, userId, ct);
+
+        await _audit.RecordAsync(
+            new AuditRecordRequest(
+                Action: "COLLECTION_REFUND_APPROVED",
+                Category: "ProviderOperations",
+                EntityName: "Collection",
+                EntityId: collectionId.ToString(),
+                NewValues: result,
+                Metadata: new { Reason = reason },
+                UserId: userId),
+            ct);
+
         return Ok(ApiResponses.Ok(result, "Refund initiation completed."));
     }
 
     [HttpPost("refresh")]
-    public async Task<IActionResult> RefreshRefund(Guid collectionId, CancellationToken ct)
+    public async Task<IActionResult> RefreshRefund(
+        Guid collectionId,
+        [FromBody] ProviderAdminActionRequestDto request,
+        CancellationToken ct)
     {
-        var result = await _refundService.RefreshAsync(collectionId, GetUserId(), ct);
+        var reason = NormalizeReason(request.Reason);
+        var userId = GetUserId();
+        var result = await _refundService.RefreshAsync(collectionId, userId, ct);
+
+        await _audit.RecordAsync(
+            new AuditRecordRequest(
+                Action: "COLLECTION_REFUND_REFRESHED",
+                Category: "ProviderOperations",
+                EntityName: "Collection",
+                EntityId: collectionId.ToString(),
+                NewValues: result,
+                Metadata: new { Reason = reason },
+                UserId: userId),
+            ct);
+
         return Ok(ApiResponses.Ok(result, "Refund status refreshed successfully."));
+    }
+
+    private static string NormalizeReason(string? reason)
+    {
+        if (string.IsNullOrWhiteSpace(reason))
+            throw new InvalidOperationException("A reason is required for this refund operation.");
+
+        var cleaned = reason.Trim();
+        if (cleaned.Length > 1000)
+            throw new InvalidOperationException("Reason cannot exceed 1000 characters.");
+
+        return cleaned;
     }
 
     private Guid GetUserId()
