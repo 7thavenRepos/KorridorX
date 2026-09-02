@@ -4,22 +4,20 @@ namespace KorridorX.Services.Payments;
 
 public class CollectionPaymentMethodPolicy : ICollectionPaymentMethodPolicy
 {
+    // This matrix must describe methods that the active remittance provider can
+    // actually initiate. Do not expose planned methods here: clients use this
+    // policy to create a collection that cannot change payment method later.
     private static readonly IReadOnlyDictionary<string, IReadOnlyList<PaymentMethod>> SupportedMethods =
         new Dictionary<string, IReadOnlyList<PaymentMethod>>(StringComparer.OrdinalIgnoreCase)
         {
             [BuildKey("US", "USD")] =
             [
-                PaymentMethod.Ach,
-                PaymentMethod.Wire,
-                PaymentMethod.Card,
-                PaymentMethod.BankTransfer,
-                PaymentMethod.VirtualAccount
+                PaymentMethod.Card
             ],
 
             [BuildKey("CA", "CAD")] =
             [
-                PaymentMethod.Interac,
-                PaymentMethod.BankTransfer
+                PaymentMethod.Interac
             ]
         };
 

@@ -30,10 +30,16 @@ Then initiate it:
 
 `POST /api/collections/{collectionId}/initiate`
 
-Live initiation currently supports:
+The public collection-method contract advertises only methods implemented by the active Blaaiz adapter:
 
-- `Card`: requires a configured currency wallet, card details, and a provider customer whose status is `VERIFIED`.
-- `Interac`: requires a CAD collection and payer email. Settlement remains asynchronous until webhook confirmation.
+| Source corridor | Advertised method | Provider initiation |
+| --- | --- | --- |
+| US / USD | `Card` | Blaaiz card collection |
+| CA / CAD | `Interac` | Blaaiz Interac money request |
+
+ACH, wire, bank-transfer and virtual-account collection methods are not advertised until their provider initiation contracts are implemented and sandbox-accepted. This matters because a transfer can have only one collection payment method; clients must never create an unusable collection from a planned capability.
+
+Card requires a configured currency wallet, card details, and a provider customer whose status is `VERIFIED`. Interac requires a CAD collection and payer email. Settlement remains asynchronous until webhook confirmation.
 
 Card numbers and CVC values are sent to Blaaiz but are never stored in collection attempts or provider request logs.
 
