@@ -7,6 +7,7 @@ using KorridorX.Models.Providers;
 using KorridorX.Models.Transfers;
 using KorridorX.Services.References;
 using KorridorX.Services.Compliance;
+using KorridorX.Services.Payments;
 using KorridorX.Services.Security;
 using Microsoft.EntityFrameworkCore;
 
@@ -105,6 +106,12 @@ public class TransferService : ITransferService
         {
             throw new InvalidOperationException("The selected quote is not a consumer transfer quote.");
         }
+
+        PayoutDestinationCapabilityPolicy.EnsureSupported(
+            quote.ProviderCode,
+            request.RecipientMobileWalletId.HasValue
+                ? PayoutDestinationType.RecipientMobileWallet
+                : PayoutDestinationType.RecipientBankAccount);
 
         if (!string.Equals(quote.SourceCountryCode, customerProfile.CountryCode, StringComparison.OrdinalIgnoreCase))
         {

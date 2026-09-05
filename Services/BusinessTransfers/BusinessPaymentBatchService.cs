@@ -13,6 +13,7 @@ using KorridorX.Models.Transfers;
 using KorridorX.Services.References;
 using KorridorX.Services.BusinessFunding;
 using KorridorX.Services.Notifications;
+using KorridorX.Services.Payments;
 using KorridorX.Services.Transfers;
 using KorridorX.Services.Compliance;
 using KorridorX.Services.Security;
@@ -646,6 +647,12 @@ public class BusinessPaymentBatchService : IBusinessPaymentBatchService
 
         await EnsureCorridorAsync(item.DestinationCountryCode, item.DestinationCurrencyCode, false, ct);
         var quote = await CreateQuoteAsync(batch, item, transferType, userId, ct);
+
+        PayoutDestinationCapabilityPolicy.EnsureSupported(
+            quote.ProviderCode,
+            item.BusinessBeneficiaryMobileWalletId.HasValue
+                ? PayoutDestinationType.BusinessBeneficiaryMobileWallet
+                : PayoutDestinationType.BusinessBeneficiaryBankAccount);
 
         await EnsureBankDestinationVerifiedForQuoteProviderAsync(item, quote, ct);
 

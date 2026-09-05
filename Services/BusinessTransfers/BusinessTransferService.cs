@@ -12,6 +12,7 @@ using KorridorX.Models.Transfers;
 using KorridorX.Services.References;
 using KorridorX.Services.BusinessFunding;
 using KorridorX.Services.Notifications;
+using KorridorX.Services.Payments;
 using KorridorX.Services.Transfers;
 using KorridorX.Services.Compliance;
 using KorridorX.Services.Security;
@@ -185,6 +186,12 @@ public class BusinessTransferService : IBusinessTransferService
             ?? throw new InvalidOperationException("Business transfer quote not found.");
 
         ValidateQuote(quote);
+
+        PayoutDestinationCapabilityPolicy.EnsureSupported(
+            quote.ProviderCode,
+            request.BusinessBeneficiaryMobileWalletId.HasValue
+                ? PayoutDestinationType.BusinessBeneficiaryMobileWallet
+                : PayoutDestinationType.BusinessBeneficiaryBankAccount);
 
         var beneficiary = await _db.BusinessBeneficiaries
             .Include(x => x.BankAccounts)
