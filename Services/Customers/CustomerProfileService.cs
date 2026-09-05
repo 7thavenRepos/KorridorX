@@ -1,4 +1,4 @@
-﻿using KorridorX.Data;
+using KorridorX.Data;
 using KorridorX.Dtos.Customers;
 using KorridorX.Models.Enums;
 using KorridorX.Services.Compliance;
@@ -37,23 +37,56 @@ public class CustomerProfileService : ICustomerProfileService
         CancellationToken ct = default)
     {
         var profile = await _db.CustomerProfiles
+            .Include(x => x.User)
             .FirstOrDefaultAsync(x => x.UserId == userId && !x.IsDeleted, ct);
 
         if (profile is null)
             throw new InvalidOperationException("Customer profile not found.");
 
-        profile.FirstName = request.FirstName.Trim();
-        profile.LastName = request.LastName.Trim();
-        profile.MiddleName = request.MiddleName;
-        profile.DateOfBirth = request.DateOfBirth;
-        profile.PhoneNumber = request.PhoneNumber;
-        profile.CountryCode = request.CountryCode.Trim().ToUpperInvariant();
-        profile.StateOrProvince = request.StateOrProvince;
-        profile.City = request.City;
-        profile.AddressLine1 = request.AddressLine1;
-        profile.AddressLine2 = request.AddressLine2;
-        profile.PostalCode = request.PostalCode;
+        var firstName = request.FirstName.Trim();
+        var lastName = request.LastName.Trim();
+        var countryCode = request.CountryCode.Trim().ToUpperInvariant();
+        var dateOfBirth = request.DateOfBirth.HasValue
+            ? DateTime.SpecifyKind(request.DateOfBirth.Value.Date, DateTimeKind.Utc)
+            : (DateTime?)null;
+
+        if (firstName.Length == 0)
+            throw new InvalidOperationException("First name is required.");
+        if (lastName.Length == 0)
+            throw new InvalidOperationException("Last name is required.");
+        if (dateOfBirth > DateTime.UtcNow.Date)
+            throw new InvalidOperationException("Date of birth cannot be in the future.");
+
+        var isSupportedSendCountry = await _db.Countries
+            .AsNoTracking()
+            .AnyAsync(
+                x => x.Code == countryCode &&
+                     x.IsSupported &&
+                     x.IsSendCountry,
+                ct);
+
+        if (!isSupportedSendCountry)
+            throw new InvalidOperationException(
+                $"Country '{countryCode}' is not available for Consumer accounts.");
+
+        profile.FirstName = firstName;
+        profile.LastName = lastName;
+        profile.MiddleName = Clean(request.MiddleName);
+        profile.DateOfBirth = dateOfBirth;
+        profile.PhoneNumber = Clean(request.PhoneNumber);
+        profile.CountryCode = countryCode;
+        profile.StateOrProvince = Clean(request.StateOrProvince);
+        profile.City = Clean(request.City);
+        profile.AddressLine1 = Clean(request.AddressLine1);
+        profile.AddressLine2 = Clean(request.AddressLine2);
+        profile.PostalCode = Clean(request.PostalCode);
         profile.LastUpdatedAt = DateTime.UtcNow;
+
+        profile.User.FirstName = firstName;
+        profile.User.LastName = lastName;
+        profile.User.PhoneNumber = profile.PhoneNumber;
+        profile.User.CountryCode = countryCode;
+        profile.User.LastUpdatedAt = profile.LastUpdatedAt;
 
         await _db.SaveChangesAsync(ct);
         await _screeningService.ScreenCustomerAsync(
@@ -89,4 +122,7 @@ public class CustomerProfileService : ICustomerProfileService
             profile.CreatedAt
         );
     }
+
+    private static string? Clean(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 }

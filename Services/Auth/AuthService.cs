@@ -73,6 +73,34 @@ public class AuthService : IAuthService
     {
         var roleName = RegistrationSecurityPolicy.ResolvePublicRole(assignedUserType);
         var email = request.Email.Trim().ToLowerInvariant();
+        var firstName = request.FirstName.Trim();
+        var lastName = request.LastName.Trim();
+        var countryCode = string.IsNullOrWhiteSpace(request.CountryCode)
+            ? null
+            : request.CountryCode.Trim().ToUpperInvariant();
+
+        if (firstName.Length == 0)
+            throw new InvalidOperationException("First name is required.");
+        if (lastName.Length == 0)
+            throw new InvalidOperationException("Last name is required.");
+
+        if (assignedUserType == UserType.Consumer)
+        {
+            if (countryCode is null)
+                throw new InvalidOperationException("Select a supported country to create a Consumer account.");
+
+            var isSupportedSendCountry = await _db.Countries
+                .AsNoTracking()
+                .AnyAsync(
+                    x => x.Code == countryCode &&
+                         x.IsSupported &&
+                         x.IsSendCountry,
+                    ct);
+
+            if (!isSupportedSendCountry)
+                throw new InvalidOperationException(
+                    $"Country '{countryCode}' is not available for Consumer registration.");
+        }
 
         if (!string.IsNullOrWhiteSpace(request.InvitationToken))
         {
@@ -89,10 +117,10 @@ public class AuthService : IAuthService
         {
             UserName = email,
             Email = email,
-            FirstName = request.FirstName.Trim(),
-            LastName = request.LastName.Trim(),
-            PhoneNumber = request.PhoneNumber,
-            CountryCode = request.CountryCode,
+            FirstName = firstName,
+            LastName = lastName,
+            PhoneNumber = Clean(request.PhoneNumber, 100),
+            CountryCode = countryCode,
             UserType = assignedUserType,
             Status = UserStatus.Active
         };
@@ -136,7 +164,7 @@ public class AuthService : IAuthService
                 LastName = user.LastName,
                 PhoneNumber = user.PhoneNumber,
                 Email = user.Email,
-                CountryCode = request.CountryCode ?? "",
+                CountryCode = countryCode!,
                 CustomerType = CustomerType.Individual
             });
         }
