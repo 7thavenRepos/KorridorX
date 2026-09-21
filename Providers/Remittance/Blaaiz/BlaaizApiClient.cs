@@ -897,7 +897,30 @@ public class BlaaizApiClient : IBlaaizApiClient
                     requestLogId);
             }
 
-            var parsed = JsonSerializer.Deserialize<TResponse>(rawResponse, SerializerOptions);
+            TResponse? parsed;
+            try
+            {
+                parsed = JsonSerializer.Deserialize<TResponse>(rawResponse, SerializerOptions);
+            }
+            catch (JsonException ex)
+            {
+                var message = $"Blaaiz returned an incompatible JSON response at {ex.Path ?? "$"}.";
+
+                await _auditService.FailAsync(
+                    requestLogId,
+                    (int)response.StatusCode,
+                    auditResponse,
+                    $"{message} {ex.Message}",
+                    stopwatch.ElapsedMilliseconds,
+                    ct);
+
+                throw new ProviderIntegrationException(
+                    message,
+                    (int)response.StatusCode,
+                    auditResponse,
+                    requestLogId,
+                    ex);
+            }
             if (parsed is null)
             {
                 const string message = "Blaaiz returned an invalid JSON response.";
