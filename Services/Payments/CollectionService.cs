@@ -14,6 +14,7 @@ using KorridorX.Models.Transfers;
 using KorridorX.Services.References;
 using KorridorX.Services.Compliance;
 using Microsoft.EntityFrameworkCore;
+using KorridorX.Services.Providers;
 
 namespace KorridorX.Services.Payments;
 
@@ -25,7 +26,7 @@ public class CollectionService : ICollectionService
     private readonly ICollectionStatusService _collectionStatusService;
     private readonly IRemittanceProvider _remittanceProvider;
     private readonly IComplianceGateService _complianceGateService;
-    private readonly IReadOnlyDictionary<string, string> collectionWalletIds;
+    private readonly IProviderWalletResolver _wallets;
 
     public CollectionService(
         AppDbContext db,
@@ -34,7 +35,7 @@ public class CollectionService : ICollectionService
         ICollectionStatusService collectionStatusService,
         IRemittanceProvider remittanceProvider,
         IComplianceGateService complianceGateService,
-        IOptions<BlaaizOptions> blaaizOptions)
+        IProviderWalletResolver wallets)
     {
         _db = db;
         _referenceGenerator = referenceGenerator;
@@ -42,7 +43,7 @@ public class CollectionService : ICollectionService
         _collectionStatusService = collectionStatusService;
         _remittanceProvider = remittanceProvider;
         _complianceGateService = complianceGateService;
-        collectionWalletIds = blaaizOptions.Value.CollectionWalletIds;
+        _wallets = wallets;
     }
 
     public async Task<IReadOnlyList<CollectionPaymentMethodDto>> GetAvailablePaymentMethodsAsync(
@@ -255,7 +256,9 @@ public class CollectionService : ICollectionService
             ? $"{profile.FirstName} {profile.LastName}".Trim()
             : request.CustomerName.Trim();
 
-        var walletId = ResolveCollectionWalletId(collection.CurrencyCode);
+        var walletId = await _wallets.SelectAsync("Collection", collection.Id, _remittanceProvider.ProviderName,
+            collection.CurrencyCode, null, ProviderWalletResolver.Collection,
+            collection.Attempts.Count > 1 || collection.ProviderCollectionId != null, ct);
         var cardRequest = request.Card;
         var card = cardRequest is null
             ? null
@@ -267,6 +270,7 @@ public class CollectionService : ICollectionService
 
         var sanitizedRequestPayload = JsonSerializer.Serialize(new
         {
+            providerWalletId = walletId,
             collectionId = collection.Id,
             collectionReference = collection.Reference,
             transferId = collection.TransferId,
@@ -563,7 +567,9 @@ public class CollectionService : ICollectionService
         var customerName = string.IsNullOrWhiteSpace(request.CustomerName)
             ? business.BusinessName
             : request.CustomerName.Trim();
-        var walletId = ResolveCollectionWalletId(collection.CurrencyCode);
+        var walletId = await _wallets.SelectAsync("Collection", collection.Id, _remittanceProvider.ProviderName,
+            collection.CurrencyCode, null, ProviderWalletResolver.Collection,
+            collection.Attempts.Count > 1 || collection.ProviderCollectionId != null, ct);
         var cardRequest = request.Card;
         var card = cardRequest is null
             ? null
@@ -575,6 +581,7 @@ public class CollectionService : ICollectionService
 
         var sanitizedRequestPayload = JsonSerializer.Serialize(new
         {
+            providerWalletId = walletId,
             businessProfileId = business.Id,
             collectionId = collection.Id,
             collectionReference = collection.Reference,
@@ -842,17 +849,6 @@ public class CollectionService : ICollectionService
                 !x.IsDeleted &&
                 !x.Transfer.IsDeleted &&
                 !x.Transfer.CustomerProfile!.IsDeleted);
-    }
-
-    private string? ResolveCollectionWalletId(string currencyCode)
-    {
-        if (collectionWalletIds.TryGetValue(currencyCode, out var walletId) &&
-            !string.IsNullOrWhiteSpace(walletId))
-        {
-            return walletId.Trim();
-        }
-
-        return null;
     }
 
     private async Task UpsertProviderTransactionAsync(

@@ -18,6 +18,7 @@ using KorridorX.Services.FinancialCore;
 using KorridorX.Services.Payments;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
+using KorridorX.Services.Providers;
 
 namespace KorridorX.Services.EmbeddedFinance;
 
@@ -31,7 +32,7 @@ public sealed class EmbeddedFinancePayoutService : IEmbeddedFinancePayoutService
     private readonly IPayoutStatusService _payoutStatus;
     private readonly IEmbeddedPayoutSettlementService _settlement;
     private readonly IEmbeddedWebhookPublisher _webhooks;
-    private readonly IReadOnlyDictionary<string, string> _payoutWalletIds;
+    private readonly IProviderWalletResolver _wallets;
 
     public EmbeddedFinancePayoutService(
         AppDbContext db,
@@ -41,7 +42,7 @@ public sealed class EmbeddedFinancePayoutService : IEmbeddedFinancePayoutService
         IPayoutStatusService payoutStatus,
         IEmbeddedPayoutSettlementService settlement,
         IEmbeddedWebhookPublisher webhooks,
-        IOptions<BlaaizOptions> blaaizOptions,
+        IProviderWalletResolver wallets,
         IOutboundFundsRestrictionService? outboundFundsRestrictions = null)
     {
         _db = db;
@@ -52,7 +53,7 @@ public sealed class EmbeddedFinancePayoutService : IEmbeddedFinancePayoutService
         _payoutStatus = payoutStatus;
         _settlement = settlement;
         _webhooks = webhooks;
-        _payoutWalletIds = blaaizOptions.Value.PayoutWalletIds;
+        _wallets = wallets;
     }
 
     public async Task<PagedResult<EmbeddedPayoutDto>> GetPayoutsAsync(
@@ -365,9 +366,11 @@ public sealed class EmbeddedFinancePayoutService : IEmbeddedFinancePayoutService
         var lastName = string.IsNullOrWhiteSpace(beneficiary.ContactLastName)
             ? names.LastName : beneficiary.ContactLastName.Trim();
 
-        var walletId = ResolveWalletId(payout.CurrencyCode);
+        var walletId = await _wallets.SelectAsync("Payout", payout.Id, _provider.ProviderName,
+            payout.CurrencyCode, null, ProviderWalletResolver.Payout, payout.Attempts.Count > 0, ct);
         var sanitized = JsonSerializer.Serialize(new
         {
+            providerWalletId = walletId,
             payoutId = payout.Id,
             payout.Reference,
             businessCustomerId = customer.Id,
@@ -576,16 +579,6 @@ public sealed class EmbeddedFinancePayoutService : IEmbeddedFinancePayoutService
             !x.IsDeleted,
             ct)
         ?? throw new InvalidOperationException("Business customer not found.");
-
-    private string ResolveWalletId(string currencyCode)
-    {
-        if (!_payoutWalletIds.TryGetValue(currencyCode, out var walletId) ||
-            string.IsNullOrWhiteSpace(walletId))
-            throw new InvalidOperationException(
-                $"No payout wallet is configured for {currencyCode} on {_provider.ProviderName}.");
-
-        return walletId.Trim();
-    }
 
     private static PaymentMethod ResolvePayoutMethod(string currencyCode) =>
         currencyCode.ToUpperInvariant() switch

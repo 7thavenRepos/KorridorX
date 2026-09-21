@@ -5,6 +5,7 @@ using KorridorX.Models.Enums;
 using KorridorX.Providers.Remittance.Blaaiz;
 using KorridorX.Providers.Remittance.Blaaiz.Models;
 using Microsoft.EntityFrameworkCore;
+using KorridorX.Services.Providers;
 
 namespace KorridorX.Services.EmbeddedFinance;
 
@@ -12,11 +13,13 @@ public sealed class BlaaizCollectionAccountProvisioner : ICollectionAccountProvi
 {
     private readonly AppDbContext _db;
     private readonly IBlaaizApiClient _blaaiz;
+    private readonly IProviderWalletResolver _wallets;
 
-    public BlaaizCollectionAccountProvisioner(AppDbContext db, IBlaaizApiClient blaaiz)
+    public BlaaizCollectionAccountProvisioner(AppDbContext db, IBlaaizApiClient blaaiz, IProviderWalletResolver wallets)
     {
         _db = db;
         _blaaiz = blaaiz;
+        _wallets = wallets;
     }
 
     public string ProviderCode => KorridorX.Models.Enums.ProviderCode.Blaaiz.ToString();
@@ -43,7 +46,15 @@ public sealed class BlaaizCollectionAccountProvisioner : ICollectionAccountProvi
                 "This business customer has not completed Blaaiz provider onboarding. " +
                 "Create/verify the Blaaiz provider customer before provisioning the CAD international bank account.");
 
-        var walletId = await ResolveCadWalletIdAsync(ct);
+        var legacyMappingExists = await _db.ProviderAccountMappings.AsNoTracking().AnyAsync(x =>
+            x.CollectionAccountId == request.CollectionAccountId && !x.IsDeleted && x.ProviderAccountId != null, ct);
+        var customerIdText = request.BusinessCustomerId.ToString();
+        var previousProviderRequest = await _db.ProviderRequestLogs.AsNoTracking().AnyAsync(x =>
+            x.ProviderCode == KorridorX.Models.Enums.ProviderCode.Blaaiz &&
+            x.Endpoint == "/api/external/virtual-bank-account" && x.HttpMethod == "POST" &&
+            x.RequestBodyJson != null && x.RequestBodyJson.Contains(customerIdText), ct);
+        var walletId = await _wallets.SelectAsync("CollectionAccount", request.CollectionAccountId, ProviderCode,
+            request.AssetCode, null, ProviderWalletResolver.Collection, legacyMappingExists || previousProviderRequest, ct);
         string raw;
 
         try
@@ -90,43 +101,9 @@ public sealed class BlaaizCollectionAccountProvisioner : ICollectionAccountProvi
                 account.Provider,
                 account.ReservationReference,
                 account.Status,
+                providerWalletId = walletId,
                 rawResponse = raw
             }));
-    }
-
-    private async Task<string> ResolveCadWalletIdAsync(CancellationToken ct)
-    {
-        var wallets = await _blaaiz.ListWalletsAsync(ct);
-        using var doc = JsonDocument.Parse(wallets.RawResponseJson);
-        var data = GetData(doc.RootElement);
-
-        if (data.ValueKind != JsonValueKind.Array)
-            throw new InvalidOperationException("Blaaiz wallet response did not contain a wallet list.");
-
-        foreach (var item in data.EnumerateArray())
-        {
-            if (item.ValueKind != JsonValueKind.Object)
-                continue;
-
-            var currency =
-                ReadString(item, "currency_code") ??
-                ReadString(item, "currencyCode") ??
-                ReadCurrencyObjectCode(item, "currency") ??
-                ReadString(item, "currency");
-
-            if (!string.Equals(currency, "CAD", StringComparison.OrdinalIgnoreCase))
-                continue;
-
-            var id =
-                ReadString(item, "id") ??
-                ReadString(item, "wallet_id") ??
-                ReadString(item, "walletId");
-
-            if (!string.IsNullOrWhiteSpace(id))
-                return id;
-        }
-
-        throw new InvalidOperationException("Blaaiz CAD business wallet was not found.");
     }
 
     private static VirtualAccountData ParseVirtualAccount(string raw, string walletId)
@@ -137,16 +114,15 @@ public sealed class BlaaizCollectionAccountProvisioner : ICollectionAccountProvi
 
         if (data.ValueKind == JsonValueKind.Array)
         {
-            var match = data.EnumerateArray()
-                .FirstOrDefault(x =>
+            var matches = data.EnumerateArray()
+                .Where(x =>
                     x.ValueKind == JsonValueKind.Object &&
-                    (string.Equals(ReadString(x, "business_wallet_id"), walletId, StringComparison.OrdinalIgnoreCase) ||
-                     string.Equals(ReadString(x, "wallet_id"), walletId, StringComparison.OrdinalIgnoreCase)));
-
-            if (match.ValueKind == JsonValueKind.Undefined)
-                match = data.EnumerateArray().FirstOrDefault();
-
-            item = match;
+                    (string.Equals(ReadString(x, "business_wallet_id"), walletId, StringComparison.Ordinal) ||
+                     string.Equals(ReadString(x, "wallet_id"), walletId, StringComparison.Ordinal)))
+                .ToArray();
+            if (matches.Length == 1) item = matches[0];
+            else if (matches.Length == 0 && data.GetArrayLength() == 1) item = data[0];
+            else throw new InvalidOperationException("Blaaiz returned no unambiguous bank account for the selected wallet.");
         }
         else
         {
@@ -155,6 +131,12 @@ public sealed class BlaaizCollectionAccountProvisioner : ICollectionAccountProvi
 
         if (item.ValueKind != JsonValueKind.Object)
             throw new InvalidOperationException("Blaaiz virtual bank account response was invalid.");
+
+        // Some responses omit the wallet ID after a wallet-scoped request. When
+        // supplied, every wallet identifier must agree with the recorded selection.
+        foreach (var returnedWallet in new[] { ReadString(item, "business_wallet_id"), ReadString(item, "wallet_id") })
+            if (!string.IsNullOrWhiteSpace(returnedWallet) && !string.Equals(returnedWallet, walletId, StringComparison.Ordinal))
+                throw new InvalidOperationException("Blaaiz returned a bank account belonging to a different wallet.");
 
         var id = ReadString(item, "id");
         if (string.IsNullOrWhiteSpace(id))
@@ -179,17 +161,6 @@ public sealed class BlaaizCollectionAccountProvisioner : ICollectionAccountProvi
         root.ValueKind == JsonValueKind.Object && root.TryGetProperty("data", out var data)
             ? data
             : root;
-
-    private static string? ReadCurrencyObjectCode(JsonElement item, string propertyName)
-    {
-        if (!item.TryGetProperty(propertyName, out var property) ||
-            property.ValueKind != JsonValueKind.Object)
-            return null;
-
-        return ReadString(property, "code") ??
-               ReadString(property, "currency_code") ??
-               ReadString(property, "currencyCode");
-    }
 
     private static string? ReadString(JsonElement item, string propertyName)
     {

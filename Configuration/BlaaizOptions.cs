@@ -12,6 +12,7 @@ public class BlaaizOptions
     public int TokenRefreshBufferSeconds { get; set; } = 60;
     public string WebhookSigningSecret { get; set; } = "";
     public int WebhookTimestampToleranceMinutes { get; set; } = 5;
+    // Legacy import only. Runtime wallet selection is managed through SuperAdmin/database registrations.
     public Dictionary<string, string> CollectionWalletIds { get; set; } = new(StringComparer.OrdinalIgnoreCase);
     public Dictionary<string, string> PayoutWalletIds { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 

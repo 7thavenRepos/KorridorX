@@ -216,6 +216,7 @@ public sealed class BlaaizDigitalAssetProviderTests
         var options = new BlaaizOptions();
         options.CryptoWalletIds[setup.AssetCode] = "wallet-selected";
         options.CryptoNetworkMappings[setup.NetworkCode] = "MATIC_MAINNET";
+        await RegisterTestWalletAsync(db, options, setup, "wallet-selected");
 
         var provider = new BlaaizDigitalAssetProvider(
             db,
@@ -347,7 +348,7 @@ public sealed class BlaaizDigitalAssetProviderTests
 
 
     [DatabaseIntegrationFact]
-    public async Task Multiple_active_blaaiz_crypto_wallets_require_explicit_wallet_configuration()
+    public async Task Missing_database_wallet_configuration_blocks_even_when_provider_wallets_exist()
     {
         await using var scope = _fixture.Factory.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
@@ -398,8 +399,8 @@ public sealed class BlaaizDigitalAssetProviderTests
                     provider.ProviderCode,
                     $"EXT-{Guid.NewGuid():N}")));
 
-        Assert.Contains("Multiple active", ex.Message, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("CryptoWalletIds", ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Configure an active default", ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("SuperAdmin", ex.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Equal(0, proxy.PayoutCalls);
 
         db.ChangeTracker.Clear();
@@ -503,6 +504,7 @@ public sealed class BlaaizDigitalAssetProviderTests
 
         var options = new BlaaizOptions();
         options.CryptoNetworkMappings[setup.NetworkCode] = "MATIC_MAINNET";
+        await RegisterTestWalletAsync(db, options, setup, "wallet-usdc");
 
         var provider = new BlaaizDigitalAssetProvider(
             db,
@@ -585,6 +587,7 @@ public sealed class BlaaizDigitalAssetProviderTests
 
         var options = new BlaaizOptions();
         options.CryptoNetworkMappings[setup.NetworkCode] = "MATIC_MAINNET";
+        await RegisterTestWalletAsync(db, options, setup, "wallet-usdc");
 
         var provider = new BlaaizDigitalAssetProvider(
             db,
@@ -712,6 +715,7 @@ public sealed class BlaaizDigitalAssetProviderTests
 
         var options = new BlaaizOptions();
         options.CryptoNetworkMappings[setup.NetworkCode] = "MATIC_MAINNET";
+        await RegisterTestWalletAsync(db, options, setup, "wallet-usdc");
 
         var provider = new BlaaizDigitalAssetProvider(
             db,
@@ -791,6 +795,7 @@ public sealed class BlaaizDigitalAssetProviderTests
 
         var options = new BlaaizOptions();
         options.CryptoNetworkMappings[setup.NetworkCode] = "MATIC_MAINNET";
+        await RegisterTestWalletAsync(db, options, setup, "wallet-usdc");
 
         var provider = new BlaaizDigitalAssetProvider(
             db,
@@ -1124,6 +1129,20 @@ public sealed class BlaaizDigitalAssetProviderTests
     {
         var value = $"{prefix}-{Guid.NewGuid():N}";
         return value.Length <= 60 ? value : value[..60];
+    }
+
+    private static async Task RegisterTestWalletAsync(AppDbContext db, BlaaizOptions options, Scenario setup, string walletId)
+    {
+        var resolver = new ProviderWalletResolver(db, Options.Create(options));
+        db.ProviderWalletConfigurations.Add(new ProviderWalletConfiguration
+        {
+            Environment = resolver.EnvironmentName, ProviderWalletId = walletId,
+            AssetCode = setup.AssetCode, NetworkCode = setup.NetworkCode, DisplayName = "Test provider wallet",
+            IsActive = true, CollectionEnabled = true, PayoutEnabled = true,
+            DefaultForCollection = true, DefaultForPayout = true,
+            VerifiedAt = DateTime.UtcNow, VerifiedConnectionKey = resolver.ConnectionKey
+        });
+        await db.SaveChangesAsync();
     }
 
     private sealed class Scenario : IAsyncDisposable

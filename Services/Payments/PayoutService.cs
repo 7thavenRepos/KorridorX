@@ -18,6 +18,7 @@ using KorridorX.Services.Transfers;
 using KorridorX.Services.Security;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
+using KorridorX.Services.Providers;
 
 namespace KorridorX.Services.Payments;
 
@@ -33,7 +34,7 @@ public class PayoutService : IPayoutService
     private readonly ITransferRiskService _transferRiskService;
     private readonly IComplianceScreeningService _screeningService;
     private readonly IOutboundFundsRestrictionService _outboundFundsRestrictions;
-    private readonly IReadOnlyDictionary<string, string> _payoutWalletIds;
+    private readonly IProviderWalletResolver _wallets;
 
     public PayoutService(
         AppDbContext db,
@@ -46,7 +47,7 @@ public class PayoutService : IPayoutService
         ITransferRiskService transferRiskService,
         IComplianceScreeningService screeningService,
         IOutboundFundsRestrictionService outboundFundsRestrictions,
-        IOptions<BlaaizOptions> blaaizOptions)
+        IProviderWalletResolver wallets)
     {
         _db = db;
         _referenceGenerator = referenceGenerator;
@@ -58,7 +59,7 @@ public class PayoutService : IPayoutService
         _transferRiskService = transferRiskService;
         _screeningService = screeningService;
         _outboundFundsRestrictions = outboundFundsRestrictions;
-        _payoutWalletIds = blaaizOptions.Value.PayoutWalletIds;
+        _wallets = wallets;
     }
 
     public async Task<PayoutDetailsDto> DispatchForTransferAsync(
@@ -154,8 +155,6 @@ public class PayoutService : IPayoutService
                     "Embedded business customer has not completed provider onboarding for transfers.");
         }
 
-        var walletId = ResolvePayoutWalletId(transfer.SourceCurrencyCode);
-
         if (payout is null)
         {
             payout = new Payout
@@ -175,8 +174,12 @@ public class PayoutService : IPayoutService
             await _db.SaveChangesAsync(ct);
         }
 
+        var walletId = await _wallets.SelectAsync("Payout", payout.Id, _remittanceProvider.ProviderName,
+            transfer.SourceCurrencyCode, null, ProviderWalletResolver.Payout, payout.Attempts.Count > 0, ct);
+
         var sanitizedRequest = JsonSerializer.Serialize(new
         {
+            providerWalletId = walletId,
             payoutId = payout.Id,
             payoutReference = payout.Reference,
             transferId = transfer.Id,
@@ -541,16 +544,6 @@ public class PayoutService : IPayoutService
         }
 
         throw new InvalidOperationException("Unable to generate a unique payout reference.");
-    }
-
-    private string ResolvePayoutWalletId(string currencyCode)
-    {
-        if (!_payoutWalletIds.TryGetValue(currencyCode, out var walletId) || string.IsNullOrWhiteSpace(walletId))
-        {
-            throw new InvalidOperationException($"No payout wallet is configured for {currencyCode} on {_remittanceProvider.ProviderName}.");
-        }
-
-        return walletId.Trim();
     }
 
     private static PaymentMethod ResolvePayoutMethod(string destinationCurrencyCode) =>

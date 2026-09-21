@@ -5,6 +5,7 @@ using KorridorX.Providers.DigitalAssets;
 using KorridorX.Providers.Remittance.Blaaiz.Models;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
+using KorridorX.Services.Providers;
 
 namespace KorridorX.Providers.Remittance.Blaaiz;
 
@@ -26,15 +27,18 @@ public sealed class BlaaizDigitalAssetProvider :
     private readonly AppDbContext _db;
     private readonly IBlaaizApiClient _api;
     private readonly BlaaizOptions _options;
+    private readonly IProviderWalletResolver _wallets;
 
     public BlaaizDigitalAssetProvider(
         AppDbContext db,
         IBlaaizApiClient api,
-        IOptions<BlaaizOptions> options)
+        IOptions<BlaaizOptions> options,
+        IProviderWalletResolver? wallets = null)
     {
         _db = db;
         _api = api;
         _options = options.Value;
+        _wallets = wallets ?? new ProviderWalletResolver(db, options);
     }
 
     public string ProviderCode => Code;
@@ -76,7 +80,12 @@ public sealed class BlaaizDigitalAssetProvider :
             request.BusinessProfileId,
             request.BusinessCustomerId,
             ct);
-        var wallet = await ResolveWalletAsync(assetCode, ct);
+        var earlierIntent = await _db.DigitalAssetDepositIntents.AsNoTracking()
+            .SingleOrDefaultAsync(x => x.Id == request.DepositIntentId, ct);
+        var selectedWallet = await _wallets.SelectAsync("CryptoDeposit", request.DepositIntentId, Code,
+            assetCode, request.NetworkCode, ProviderWalletResolver.Collection,
+            earlierIntent is not null && (earlierIntent.ProviderWalletId != null || earlierIntent.Status != KorridorX.Models.Enums.CollectionStatus.Pending), ct);
+        var wallet = await ResolveWalletAsync(assetCode, selectedWallet, ct);
 
         var response = await _api.InitiateCryptoCollectionAsync(
             new BlaaizCryptoCollectionRequest
@@ -131,7 +140,9 @@ public sealed class BlaaizDigitalAssetProvider :
             {
                 x.BusinessProfileId,
                 x.BusinessCustomerId,
-                x.PayoutId
+                x.PayoutId,
+                x.SubmittedAt,
+                x.Status
             })
             .SingleOrDefaultAsync(ct)
             ?? throw new InvalidOperationException("Digital-asset withdrawal was not found for Blaaiz payout submission.");
@@ -140,7 +151,10 @@ public sealed class BlaaizDigitalAssetProvider :
             withdrawal.BusinessProfileId,
             withdrawal.BusinessCustomerId,
             ct);
-        var wallet = await ResolveWalletAsync(assetCode, ct);
+        var selectedWallet = await _wallets.SelectAsync("CryptoWithdrawal", request.WithdrawalId, Code,
+            assetCode, request.NetworkCode, ProviderWalletResolver.Payout,
+            withdrawal.SubmittedAt.HasValue || withdrawal.Status != KorridorX.Models.Enums.DigitalAssetWithdrawalStatus.Pending, ct);
+        var wallet = await ResolveWalletAsync(assetCode, selectedWallet, ct);
         var idempotencyKey = Required(request.ExternalReference, "External reference");
 
         var response = await _api.InitiateCryptoPayoutAsync(
@@ -239,6 +253,7 @@ public sealed class BlaaizDigitalAssetProvider :
 
     private async Task<BlaaizCryptoWalletData> ResolveWalletAsync(
         string assetCode,
+        string selectedWalletId,
         CancellationToken ct)
     {
         var response = await _api.ListCryptoWalletsAsync(ct);
@@ -248,23 +263,8 @@ public sealed class BlaaizDigitalAssetProvider :
                 string.Equals(x.Asset.Symbol?.Trim(), assetCode, StringComparison.OrdinalIgnoreCase))
             .ToList();
 
-        if (_options.CryptoWalletIds.TryGetValue(assetCode, out var configuredWalletId) &&
-            !string.IsNullOrWhiteSpace(configuredWalletId))
-        {
-            var configured = candidates.FirstOrDefault(x =>
-                string.Equals(x.Id, configuredWalletId.Trim(), StringComparison.OrdinalIgnoreCase));
-
-            return configured
-                ?? throw new InvalidOperationException(
-                    $"Configured Blaaiz crypto wallet '{configuredWalletId}' for {assetCode} was not returned as an active matching wallet.");
-        }
-
-        return candidates.Count switch
-        {
-            1 => candidates[0],
-            0 => throw new InvalidOperationException($"No active Blaaiz crypto wallet was found for {assetCode}. Provision the crypto wallet before enabling this rail."),
-            _ => throw new InvalidOperationException($"Multiple active Blaaiz crypto wallets were found for {assetCode}. Configure Blaaiz:CryptoWalletIds:{assetCode} explicitly.")
-        };
+        return candidates.SingleOrDefault(x => string.Equals(x.Id, selectedWalletId, StringComparison.Ordinal))
+            ?? throw new InvalidOperationException($"Selected Blaaiz crypto wallet '{selectedWalletId}' is no longer an active matching wallet for {assetCode}.");
     }
 
     private string MapNetwork(string networkCode)

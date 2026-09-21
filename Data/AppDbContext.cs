@@ -138,6 +138,8 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<Guid
     public DbSet<FinanceCloseRequest> FinanceCloseRequests => Set<FinanceCloseRequest>();
 
     public DbSet<ProviderWalletBalance> ProviderWalletBalances => Set<ProviderWalletBalance>();
+    public DbSet<ProviderWalletConfiguration> ProviderWalletConfigurations => Set<ProviderWalletConfiguration>();
+    public DbSet<ProviderWalletSelection> ProviderWalletSelections => Set<ProviderWalletSelection>();
     public DbSet<LiquidityThreshold> LiquidityThresholds => Set<LiquidityThreshold>();
     public DbSet<FxMarkupRule> FxMarkupRules => Set<FxMarkupRule>();
     public DbSet<SettlementBatch> SettlementBatches => Set<SettlementBatch>();

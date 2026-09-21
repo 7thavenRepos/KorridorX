@@ -304,6 +304,8 @@ builder.Services.AddScoped<IBusinessFundingService, BusinessFundingService>();
 builder.Services.AddScoped<IFinancialReservationService, FinancialReservationService>();
 builder.Services.Configure<DigitalAssetComplianceOptions>(
     builder.Configuration.GetSection("DigitalAssets:Compliance"));
+builder.Services.AddScoped<KorridorX.Services.Providers.IProviderWalletResolver, KorridorX.Services.Providers.ProviderWalletResolver>();
+builder.Services.AddScoped<KorridorX.Services.Providers.ProviderWalletAdminService>();
 builder.Services.AddScoped<IDigitalAssetProvider, BlaaizDigitalAssetProvider>();
 builder.Services.AddScoped<IDigitalAssetProviderRegistry, DigitalAssetProviderRegistry>();
 builder.Services.AddScoped<IDigitalAssetComplianceGate, DigitalAssetComplianceGate>();
