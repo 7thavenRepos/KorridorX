@@ -266,6 +266,7 @@ builder.Services.AddHttpClient("BlaaizAuth", (serviceProvider, client) =>
     var options = serviceProvider.GetRequiredService<IOptions<BlaaizOptions>>().Value;
     client.BaseAddress = new Uri(options.BaseUrl.TrimEnd('/') + "/");
     client.Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds);
+    client.DefaultRequestHeaders.UserAgent.ParseAdd("KorridorX/1.0");
 });
 
 builder.Services.AddHttpClient<IBlaaizApiClient, BlaaizApiClient>((serviceProvider, client) =>
@@ -273,6 +274,7 @@ builder.Services.AddHttpClient<IBlaaizApiClient, BlaaizApiClient>((serviceProvid
     var options = serviceProvider.GetRequiredService<IOptions<BlaaizOptions>>().Value;
     client.BaseAddress = new Uri(options.BaseUrl.TrimEnd('/') + "/");
     client.Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds);
+    client.DefaultRequestHeaders.UserAgent.ParseAdd("KorridorX/1.0");
 });
 
 builder.Services.AddHttpClient(OpenSanctionsScreeningProvider.HttpClientName, (serviceProvider, client) =>
