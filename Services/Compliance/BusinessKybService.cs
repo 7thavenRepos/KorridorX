@@ -4,6 +4,7 @@ using KorridorX.Data;
 using KorridorX.Dtos.Compliance;
 using KorridorX.Exceptions;
 using KorridorX.Models.Compliance;
+using KorridorX.Models.Audit;
 using KorridorX.Models.Customers;
 using KorridorX.Models.Enums;
 using KorridorX.Models.Providers;
@@ -80,7 +81,9 @@ public class BusinessKybService : IBusinessKybService
                 "MINIMAL business KYB is disabled. Use FULL KYB unless the provider has explicitly allow-listed this platform.");
         }
 
+        await using var startLease = await BusinessKybStartLease.AcquireAsync(_db, userId, ct);
         var profile = await GetOrCreateStartProfileAsync(userId, ct);
+        await startLease.LockBusinessAsync(profile.Id, ct);
 
         var current = await _db.BusinessKybApplications
             .Include(x => x.Owners)
@@ -123,7 +126,8 @@ public class BusinessKybService : IBusinessKybService
         profile.LastUpdatedAt = DateTime.UtcNow;
         profile.LastUpdatedByUserId = userId;
 
-        var providerResult = await SyncProviderAsync(profile, current, ct);
+        var providerResult = await SyncProviderAsync(profile, current, userId, ct);
+        await EnsureProviderCustomerAvailableAsync(profile.Id, providerResult.ProviderCustomerId, ct);
         current.ProviderApplicationId = providerResult.ProviderCustomerId;
         current.ProviderResponseJson = providerResult.RawResponseJson;
 
@@ -173,7 +177,9 @@ public class BusinessKybService : IBusinessKybService
         UpdateBusinessKybProfileRequestDto request,
         CancellationToken ct = default)
     {
+        await using var startLease = await BusinessKybStartLease.AcquireAsync(_db, userId, ct);
         var application = await GetOwnedApplicationAsync(userId, applicationId, true, ct);
+        await startLease.LockBusinessAsync(application.BusinessProfileId, ct);
         EnsureEditable(application);
 
         ApplyProfile(application.BusinessProfile, request);
@@ -182,7 +188,7 @@ public class BusinessKybService : IBusinessKybService
         application.LastUpdatedAt = DateTime.UtcNow;
         application.LastUpdatedByUserId = userId;
 
-        var providerResult = await SyncProviderAsync(application.BusinessProfile, application, ct);
+        var providerResult = await SyncProviderAsync(application.BusinessProfile, application, userId, ct);
         ApplyProviderSnapshot(application, providerResult);
         await UpsertProviderCustomerAsync(application.BusinessProfile, providerResult, userId, ct);
 
@@ -203,7 +209,9 @@ public class BusinessKybService : IBusinessKybService
         CreateBusinessOwnerRequestDto request,
         CancellationToken ct = default)
     {
+        await using var startLease = await BusinessKybStartLease.AcquireAsync(_db, userId, ct);
         var application = await GetOwnedApplicationAsync(userId, applicationId, true, ct);
+        await startLease.LockBusinessAsync(application.BusinessProfileId, ct);
         EnsureEditable(application);
 
         if (application.KybScope != BusinessKybScope.Full)
@@ -247,7 +255,7 @@ public class BusinessKybService : IBusinessKybService
             FirstName = Required(request.FirstName, "Owner first name"),
             LastName = Required(request.LastName, "Owner last name"),
             Email = email,
-            DateOfBirth = request.DateOfBirth.Date,
+            DateOfBirth = BusinessKybCalendarDate.Normalize(request.DateOfBirth),
             Nationality = NormalizeCode(request.Nationality),
             CountryCode = NormalizeCode(request.CountryCode),
             Title = Optional(request.Title),
@@ -260,16 +268,17 @@ public class BusinessKybService : IBusinessKybService
             IdentityNumberLastFour = LastFour(idNumber),
             IdentityNumberEncrypted = _identityProtector.Protect(idNumber),
             IdDocumentCountry = NormalizeCode(request.IdDocumentCountry),
-            IdExpiryDate = request.IdExpiryDate.Date,
+            IdExpiryDate = BusinessKybCalendarDate.Normalize(request.IdExpiryDate),
             ProviderStatus = "PENDING",
             CreatedByUserId = userId
         };
 
         application.Owners.Add(owner);
+        _db.BusinessBeneficialOwners.Add(owner);
         application.Status = KybStatus.Pending;
         application.ReviewNote = null;
 
-        var providerResult = await SyncProviderAsync(application.BusinessProfile, application, ct);
+        var providerResult = await SyncProviderAsync(application.BusinessProfile, application, userId, ct);
         ApplyProviderSnapshot(application, providerResult);
         await UpsertProviderCustomerAsync(application.BusinessProfile, providerResult, userId, ct);
 
@@ -291,7 +300,9 @@ public class BusinessKybService : IBusinessKybService
         UpdateBusinessOwnerRequestDto request,
         CancellationToken ct = default)
     {
+        await using var startLease = await BusinessKybStartLease.AcquireAsync(_db, userId, ct);
         var application = await GetOwnedApplicationAsync(userId, applicationId, true, ct);
+        await startLease.LockBusinessAsync(application.BusinessProfileId, ct);
         EnsureEditable(application);
 
         var owner = application.Owners.FirstOrDefault(x => x.Id == ownerId && !x.IsDeleted)
@@ -328,7 +339,7 @@ public class BusinessKybService : IBusinessKybService
         owner.FirstName = Required(request.FirstName, "Owner first name");
         owner.LastName = Required(request.LastName, "Owner last name");
         owner.Email = email;
-        owner.DateOfBirth = request.DateOfBirth.Date;
+        owner.DateOfBirth = BusinessKybCalendarDate.Normalize(request.DateOfBirth);
         owner.Nationality = NormalizeCode(request.Nationality);
         owner.CountryCode = NormalizeCode(request.CountryCode);
         owner.Title = Optional(request.Title);
@@ -341,7 +352,7 @@ public class BusinessKybService : IBusinessKybService
         owner.IdentityNumberLastFour = LastFour(idNumber);
         owner.IdentityNumberEncrypted = _identityProtector.Protect(idNumber);
         owner.IdDocumentCountry = NormalizeCode(request.IdDocumentCountry);
-        owner.IdExpiryDate = request.IdExpiryDate.Date;
+        owner.IdExpiryDate = BusinessKybCalendarDate.Normalize(request.IdExpiryDate);
         owner.ProviderStatus = "PENDING";
         owner.ProviderAdminCommentsJson = null;
         owner.RejectionReason = null;
@@ -351,7 +362,7 @@ public class BusinessKybService : IBusinessKybService
         application.Status = KybStatus.Pending;
         application.ReviewNote = null;
 
-        var providerResult = await SyncProviderAsync(application.BusinessProfile, application, ct);
+        var providerResult = await SyncProviderAsync(application.BusinessProfile, application, userId, ct);
         ApplyProviderSnapshot(application, providerResult);
         await UpsertProviderCustomerAsync(application.BusinessProfile, providerResult, userId, ct);
 
@@ -374,7 +385,9 @@ public class BusinessKybService : IBusinessKybService
         CancellationToken ct = default)
     {
         ValidateFile(request.FileName, request.MimeType);
+        await using var startLease = await BusinessKybStartLease.AcquireAsync(_db, userId, ct);
         var application = await GetOwnedApplicationAsync(userId, applicationId, true, ct);
+        await startLease.LockBusinessAsync(application.BusinessProfileId, ct);
         EnsureEditable(application);
 
         var owner = application.Owners.FirstOrDefault(x => x.Id == ownerId && !x.IsDeleted)
@@ -383,7 +396,7 @@ public class BusinessKybService : IBusinessKybService
         if (string.IsNullOrWhiteSpace(application.ProviderApplicationId) ||
             string.IsNullOrWhiteSpace(owner.ProviderOwnerId))
         {
-            var providerResult = await SyncProviderAsync(application.BusinessProfile, application, ct);
+            var providerResult = await SyncProviderAsync(application.BusinessProfile, application, userId, ct);
             ApplyProviderSnapshot(application, providerResult);
         }
 
@@ -434,7 +447,9 @@ public class BusinessKybService : IBusinessKybService
         ConfirmBusinessOwnerUploadRequestDto request,
         CancellationToken ct = default)
     {
+        await using var startLease = await BusinessKybStartLease.AcquireAsync(_db, userId, ct);
         var application = await GetOwnedApplicationAsync(userId, applicationId, true, ct);
+        await startLease.LockBusinessAsync(application.BusinessProfileId, ct);
         EnsureEditable(application);
 
         var owner = application.Owners.FirstOrDefault(x => x.Id == ownerId && !x.IsDeleted)
@@ -495,12 +510,14 @@ public class BusinessKybService : IBusinessKybService
         CancellationToken ct = default)
     {
         ValidateFile(request.FileName, request.MimeType);
+        await using var startLease = await BusinessKybStartLease.AcquireAsync(_db, userId, ct);
         var application = await GetOwnedApplicationAsync(userId, applicationId, true, ct);
+        await startLease.LockBusinessAsync(application.BusinessProfileId, ct);
         EnsureEditable(application);
 
         if (string.IsNullOrWhiteSpace(application.ProviderApplicationId))
         {
-            var providerResult = await SyncProviderAsync(application.BusinessProfile, application, ct);
+            var providerResult = await SyncProviderAsync(application.BusinessProfile, application, userId, ct);
             ApplyProviderSnapshot(application, providerResult);
         }
 
@@ -527,6 +544,7 @@ public class BusinessKybService : IBusinessKybService
         };
 
         application.Documents.Add(document);
+        _db.BusinessKybDocuments.Add(document);
         await _db.SaveChangesAsync(ct);
 
         return new BusinessUploadUrlDto(
@@ -543,7 +561,9 @@ public class BusinessKybService : IBusinessKybService
         ConfirmBusinessDocumentUploadRequestDto request,
         CancellationToken ct = default)
     {
+        await using var startLease = await BusinessKybStartLease.AcquireAsync(_db, userId, ct);
         var application = await GetOwnedApplicationAsync(userId, applicationId, true, ct);
+        await startLease.LockBusinessAsync(application.BusinessProfileId, ct);
         EnsureEditable(application);
 
         var document = application.Documents.FirstOrDefault(x => x.Id == documentId && !x.IsDeleted)
@@ -586,12 +606,14 @@ public class BusinessKybService : IBusinessKybService
         Guid applicationId,
         CancellationToken ct = default)
     {
+        await using var startLease = await BusinessKybStartLease.AcquireAsync(_db, userId, ct);
         var application = await GetOwnedApplicationAsync(userId, applicationId, true, ct);
+        await startLease.LockBusinessAsync(application.BusinessProfileId, ct);
         EnsureEditable(application);
 
         ValidateSubmissionReadiness(application);
 
-        var providerResult = await SyncProviderAsync(application.BusinessProfile, application, ct);
+        var providerResult = await SyncProviderAsync(application.BusinessProfile, application, userId, ct);
         ApplyProviderSnapshot(application, providerResult);
 
         var submitted = await _provider.SubmitBusinessKybAsync(
@@ -770,11 +792,17 @@ public class BusinessKybService : IBusinessKybService
     private async Task<RemittanceBusinessCustomerResult> SyncProviderAsync(
         BusinessProfile profile,
         BusinessKybApplication application,
+        Guid userId,
         CancellationToken ct)
     {
-        var businessTypeActive = await _db.BusinessTypes.AsNoTracking()
-            .AnyAsync(x => x.Code == profile.BusinessType && x.IsActive, ct);
-        BusinessKybProfileValidation.Validate(profile, businessTypeActive);
+        await ValidateProfileAsync(profile, ct);
+        if (string.IsNullOrWhiteSpace(profile.BlaaizBusinessCustomerId))
+        {
+            // A stable, authorized local ID must exist before customer creation.
+            // This applies to Start and to the profile-update path after a reload.
+            await _db.SaveChangesAsync(ct);
+            await RecoverCreatedCustomerAsync(profile, application, userId, ct);
+        }
 
         var owners = application.Owners
             .Where(x => !x.IsDeleted)
@@ -832,6 +860,52 @@ public class BusinessKybService : IBusinessKybService
                 profile.OperatingPostalCode,
                 owners),
             ct);
+    }
+
+    private async Task ValidateProfileAsync(BusinessProfile profile, CancellationToken ct)
+    {
+        var businessTypeActive = await _db.BusinessTypes.AsNoTracking()
+            .AnyAsync(x => x.Code == profile.BusinessType && x.IsActive, ct);
+        BusinessKybProfileValidation.Validate(profile, businessTypeActive);
+    }
+
+    private async Task RecoverCreatedCustomerAsync(
+        BusinessProfile profile, BusinessKybApplication application, Guid userId, CancellationToken ct)
+    {
+        if (!string.IsNullOrWhiteSpace(profile.BlaaizBusinessCustomerId)) return;
+        var profileKey = profile.Id.ToString("D");
+        var logs = await _db.ProviderRequestLogs.AsNoTracking()
+            .Where(x => x.ProviderCode == _provider.ProviderCode && !x.IsDeleted &&
+                x.HttpMethod == "POST" && x.Endpoint == "/api/external/customer" &&
+                x.RequestBodyJson != null && x.RequestBodyJson.Contains(profileKey))
+            .OrderBy(x => x.RequestedAt).ToListAsync(ct);
+        var recovered = BusinessKybCreationHistory.Resolve(profile.Id, logs);
+        if (recovered is null) return;
+        await EnsureProviderCustomerAvailableAsync(profile.Id, recovered.CustomerId, ct);
+        profile.BlaaizBusinessCustomerId = recovered.CustomerId;
+        application.ProviderApplicationId = recovered.CustomerId;
+        _db.AuditLogs.Add(new AuditLog
+        {
+            UserId = userId, Category = "BusinessKyb", Action = "RecoverProviderCustomerReference",
+            EntityName = nameof(BusinessProfile), EntityId = profileKey,
+            NewValuesJson = JsonSerializer.Serialize(new { recovered.CustomerId }),
+            MetadataJson = JsonSerializer.Serialize(new { recovered.RequestLogId })
+        });
+        // Retain the recovered ID even if the subsequent provider update is rejected.
+        await _db.SaveChangesAsync(ct);
+    }
+
+    private async Task EnsureProviderCustomerAvailableAsync(
+        Guid businessProfileId, string customerId, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(customerId) || customerId.Length > 150)
+            throw new InvalidOperationException("The provider returned an invalid customer reference. Contact operations for recovery.");
+        if (await _db.ProviderCustomers.AsNoTracking().AnyAsync(x =>
+                x.ProviderCode == _provider.ProviderCode && x.ProviderCustomerId == customerId &&
+                (x.BusinessProfileId != businessProfileId || x.CustomerProfileId != null || x.BusinessCustomerId != null), ct) ||
+            await _db.BusinessProfiles.AsNoTracking().AnyAsync(x =>
+                x.Id != businessProfileId && x.BlaaizBusinessCustomerId == customerId, ct))
+            throw new InvalidOperationException("This provider customer is already linked to another record. Contact operations for recovery.");
     }
 
     private static void ApplyProviderSnapshot(
@@ -1109,7 +1183,8 @@ public class BusinessKybService : IBusinessKybService
         profile.RegistrationNumber = registrationNumber?.Trim() ?? "";
         profile.TaxIdentificationNumber = Optional(taxIdentificationNumber);
         profile.CountryCode = countryCode?.Trim().ToUpperInvariant() ?? "";
-        profile.IncorporationDate = incorporationDate?.Date;
+        profile.IncorporationDate = incorporationDate.HasValue
+            ? BusinessKybCalendarDate.Normalize(incorporationDate.Value) : null;
         profile.IndustryType = Optional(industryType);
         profile.BusinessDescription = Optional(businessDescription);
         profile.Website = Optional(website);
