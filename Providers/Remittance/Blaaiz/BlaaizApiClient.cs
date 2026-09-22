@@ -894,7 +894,8 @@ public class BlaaizApiClient : IBlaaizApiClient
                     message,
                     (int)response.StatusCode,
                     auditResponse,
-                    requestLogId);
+                    requestLogId,
+                    validationErrors: BlaaizValidationErrors.Read(endpoint, (int)response.StatusCode, rawResponse));
             }
 
             TResponse? parsed;

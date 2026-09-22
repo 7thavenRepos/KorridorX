@@ -17,6 +17,12 @@ public class LookupsController : ControllerBase
         _db = db;
     }
 
+    [HttpGet("business-types")]
+    public async Task<IActionResult> GetBusinessTypes(CancellationToken ct) => Ok(ApiResponses.Ok(
+        await _db.BusinessTypes.AsNoTracking().Where(x => x.IsActive)
+            .OrderBy(x => x.SortOrder).ThenBy(x => x.Name)
+            .Select(x => new { x.Code, x.Name }).ToListAsync(ct)));
+
     [HttpGet("countries")]
     public async Task<IActionResult> GetCountries(CancellationToken ct)
     {

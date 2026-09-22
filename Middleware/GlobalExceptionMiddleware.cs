@@ -73,6 +73,18 @@ public class GlobalExceptionMiddleware
                 "COMPLIANCE_HOLD",
                 ex.Message);
         }
+        catch (RequestValidationException ex)
+        {
+            await WriteErrorAsync(context, HttpStatusCode.UnprocessableEntity, "VALIDATION_ERROR",
+                ex.Message, new { validationErrors = ex.ValidationErrors });
+        }
+        catch (ProviderIntegrationException ex) when (ex.ValidationErrors is not null)
+        {
+            await WriteErrorAsync(context, HttpStatusCode.UnprocessableEntity, "VALIDATION_ERROR",
+                ex.ValidationErrors.Count > 0 ? "Review the highlighted fields and try again." : ex.Message,
+                new { requestLogId = ex.RequestLogId, providerStatusCode = ex.ProviderStatusCode,
+                    validationErrors = ex.ValidationErrors });
+        }
         catch (InvalidOperationException ex)
         {
             await WriteErrorAsync(

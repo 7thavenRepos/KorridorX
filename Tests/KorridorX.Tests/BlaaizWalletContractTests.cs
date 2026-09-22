@@ -112,6 +112,24 @@ public sealed class BlaaizWalletContractTests
         Assert.Null(audit.Response);
     }
 
+    [Fact]
+    public async Task Customer_validation_keeps_messages_after_auditing_and_response_sanitization()
+    {
+        const string body = """{"message":"Bad inputs (and 1 more error)","errors":{"business_type":["Invalid business type."],"id_number":["Identity number is invalid."]}}""";
+        using var handler = new ResponseHandler(body, status: HttpStatusCode.UnprocessableEntity);
+        using var http = CreateHttp(handler);
+        var audit = new RecordingAudit();
+        var client = new BlaaizApiClient(http, new TokenService(), audit);
+        var error = await Assert.ThrowsAsync<ProviderIntegrationException>(() => client.CreateBusinessCustomerAsync(
+            new KorridorX.Providers.Remittance.Blaaiz.Models.BlaaizCreateCustomerRequest { Type = "business", BusinessName = "Example" }, Guid.NewGuid()));
+        Assert.Equal(422, error.ProviderStatusCode);
+        Assert.Equal("Invalid business type.", Assert.Single(error.ValidationErrors!["business_type"]));
+        Assert.Equal("Identity number is invalid.", Assert.Single(error.ValidationErrors["id_number"]));
+        Assert.Equal(audit.Id, error.RequestLogId);
+        Assert.Equal(1, audit.FailCalls);
+        Assert.Equal(0, audit.CompleteCalls);
+    }
+
     private static string WalletJson(string currencyIdJson) =>
         "{\"id\":\"wallet-cad\",\"business_id\":\"business-test\",\"currency\":\"CAD\"," +
         "\"currency_id\":" + currencyIdJson + ",\"amount\":1234.5678,\"is_active\":true}";
@@ -125,7 +143,7 @@ public sealed class BlaaizWalletContractTests
             Task.FromResult("test-token");
     }
 
-    private sealed class ResponseHandler(string body, bool failTransport = false) : HttpMessageHandler
+    private sealed class ResponseHandler(string body, bool failTransport = false, HttpStatusCode status = HttpStatusCode.OK) : HttpMessageHandler
     {
         public string? Path { get; private set; }
         public string? Authorization { get; private set; }
@@ -135,7 +153,7 @@ public sealed class BlaaizWalletContractTests
             if (failTransport) throw new HttpRequestException("Test connection failure.");
             Path = request.RequestUri!.AbsolutePath;
             Authorization = request.Headers.Authorization?.ToString();
-            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            return Task.FromResult(new HttpResponseMessage(status)
             {
                 Content = new StringContent(body, Encoding.UTF8, "application/json")
             });

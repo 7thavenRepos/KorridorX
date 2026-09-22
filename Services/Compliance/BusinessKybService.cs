@@ -772,7 +772,9 @@ public class BusinessKybService : IBusinessKybService
         BusinessKybApplication application,
         CancellationToken ct)
     {
-        ValidateProfile(profile);
+        var businessTypeActive = await _db.BusinessTypes.AsNoTracking()
+            .AnyAsync(x => x.Code == profile.BusinessType && x.IsActive, ct);
+        BusinessKybProfileValidation.Validate(profile, businessTypeActive);
 
         var owners = application.Owners
             .Where(x => !x.IsDeleted)
@@ -970,30 +972,6 @@ public class BusinessKybService : IBusinessKybService
         }
     }
 
-    private static void ValidateProfile(BusinessProfile profile)
-    {
-        var missing = new List<string>();
-        if (string.IsNullOrWhiteSpace(profile.BusinessName)) missing.Add("business name");
-        if (string.IsNullOrWhiteSpace(profile.RegistrationNumber)) missing.Add("registration number");
-        if (string.IsNullOrWhiteSpace(profile.CountryCode)) missing.Add("incorporation country");
-        if (string.IsNullOrWhiteSpace(profile.ContactEmail)) missing.Add("contact email");
-        if (string.IsNullOrWhiteSpace(profile.AddressLine1)) missing.Add("registered address");
-        if (string.IsNullOrWhiteSpace(profile.City)) missing.Add("registered city");
-
-        if (missing.Count > 0)
-        {
-            throw new InvalidOperationException(
-                $"Complete the business profile before provider synchronization. Missing: {string.Join(", ", missing)}.");
-        }
-
-        if (!string.IsNullOrWhiteSpace(profile.OperatingAddressLine1) &&
-            string.IsNullOrWhiteSpace(profile.OperatingCountryCode))
-        {
-            throw new InvalidOperationException(
-                "Operating country is required when an operating address is supplied.");
-        }
-    }
-
     private static void ValidateOwner(
         string email,
         DateTime dateOfBirth,
@@ -1003,31 +981,21 @@ public class BusinessKybService : IBusinessKybService
         string idDocumentCountry,
         DateTime idExpiryDate)
     {
-        _ = Required(email, "Owner email");
-        _ = Required(idDocumentNumber, "Owner identity document number");
-        _ = NormalizeCode(idDocumentCountry);
-
-        var type = Required(idDocumentType, "Owner identity document type").ToLowerInvariant();
-        if (!AllowedOwnerIdTypes.Contains(type))
-        {
-            throw new InvalidOperationException(
-                "Owner identity document type must be passport, drivers_license, resident_permit, or id_card.");
-        }
-
-        if (dateOfBirth.Date > DateTime.UtcNow.Date.AddYears(-18))
-        {
-            throw new InvalidOperationException("Every business owner must be at least 18 years old.");
-        }
-
+        var errors = new Dictionary<string, string[]>();
+        if (string.IsNullOrWhiteSpace(email) || !new System.ComponentModel.DataAnnotations.EmailAddressAttribute().IsValid(email))
+            errors["email"] = ["Enter a valid owner email address."];
+        if (string.IsNullOrWhiteSpace(idDocumentNumber)) errors["idDocumentNumber"] = ["Owner identity document number is required."];
+        if (string.IsNullOrWhiteSpace(idDocumentCountry) || idDocumentCountry.Trim().Length != 2)
+            errors["idDocumentCountry"] = ["Select the identity document country."];
+        if (!AllowedOwnerIdTypes.Contains(idDocumentType?.Trim().ToLowerInvariant() ?? ""))
+            errors["idDocumentType"] = ["Select an available identity document type."];
+        if (dateOfBirth == default || dateOfBirth.Date > DateTime.UtcNow.Date.AddYears(-18))
+            errors["dateOfBirth"] = ["Every business owner must be at least 18 years old."];
         if (idExpiryDate.Date <= DateTime.UtcNow.Date)
-        {
-            throw new InvalidOperationException("Owner identity document expiry date must be in the future.");
-        }
-
+            errors["idExpiryDate"] = ["Owner identity document expiry date must be in the future."];
         if (ownershipPercentage <= 0m || ownershipPercentage > 100m)
-        {
-            throw new InvalidOperationException("Ownership percentage must be greater than zero and at most 100.");
-        }
+            errors["ownershipPercentage"] = ["Ownership percentage must be greater than zero and at most 100."];
+        if (errors.Count > 0) throw new RequestValidationException(errors);
     }
 
     private static void ValidateFile(string fileName, string mimeType)
@@ -1135,12 +1103,12 @@ public class BusinessKybService : IBusinessKybService
         string contactEmail,
         string? contactPhone)
     {
-        profile.BusinessName = Required(businessName, "Business name");
+        profile.BusinessName = businessName?.Trim() ?? "";
         profile.TradingName = Optional(tradingName);
-        profile.BusinessType = Optional(businessType);
-        profile.RegistrationNumber = Required(registrationNumber, "Registration number");
+        profile.BusinessType = Optional(businessType)?.ToLowerInvariant();
+        profile.RegistrationNumber = registrationNumber?.Trim() ?? "";
         profile.TaxIdentificationNumber = Optional(taxIdentificationNumber);
-        profile.CountryCode = NormalizeCode(countryCode);
+        profile.CountryCode = countryCode?.Trim().ToUpperInvariant() ?? "";
         profile.IncorporationDate = incorporationDate?.Date;
         profile.IndustryType = Optional(industryType);
         profile.BusinessDescription = Optional(businessDescription);
@@ -1155,14 +1123,15 @@ public class BusinessKybService : IBusinessKybService
         profile.AddressLine2 = Optional(addressLine2);
         profile.PostalCode = Optional(postalCode);
         profile.OperatingCountryCode = string.IsNullOrWhiteSpace(operatingCountryCode)
-            ? null
+            ? (new[] { operatingAddressLine1, operatingAddressLine2, operatingCity, operatingStateOrProvince, operatingPostalCode }
+                .Any(x => !string.IsNullOrWhiteSpace(x)) ? profile.CountryCode : null)
             : NormalizeCode(operatingCountryCode);
         profile.OperatingStateOrProvince = Optional(operatingStateOrProvince);
         profile.OperatingCity = Optional(operatingCity);
         profile.OperatingAddressLine1 = Optional(operatingAddressLine1);
         profile.OperatingAddressLine2 = Optional(operatingAddressLine2);
         profile.OperatingPostalCode = Optional(operatingPostalCode);
-        profile.ContactEmail = Required(contactEmail, "Business email").ToLowerInvariant();
+        profile.ContactEmail = contactEmail?.Trim().ToLowerInvariant() ?? "";
         profile.ContactPhone = Optional(contactPhone);
     }
 

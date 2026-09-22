@@ -158,6 +158,8 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<Guid
     public DbSet<TransferDispute> TransferDisputes => Set<TransferDispute>();
     public DbSet<TransferInvestigation> TransferInvestigations => Set<TransferInvestigation>();
     public DbSet<SupportEvidence> SupportEvidence => Set<SupportEvidence>();
+    public DbSet<BusinessType> BusinessTypes => Set<BusinessType>();
+
     public DbSet<Country> Countries => Set<Country>();
     public DbSet<Asset> Assets => Set<Asset>();
     public DbSet<AssetNetwork> AssetNetworks => Set<AssetNetwork>();
