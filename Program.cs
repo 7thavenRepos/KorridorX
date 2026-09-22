@@ -334,7 +334,9 @@ builder.Services.AddScoped<IEmbeddedFinanceAdminAssuranceService, EmbeddedFinanc
 builder.Services.AddScoped<IEmbeddedFinanceCustomerService, EmbeddedFinanceCustomerService>();
 builder.Services.AddScoped<IEmbeddedFinanceCredentialAuthenticator, EmbeddedFinanceCredentialAuthenticator>();
 builder.Services.AddScoped<IEmbeddedFinanceContextAccessor, HttpEmbeddedFinanceContextAccessor>();
-builder.Services.AddScoped<ICollectionAccountProvisioningService, CollectionAccountProvisioningService>();
+builder.Services.AddScoped<CollectionAccountProvisioningService>();
+builder.Services.AddScoped<ICollectionAccountProvisioningService>(sp => sp.GetRequiredService<CollectionAccountProvisioningService>());
+builder.Services.AddScoped<BusinessCollectionAccountService>();
 builder.Services.AddScoped<IEmbeddedInboundCollectionService, EmbeddedInboundCollectionService>();
 builder.Services.AddScoped<IEmbeddedFinancePayoutService, EmbeddedFinancePayoutService>();
 builder.Services.AddScoped<IEmbeddedFinanceTransferService, EmbeddedFinanceTransferService>();

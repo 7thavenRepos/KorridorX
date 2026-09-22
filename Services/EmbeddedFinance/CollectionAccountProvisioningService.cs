@@ -22,13 +22,25 @@ public sealed class CollectionAccountProvisioningService : ICollectionAccountPro
         _provisioners = provisioners.ToDictionary(x => x.ProviderCode, StringComparer.OrdinalIgnoreCase);
     }
 
-    public async Task<ProviderAccountMappingDto> ProvisionAsync(
+    public Task<ProviderAccountMappingDto> ProvisionAsync(
         Guid businessCustomerId,
         Guid collectionAccountId,
         ProvisionCollectionAccountRequestDto request,
         CancellationToken ct = default)
     {
         var principal = RequireScope(EmbeddedFinanceScope.AccountsWrite);
+        return ProvisionForBusinessAsync(principal.BusinessProfileId, businessCustomerId, collectionAccountId, request, ct);
+    }
+
+    // Shared domain operation. The API-key entry point above and the Business
+    // portal service each authorize their own caller before reaching this method.
+    internal async Task<ProviderAccountMappingDto> ProvisionForBusinessAsync(
+        Guid businessProfileId,
+        Guid businessCustomerId,
+        Guid collectionAccountId,
+        ProvisionCollectionAccountRequestDto request,
+        CancellationToken ct = default)
+    {
         var providerCode = Required(request.ProviderCode, 50, "Provider code");
         if (_provisioners.TryGetValue(providerCode, out var registered)) providerCode = registered.ProviderCode;
 
@@ -37,7 +49,7 @@ public sealed class CollectionAccountProvisioningService : ICollectionAccountPro
             .FirstOrDefaultAsync(x =>
                 x.Id == collectionAccountId &&
                 x.BusinessCustomerId == businessCustomerId &&
-                x.BusinessProfileId == principal.BusinessProfileId &&
+                x.BusinessProfileId == businessProfileId &&
                 !x.IsDeleted &&
                 !x.BusinessCustomer.IsDeleted,
                 ct)
@@ -103,7 +115,7 @@ public sealed class CollectionAccountProvisioningService : ICollectionAccountPro
                 .Where(x =>
                     x.Id == account.Id &&
                     x.BusinessCustomerId == businessCustomerId &&
-                    x.BusinessProfileId == principal.BusinessProfileId &&
+                    x.BusinessProfileId == businessProfileId &&
                     !x.IsDeleted &&
                     !x.BusinessCustomer.IsDeleted)
                 .Select(x => new
@@ -136,7 +148,7 @@ public sealed class CollectionAccountProvisioningService : ICollectionAccountPro
 
             var result = await provisioner.ProvisionAsync(
                 new CollectionAccountProvisioningRequest(
-                    principal.BusinessProfileId,
+                    businessProfileId,
                     account.BusinessCustomerId,
                     account.Id,
                     account.ExternalReference,
