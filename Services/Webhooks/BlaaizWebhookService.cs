@@ -103,7 +103,10 @@ public class BlaaizWebhookService : IBlaaizWebhookService
                 x.ProviderEventId == eventId,
                 ct);
 
-        if (existing is not null)
+        var retryVirtualAccount = existing is not null &&
+            existing.ProcessingStatus == WebhookProcessingStatus.Failed &&
+            eventType.StartsWith("virtual_account.", StringComparison.OrdinalIgnoreCase);
+        if (existing is not null && !retryVirtualAccount)
         {
             return new BlaaizWebhookResult(
                 existing.Id,
@@ -112,7 +115,20 @@ public class BlaaizWebhookService : IBlaaizWebhookService
                 true);
         }
 
-        var webhook = new WebhookEvent
+        if (retryVirtualAccount)
+        {
+            if (existing!.RawPayloadJson != rawPayload)
+                throw new InvalidOperationException("A virtual-account event ID cannot be reused with a different payload.");
+            var claimed = await _db.WebhookEvents.Where(x => x.Id == existing.Id &&
+                    x.ProcessingStatus == WebhookProcessingStatus.Failed)
+                .ExecuteUpdateAsync(setters => setters.SetProperty(x => x.ProcessingStatus, WebhookProcessingStatus.Processing), ct);
+            if (claimed == 0)
+                return new BlaaizWebhookResult(existing.Id, existing.EventType, WebhookProcessingStatus.Processing.ToString(), true);
+        }
+
+        var webhook = retryVirtualAccount
+            ? await _db.WebhookEvents.SingleAsync(x => x.Id == existing!.Id, ct)
+            : new WebhookEvent
         {
             ProviderCode = ProviderCode.Blaaiz,
             ProviderEventId = eventId,
@@ -124,6 +140,11 @@ public class BlaaizWebhookService : IBlaaizWebhookService
             ReceivedAt = DateTime.UtcNow
         };
 
+        webhook.ProcessingStatus = WebhookProcessingStatus.Processing;
+        webhook.ErrorMessage = null;
+        webhook.ProcessedAt = null;
+        webhook.SignatureHeader = signature;
+        webhook.TimestampHeader = timestamp;
         var attempt = new WebhookProcessingAttempt
         {
             WebhookEvent = webhook,
@@ -133,7 +154,8 @@ public class BlaaizWebhookService : IBlaaizWebhookService
         };
 
         webhook.Attempts.Add(attempt);
-        _db.WebhookEvents.Add(webhook);
+        if (!retryVirtualAccount) _db.WebhookEvents.Add(webhook);
+        else _db.Set<WebhookProcessingAttempt>().Add(attempt);
 
         try
         {
@@ -204,6 +226,11 @@ public class BlaaizWebhookService : IBlaaizWebhookService
         string rawPayload,
         CancellationToken ct)
     {
+        if (eventType.StartsWith("virtual_account.", StringComparison.OrdinalIgnoreCase))
+        {
+            return await new BlaaizVirtualAccountWebhookHandler(_db).ProcessAsync(eventType, rawPayload, ct);
+        }
+
         if (eventType.Equals("customer.status_changed", StringComparison.OrdinalIgnoreCase))
         {
             return await ProcessCustomerStatusChangedAsync(root, data, ct);

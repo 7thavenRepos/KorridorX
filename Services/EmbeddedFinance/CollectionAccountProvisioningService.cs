@@ -30,6 +30,7 @@ public sealed class CollectionAccountProvisioningService : ICollectionAccountPro
     {
         var principal = RequireScope(EmbeddedFinanceScope.AccountsWrite);
         var providerCode = Required(request.ProviderCode, 50, "Provider code");
+        if (_provisioners.TryGetValue(providerCode, out var registered)) providerCode = registered.ProviderCode;
 
         var account = await _db.CollectionAccounts
             .Include(x => x.BusinessCustomer)
@@ -53,6 +54,8 @@ public sealed class CollectionAccountProvisioningService : ICollectionAccountPro
 
         if (existing?.Status == ProviderAccountMappingStatus.Active)
             return ToDto(existing);
+        if (existing?.Status == ProviderAccountMappingStatus.Disabled)
+            throw new InvalidOperationException("The provider account mapping has been disabled by an administrator.");
 
         EnsureProvisionableAccountStatus(account.Status);
 
@@ -144,6 +147,14 @@ public sealed class CollectionAccountProvisioningService : ICollectionAccountPro
                     account.AssetCode),
                 ct);
 
+            // A ready/failed webhook may arrive while the POST is still returning.
+            await _db.Entry(mapping).ReloadAsync(ct);
+            await _db.Entry(account).ReloadAsync(ct);
+            if (mapping.Status != ProviderAccountMappingStatus.Pending) return ToDto(mapping);
+            if (result.Status is not (ProviderAccountMappingStatus.Pending or ProviderAccountMappingStatus.Active or ProviderAccountMappingStatus.Failed))
+                throw new InvalidOperationException("Provider returned an invalid provisioning state.");
+            if (mapping.ProviderAccountId is not null && mapping.ProviderAccountId != result.ProviderAccountId)
+                throw new InvalidOperationException("Provider response conflicts with the recorded virtual-account ID.");
             if (string.IsNullOrWhiteSpace(result.ProviderAccountId))
                 throw new InvalidOperationException("Provider did not return a provider account identifier.");
 
@@ -154,22 +165,32 @@ public sealed class CollectionAccountProvisioningService : ICollectionAccountPro
             mapping.AccountName = Clean(result.AccountName, 200);
             mapping.BankName = Clean(result.BankName, 200);
             mapping.MetadataJson = result.MetadataJson;
-            mapping.Status = ProviderAccountMappingStatus.Active;
-            mapping.FailureReason = null;
+            mapping.Status = result.Status;
+            mapping.FailureReason = result.FailureReason;
             mapping.LastUpdatedAt = DateTime.UtcNow;
 
-            account.Status = CollectionAccountStatus.Active;
-            account.LastUpdatedAt = DateTime.UtcNow;
+            if (result.Status == ProviderAccountMappingStatus.Active && account.Status == CollectionAccountStatus.Pending &&
+                await _db.BusinessCustomers.AsNoTracking().AnyAsync(x => x.Id == account.BusinessCustomerId &&
+                    !x.IsDeleted && x.Status == BusinessCustomerStatus.Active, ct))
+            {
+                account.Status = CollectionAccountStatus.Active;
+                account.LastUpdatedAt = DateTime.UtcNow;
+            }
 
             await _db.SaveChangesAsync(ct);
             return ToDto(mapping);
         }
         catch (Exception ex)
         {
-            mapping.Status = ProviderAccountMappingStatus.Failed;
-            mapping.FailureReason = Truncate(ex.Message, 1000);
-            mapping.LastUpdatedAt = DateTime.UtcNow;
-            await _db.SaveChangesAsync(ct);
+            await _db.Entry(mapping).ReloadAsync(ct);
+            await _db.Entry(account).ReloadAsync(ct);
+            if (mapping.Status == ProviderAccountMappingStatus.Pending)
+            {
+                mapping.Status = ProviderAccountMappingStatus.Failed;
+                mapping.FailureReason = Truncate(ex.Message, 1000);
+                mapping.LastUpdatedAt = DateTime.UtcNow;
+                await _db.SaveChangesAsync(ct);
+            }
             throw;
         }
     }
@@ -197,7 +218,7 @@ public sealed class CollectionAccountProvisioningService : ICollectionAccountPro
                 x.Id, x.CollectionAccountId, x.ProviderCode, x.ProviderCustomerId,
                 x.ProviderAccountId, x.ProviderReference, x.AccountNumber,
                 x.AccountName, x.BankName, x.Status, x.FailureReason,
-                x.CreatedAt, x.LastUpdatedAt))
+                x.CreatedAt, x.LastUpdatedAt, BlaaizVirtualAccountState.BankDetails(x.MetadataJson)))
             .ToListAsync(ct);
     }
 
@@ -249,7 +270,7 @@ public sealed class CollectionAccountProvisioningService : ICollectionAccountPro
     private static ProviderAccountMappingDto ToDto(ProviderAccountMapping x) => new(
         x.Id, x.CollectionAccountId, x.ProviderCode, x.ProviderCustomerId,
         x.ProviderAccountId, x.ProviderReference, x.AccountNumber,
-        x.AccountName, x.BankName, x.Status, x.FailureReason, x.CreatedAt, x.LastUpdatedAt);
+        x.AccountName, x.BankName, x.Status, x.FailureReason, x.CreatedAt, x.LastUpdatedAt, BlaaizVirtualAccountState.BankDetails(x.MetadataJson));
 
     private static string Required(string? value, int max, string label)
     {

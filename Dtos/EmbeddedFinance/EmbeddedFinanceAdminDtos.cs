@@ -139,7 +139,8 @@ public sealed record EmbeddedFinanceAdminProviderMappingDto(
     ProviderAccountMappingStatus Status,
     string? FailureReason,
     DateTime CreatedAt,
-    DateTime? LastUpdatedAt);
+    DateTime? LastUpdatedAt,
+    KorridorX.Services.EmbeddedFinance.VirtualAccountBankDetails? BankDetails = null);
 
 public sealed record EmbeddedFinanceAdminProvisioningRetryResultDto(
     EmbeddedFinanceAdminProviderMappingDto Mapping,

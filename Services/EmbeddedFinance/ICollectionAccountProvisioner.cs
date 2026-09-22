@@ -27,4 +27,6 @@ public sealed record CollectionAccountProvisioningResult(
     string? AccountNumber,
     string? AccountName,
     string? BankName,
-    string? MetadataJson);
+    string? MetadataJson,
+    KorridorX.Models.Enums.ProviderAccountMappingStatus Status = KorridorX.Models.Enums.ProviderAccountMappingStatus.Active,
+    string? FailureReason = null);

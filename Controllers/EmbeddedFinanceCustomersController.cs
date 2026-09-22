@@ -43,7 +43,7 @@ public sealed class EmbeddedFinanceCustomersController : ControllerBase
         [FromBody] ProvisionCollectionAccountRequestDto request,
         CancellationToken ct) =>
         Ok(ApiResponses.Ok(await _provisioning.ProvisionAsync(businessCustomerId, collectionAccountId, request, ct),
-            "Provider collection account provisioned successfully."));
+            "Provider collection account provisioning status returned."));
 
     [HttpGet("{businessCustomerId:guid}/payouts")]
     public async Task<IActionResult> Payouts(

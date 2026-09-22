@@ -41,6 +41,14 @@ public sealed class EmbeddedInboundCollectionService : IEmbeddedInboundCollectio
         if (mapping.Status != ProviderAccountMappingStatus.Active) throw new InvalidOperationException("The matched provider collection account is not active.");
 
         var collectionAccount = mapping.CollectionAccount;
+        if (collectionAccount.BusinessCustomer.Status != BusinessCustomerStatus.Active)
+            throw new InvalidOperationException("The matched business customer is not active.");
+        if (!string.IsNullOrWhiteSpace(request.ProviderCustomerId) && mapping.ProviderCustomerId != request.ProviderCustomerId.Trim())
+            throw new InvalidOperationException("Provider deposit customer does not match the collection account.");
+        if (!string.IsNullOrWhiteSpace(request.AccountNumber) && mapping.AccountNumber is not null && mapping.AccountNumber != request.AccountNumber.Trim())
+            throw new InvalidOperationException("Provider deposit account number does not match the collection account.");
+        if (!string.IsNullOrWhiteSpace(request.ProviderAccountReference) && mapping.ProviderReference is not null && mapping.ProviderReference != request.ProviderAccountReference.Trim())
+            throw new InvalidOperationException("Provider deposit account reference does not match the collection account.");
         if (collectionAccount.Status != CollectionAccountStatus.Active) throw new InvalidOperationException("The matched collection account is not active.");
         if (!string.Equals(collectionAccount.AssetCode, currency, StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException($"Provider deposit currency mismatch. Collection account expects {collectionAccount.AssetCode}, received {currency}.");
@@ -240,30 +248,37 @@ public sealed class EmbeddedInboundCollectionService : IEmbeddedInboundCollectio
         if (!string.IsNullOrWhiteSpace(request.ProviderAccountId))
         {
             var value = request.ProviderAccountId.Trim();
-            var match = await query.FirstOrDefaultAsync(x => x.ProviderAccountId == value, ct);
-            if (match is not null) return match;
+            // An explicit unknown account must never fall back to a customer match.
+            return await query.SingleOrDefaultAsync(x => x.ProviderAccountId == value, ct);
         }
         if (!string.IsNullOrWhiteSpace(request.ProviderAccountReference))
         {
             var value = request.ProviderAccountReference.Trim();
-            var match = await query.FirstOrDefaultAsync(x => x.ProviderReference == value, ct);
-            if (match is not null) return match;
+            return Unique(await query.Where(x => x.ProviderReference == value).Take(2).ToListAsync(ct));
+        }
+        var currency = request.CurrencyCode.Trim().ToUpperInvariant();
+        query = query.Where(x => x.CollectionAccount.AssetCode == currency);
+        if (!string.IsNullOrWhiteSpace(request.ProviderCustomerId))
+        {
+            var customer = request.ProviderCustomerId.Trim();
+            query = query.Where(x => x.ProviderCustomerId == customer);
         }
         if (!string.IsNullOrWhiteSpace(request.AccountNumber))
         {
-            var value = request.AccountNumber.Trim();
-            var match = await query.FirstOrDefaultAsync(x => x.AccountNumber == value, ct);
-            if (match is not null) return match;
+            var number = request.AccountNumber.Trim();
+            return Unique(await query.Where(x => x.AccountNumber == number).Take(2).ToListAsync(ct));
         }
         if (!string.IsNullOrWhiteSpace(request.ProviderCustomerId))
-        {
-            var value = request.ProviderCustomerId.Trim();
-            var candidates = await query.Where(x => x.ProviderCustomerId == value).Take(2).ToListAsync(ct);
-            if (candidates.Count == 1) return candidates[0];
-            if (candidates.Count > 1) throw new InvalidOperationException("Blaaiz deposit matched multiple collection accounts by provider customer only; account identification is required.");
-        }
+            return Unique(await query.Take(2).ToListAsync(ct));
         return null;
     }
+
+    private static ProviderAccountMapping? Unique(List<ProviderAccountMapping> candidates) => candidates.Count switch
+    {
+        0 => null,
+        1 => candidates[0],
+        _ => throw new InvalidOperationException("Blaaiz deposit matched multiple collection accounts; unambiguous account identification is required.")
+    };
 
     private static string Hash(object value)
     {

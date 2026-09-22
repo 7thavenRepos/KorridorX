@@ -419,7 +419,8 @@ public sealed class EmbeddedFinanceAdminQueryService : IEmbeddedFinanceAdminQuer
                 x.Status,
                 x.FailureReason,
                 x.CreatedAt,
-                x.LastUpdatedAt))
+                x.LastUpdatedAt,
+                BlaaizVirtualAccountState.BankDetails(x.MetadataJson)))
             .ToListAsync(ct);
     }
 

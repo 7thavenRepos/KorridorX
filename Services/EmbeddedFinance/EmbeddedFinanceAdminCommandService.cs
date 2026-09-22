@@ -519,6 +519,14 @@ public sealed class EmbeddedFinanceAdminCommandService
                     account.AssetCode),
                 ct);
 
+            await _db.Entry(mapping).ReloadAsync(ct);
+            await _db.Entry(account).ReloadAsync(ct);
+            if (mapping.Status != ProviderAccountMappingStatus.Pending)
+                return new EmbeddedFinanceAdminProvisioningRetryResultDto(ToAdminProviderMapping(mapping), account.Status, DateTime.UtcNow);
+            if (result.Status is not (ProviderAccountMappingStatus.Pending or ProviderAccountMappingStatus.Active or ProviderAccountMappingStatus.Failed))
+                throw new InvalidOperationException("Provider returned an invalid provisioning state.");
+            if (mapping.ProviderAccountId is not null && mapping.ProviderAccountId != result.ProviderAccountId)
+                throw new InvalidOperationException("Provider response conflicts with the recorded virtual-account ID.");
             if (string.IsNullOrWhiteSpace(result.ProviderAccountId))
             {
                 throw new InvalidOperationException(
@@ -544,12 +552,14 @@ public sealed class EmbeddedFinanceAdminCommandService
             mapping.BankName =
                 CleanProviderValue(result.BankName, 200);
             mapping.MetadataJson = result.MetadataJson;
-            mapping.Status = ProviderAccountMappingStatus.Active;
-            mapping.FailureReason = null;
+            mapping.Status = result.Status;
+            mapping.FailureReason = result.FailureReason;
             mapping.LastUpdatedAt = completedAt;
             mapping.LastUpdatedByUserId = actorUserId;
 
-            if (account.Status == CollectionAccountStatus.Pending)
+            if (result.Status == ProviderAccountMappingStatus.Active && account.Status == CollectionAccountStatus.Pending &&
+                await _db.BusinessCustomers.AsNoTracking().AnyAsync(x => x.Id == account.BusinessCustomerId &&
+                    !x.IsDeleted && x.Status == BusinessCustomerStatus.Active, ct))
             {
                 account.Status = CollectionAccountStatus.Active;
                 account.LastUpdatedAt = completedAt;
@@ -557,7 +567,8 @@ public sealed class EmbeddedFinanceAdminCommandService
             }
 
             _audit.Stage(new AuditRecordRequest(
-                "EmbeddedFinanceProviderProvisioningRetrySucceeded",
+                result.Status == ProviderAccountMappingStatus.Pending
+                    ? "EmbeddedFinanceProviderProvisioningRetryPending" : "EmbeddedFinanceProviderProvisioningRetryCompleted",
                 "EmbeddedFinance",
                 nameof(ProviderAccountMapping),
                 mapping.Id.ToString(),
@@ -605,6 +616,9 @@ public sealed class EmbeddedFinanceAdminCommandService
         }
         catch (Exception ex)
         {
+            await _db.Entry(mapping).ReloadAsync(ct);
+            await _db.Entry(account).ReloadAsync(ct);
+            if (mapping.Status != ProviderAccountMappingStatus.Pending) throw;
             var failedAt = DateTime.UtcNow;
 
             mapping.Status = ProviderAccountMappingStatus.Failed;
@@ -843,7 +857,8 @@ public sealed class EmbeddedFinanceAdminCommandService
             value.Status,
             value.FailureReason,
             value.CreatedAt,
-            value.LastUpdatedAt);
+            value.LastUpdatedAt,
+            BlaaizVirtualAccountState.BankDetails(value.MetadataJson));
 
     private static string TruncateProviderFailure(string? value)
     {
