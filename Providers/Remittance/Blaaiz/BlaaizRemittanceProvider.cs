@@ -1,4 +1,5 @@
 using KorridorX.Configuration;
+using KorridorX.Exceptions;
 using KorridorX.Models.Enums;
 using KorridorX.Providers.Remittance.Blaaiz.Models;
 using Microsoft.Extensions.Options;
@@ -329,6 +330,13 @@ public class BlaaizRemittanceProvider : IRemittanceProvider
         }
         else
         {
+            // A previous PUT may have saved an owner before its response could be read.
+            // Sending that owner again without its provider ID would create a duplicate.
+            if (providerRequest.Owners.Any(x => string.IsNullOrWhiteSpace(x.Id)))
+            {
+                await RecoverBusinessOwnerIdsAsync(request.ExistingProviderCustomerId,
+                    request.BusinessProfileId, providerRequest.Owners, ct);
+            }
             response = await _apiClient.UpdateBusinessCustomerAsync(
                 request.ExistingProviderCustomerId,
                 providerRequest,
@@ -337,6 +345,37 @@ public class BlaaizRemittanceProvider : IRemittanceProvider
         }
 
         return MapBusinessCustomerResult(response, request.Owners);
+    }
+
+    private async Task RecoverBusinessOwnerIdsAsync(string customerId, Guid businessProfileId,
+        List<BlaaizBusinessOwnerRequest> owners, CancellationToken ct)
+    {
+        var response = await _apiClient.GetBusinessCustomerAsync(customerId, businessProfileId, ct);
+        var customer = response.Data.Data;
+        ProviderIntegrationException Conflict(string message) =>
+            new(message, 200, response.RawResponseJson, response.RequestLogId);
+
+        if (customer is null || customer.Owners is null ||
+            !string.Equals(customer.Id, customerId, StringComparison.Ordinal))
+            throw Conflict("Blaaiz returned a different customer during owner recovery. No owner update was sent.");
+
+        var linkedIds = owners.Where(x => !string.IsNullOrWhiteSpace(x.Id))
+            .Select(x => x.Id!).ToHashSet(StringComparer.Ordinal);
+        foreach (var owner in owners.Where(x => string.IsNullOrWhiteSpace(x.Id)))
+        {
+            var matches = customer.Owners.Where(x =>
+                string.Equals(x.Email?.Trim(), owner.Email, StringComparison.OrdinalIgnoreCase)).ToList();
+            if (matches.Count == 0) continue;
+            if (matches.Count != 1)
+                throw Conflict("Blaaiz returned ambiguous owners for this email. Review the existing owner before retrying.");
+            var match = matches[0];
+            if (string.IsNullOrWhiteSpace(match.Id) ||
+                !string.Equals(match.FirstName?.Trim(), owner.FirstName, StringComparison.OrdinalIgnoreCase) ||
+                !string.Equals(match.LastName?.Trim(), owner.LastName, StringComparison.OrdinalIgnoreCase) ||
+                match.OwnershipPercentage != owner.OwnershipPercentage || !linkedIds.Add(match.Id))
+                throw Conflict("The existing Blaaiz owner does not match this retry. Review the saved owner details before retrying.");
+            owner.Id = match.Id;
+        }
     }
 
     public async Task<RemittanceBusinessUploadUrlResult> RequestBusinessOwnerUploadUrlAsync(

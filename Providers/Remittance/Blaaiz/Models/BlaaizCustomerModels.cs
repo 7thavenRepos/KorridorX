@@ -250,6 +250,7 @@ public sealed class BlaaizBusinessOwnerData
     public string? Email { get; set; }
 
     [JsonPropertyName("ownership_percentage")]
+    [JsonNumberHandling(JsonNumberHandling.AllowReadingFromString)]
     public decimal OwnershipPercentage { get; set; }
 
     [JsonPropertyName("status")]

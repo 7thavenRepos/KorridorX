@@ -1,4 +1,5 @@
 using System.Net;
+using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using KorridorX.Configuration;
@@ -15,6 +16,200 @@ namespace KorridorX.Tests;
 
 public sealed class BlaaizBusinessKybContractTests
 {
+    [Theory]
+    [InlineData("100", "100")]
+    [InlineData("100.00", "100")]
+    [InlineData("\"100\"", "100")]
+    [InlineData("\"100.00\"", "100")]
+    [InlineData("37.5", "37.5")]
+    [InlineData("\"37.50\"", "37.5")]
+    [InlineData("0", "0")]
+    [InlineData("\"0.00\"", "0")]
+    public async Task Ownership_percentage_accepts_numeric_and_string_decimals_across_customer_and_owner_responses(
+        string token, string expected)
+    {
+        var value = decimal.Parse(expected, CultureInfo.InvariantCulture);
+        var owner = OwnerJson(token);
+        using var handler = new ResponseHandler(CustomerJson(owner));
+        using var http = CreateHttp(handler);
+        var client = new BlaaizApiClient(http, new TokenService(), new RecordingAudit());
+        var request = new BlaaizCreateCustomerRequest();
+        var profileId = Guid.NewGuid();
+        var responses = new[]
+        {
+            await client.CreateBusinessCustomerAsync(request, profileId),
+            await client.UpdateBusinessCustomerAsync("customer-id", request, profileId),
+            await client.GetBusinessCustomerAsync("customer-id", profileId),
+            await client.SubmitBusinessCustomerAsync("customer-id", profileId)
+        };
+        foreach (var response in responses)
+            Assert.Equal(value, Assert.Single(response.Data.Data.Owners).OwnershipPercentage);
+
+        using var ownerHandler = new ResponseHandler("{\"data\":" + owner + "}");
+        using var ownerHttp = CreateHttp(ownerHandler);
+        var ownerClient = new BlaaizApiClient(ownerHttp, new TokenService(), new RecordingAudit());
+        var confirmed = await ownerClient.AttachBusinessOwnerFilesAsync("customer-id", "owner-id",
+            new BlaaizOwnerFilesRequest { IdDocumentFront = "file-id" }, profileId);
+        Assert.Equal(value, confirmed.Data.Data.OwnershipPercentage);
+    }
+
+    [Theory]
+    [InlineData("null")]
+    [InlineData("true")]
+    [InlineData("{}")]
+    [InlineData("[]")]
+    [InlineData("\"\"")]
+    [InlineData("\"100%\"")]
+    [InlineData("\"not-a-number\"")]
+    [InlineData("\"37,50\"")]
+    [InlineData("\"NaN\"")]
+    [InlineData("\"Infinity\"")]
+    [InlineData("\"79228162514264337593543950336\"")]
+    public async Task Invalid_ownership_percentages_remain_audited_provider_errors(string token)
+    {
+        using var handler = new ResponseHandler(CustomerJson(OwnerJson(token)));
+        using var http = CreateHttp(handler);
+        var audit = new RecordingAudit();
+        var client = new BlaaizApiClient(http, new TokenService(), audit);
+        var error = await Assert.ThrowsAsync<ProviderIntegrationException>(() =>
+            client.UpdateBusinessCustomerAsync("customer-id", new BlaaizCreateCustomerRequest(), Guid.NewGuid()));
+        Assert.Equal(200, error.ProviderStatusCode);
+        Assert.Equal(audit.Id, error.RequestLogId);
+        Assert.Equal("$.data.owners[0].ownership_percentage", Assert.IsType<JsonException>(error.InnerException).Path);
+        Assert.Equal(1, audit.FailCalls);
+        Assert.Equal(0, audit.CompleteCalls);
+    }
+
+    [Theory]
+    [InlineData("fr-FR")]
+    [InlineData("en-CA")]
+    public async Task Ownership_percentage_response_is_culture_independent_and_request_stays_numeric(string culture)
+    {
+        var previous = CultureInfo.CurrentCulture;
+        try
+        {
+            CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo(culture);
+            using var handler = new ResponseHandler(CustomerJson(OwnerJson("\"37.50\"")));
+            using var http = CreateHttp(handler);
+            var client = new BlaaizApiClient(http, new TokenService(), new RecordingAudit());
+            var result = await client.UpdateBusinessCustomerAsync("customer-id", new BlaaizCreateCustomerRequest
+            {
+                Owners = [new BlaaizBusinessOwnerRequest { OwnershipPercentage = 37.5m }]
+            }, Guid.NewGuid());
+            Assert.Equal(37.5m, Assert.Single(result.Data.Data.Owners).OwnershipPercentage);
+            using var sent = JsonDocument.Parse(handler.Body!);
+            var percentage = sent.RootElement.GetProperty("owners")[0].GetProperty("ownership_percentage");
+            Assert.Equal(JsonValueKind.Number, percentage.ValueKind);
+            Assert.Equal(37.5m, percentage.GetDecimal());
+        }
+        finally { CultureInfo.CurrentCulture = previous; }
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Owner_retry_recovers_existing_provider_ID_or_creates_when_no_owner_matches(bool existing)
+    {
+        var savedOwner = OwnerJson("\"100.00\"");
+        using var handler = new SequenceHandler(CustomerJson(existing ? savedOwner : ""), CustomerJson(savedOwner));
+        using var http = CreateHttp(handler);
+        var request = BusinessRequest();
+        var result = await CreateProvider(http, new RecordingAudit()).SyncBusinessCustomerAsync(request);
+
+        Assert.Equal(new[] { HttpMethod.Get, HttpMethod.Put }, handler.Requests.Select(x => x.Method));
+        Assert.All(handler.Requests, x => Assert.Equal("/api/external/customer/customer-id", x.Path));
+        using var sent = JsonDocument.Parse(handler.Requests[1].Body!);
+        var sentOwner = sent.RootElement.GetProperty("owners")[0];
+        if (existing) Assert.Equal("owner-id", sentOwner.GetProperty("id").GetString());
+        else Assert.False(sentOwner.TryGetProperty("id", out _));
+        Assert.Equal(100m, sentOwner.GetProperty("ownership_percentage").GetDecimal());
+        Assert.False(sent.RootElement.TryGetProperty("kyb_scope", out _));
+        Assert.Null(request.Owners[0].ProviderOwnerId);
+        Assert.Equal(request.Owners[0].LocalOwnerId, Assert.Single(result.Owners).LocalOwnerId);
+        Assert.Equal("owner-id", result.Owners[0].ProviderOwnerId);
+    }
+
+    [Theory]
+    [InlineData("name")]
+    [InlineData("percentage")]
+    [InlineData("duplicate-email")]
+    [InlineData("missing-id")]
+    [InlineData("customer")]
+    [InlineData("claimed-id")]
+    public async Task Owner_retry_stops_before_any_write_for_uncertain_matches(string mismatch)
+    {
+        var owner = OwnerJson("\"100.00\"");
+        owner = mismatch switch
+        {
+            "name" => owner.Replace("\"Test\"", "\"Different\""),
+            "percentage" => owner.Replace("\"100.00\"", "\"50.00\""),
+            "duplicate-email" => owner + "," + owner.Replace("owner-id", "other-owner-id"),
+            "missing-id" => owner.Replace("\"owner-id\"", "\"\""),
+            _ => owner
+        };
+        var body = CustomerJson(owner);
+        if (mismatch == "customer") body = body.Replace("customer-id", "wrong-customer-id");
+        var request = BusinessRequest();
+        if (mismatch == "claimed-id") request = request with
+        {
+            Owners = [request.Owners[0], request.Owners[0] with
+            {
+                LocalOwnerId = Guid.NewGuid(), ProviderOwnerId = "owner-id", Email = "second@example.test"
+            }]
+        };
+        using var handler = new SequenceHandler(body);
+        using var http = CreateHttp(handler);
+        var audit = new RecordingAudit();
+        var error = await Assert.ThrowsAsync<ProviderIntegrationException>(() =>
+            CreateProvider(http, audit).SyncBusinessCustomerAsync(request));
+        Assert.Equal(HttpMethod.Get, Assert.Single(handler.Requests).Method);
+        Assert.Equal(audit.Id, error.RequestLogId);
+        Assert.Equal(200, error.ProviderStatusCode);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Owner_retry_does_not_lookup_new_customers_or_already_linked_owners(bool newCustomer)
+    {
+        var request = BusinessRequest();
+        request = newCustomer ? request with { ExistingProviderCustomerId = null }
+            : request with { Owners = [request.Owners[0] with { ProviderOwnerId = "owner-id" }] };
+        using var handler = new SequenceHandler(CustomerJson(OwnerJson("\"100.00\"")));
+        using var http = CreateHttp(handler);
+        await CreateProvider(http, new RecordingAudit()).SyncBusinessCustomerAsync(request);
+        Assert.Equal(newCustomer ? HttpMethod.Post : HttpMethod.Put, Assert.Single(handler.Requests).Method);
+    }
+
+    private static string OwnerJson(string token) =>
+        "{\"id\":\"owner-id\",\"first_name\":\"Test\",\"last_name\":\"Owner\",\"email\":\"OWNER@EXAMPLE.TEST\",\"ownership_percentage\":" + token + ",\"status\":\"PENDING\"}";
+    private static string CustomerJson(string owners) =>
+        "{\"data\":{\"id\":\"customer-id\",\"type\":\"business\",\"kyb_scope\":\"FULL\",\"owners\":[" + owners + "],\"documents\":[]}}";
+
+    private static RemittanceBusinessCustomerRequest BusinessRequest() => new(
+        BusinessProfileId: Guid.NewGuid(), ExistingProviderCustomerId: "customer-id", BusinessName: "Test company",
+        TradingName: null, BusinessType: "corporation", RegistrationNumber: "TEST123", IncorporationCountry: "CA",
+        IncorporationDate: null, IndustryType: null, BusinessDescription: null, Website: null, SourceOfFunds: null,
+        EstimatedAnnualRevenue: null, ExpectedMonthlyPayments: null, AccountPurpose: null, KybScope: "FULL",
+        Email: "business@example.test", Phone: null, Tin: null, CountryCode: "CA", Street: null, City: null,
+        State: null, PostalCode: null, OperatingCountry: null, OperatingStreet: null, OperatingCity: null,
+        OperatingState: null, OperatingPostalCode: null,
+        Owners: [new(Guid.NewGuid(), null, "Test", "Owner", "owner@example.test", new(1990, 1, 1),
+            "CA", "CA", null, 100m, true, true, true, "passport", "test-private-id", "CA", new(2035, 1, 1), false)]);
+
+    private sealed class SequenceHandler(params string[] responses) : HttpMessageHandler
+    {
+        public List<(HttpMethod Method, string Path, string? Body)> Requests { get; } = [];
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
+        {
+            var responseIndex = Requests.Count;
+            Requests.Add((request.Method, request.RequestUri!.AbsolutePath,
+                request.Content is null ? null : await request.Content.ReadAsStringAsync(ct)));
+            Assert.True(responseIndex < responses.Length, "Unexpected extra provider request.");
+            return new(HttpStatusCode.OK) { Content = new StringContent(responses[responseIndex], Encoding.UTF8, "application/json") };
+        }
+    }
+
     [Theory]
     [InlineData("FULL")]
     [InlineData("MINIMAL")]
