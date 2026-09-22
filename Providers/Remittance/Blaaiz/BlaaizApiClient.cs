@@ -414,13 +414,18 @@ public class BlaaizApiClient : IBlaaizApiClient
         CancellationToken ct = default)
     {
         var endpoint = $"/api/external/customer/{Uri.EscapeDataString(providerCustomerId)}";
-        var auditBody = CreateBusinessCustomerAuditBody(request, businessProfileId);
+        // Scope is creation-only; upgrades have their own provider endpoint.
+        // Copy the wire payload so a caller's creation request is not mutated.
+        var updateBody = JsonSerializer.SerializeToNode(request, SerializerOptions)!.AsObject();
+        updateBody.Remove("kyb_scope");
+        var auditBody = JsonNode.Parse(CreateBusinessCustomerAuditBody(request, businessProfileId))!.AsObject();
+        auditBody.Remove(nameof(request.KybScope));
 
-        return SendAsync<BlaaizCreateCustomerRequest, BlaaizCustomerEnvelope>(
+        return SendAsync<JsonObject, BlaaizCustomerEnvelope>(
             HttpMethod.Put,
             endpoint,
-            request,
-            auditBody,
+            updateBody,
+            auditBody.ToJsonString(),
             null,
             null,
             null,

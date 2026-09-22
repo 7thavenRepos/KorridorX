@@ -8,6 +8,7 @@ public sealed class BlaaizOwnerUploadUrlRequest
     public string FileCategory { get; set; } = "id_document_front";
 }
 
+[JsonConverter(typeof(BlaaizUploadUrlEnvelopeConverter))]
 public sealed class BlaaizUploadUrlEnvelope
 {
     [JsonPropertyName("message")]
@@ -15,6 +16,7 @@ public sealed class BlaaizUploadUrlEnvelope
 
     [JsonPropertyName("data")]
     public BlaaizUploadUrlData Data { get; set; } = new();
+
 }
 
 public sealed class BlaaizUploadUrlData
