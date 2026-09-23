@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Text.Json.Nodes;
 using KorridorX.Exceptions;
 using KorridorX.Models.Enums;
@@ -15,8 +16,48 @@ public class BlaaizApiClient : IBlaaizApiClient
     private static readonly JsonSerializerOptions SerializerOptions = new()
     {
         PropertyNameCaseInsensitive = true,
-        DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+        Converters =
+        {
+            new BlaaizStringOrNumberJsonConverter()
+        }
     };
+
+    private sealed class BlaaizStringOrNumberJsonConverter : JsonConverter<string>
+    {
+        public override string? Read(
+            ref Utf8JsonReader reader,
+            Type typeToConvert,
+            JsonSerializerOptions options)
+        {
+            if (reader.TokenType == JsonTokenType.String)
+            {
+                return reader.GetString();
+            }
+
+            if (reader.TokenType == JsonTokenType.Number)
+            {
+                using var document = JsonDocument.ParseValue(ref reader);
+                return document.RootElement.GetRawText();
+            }
+
+            if (reader.TokenType == JsonTokenType.Null)
+            {
+                return null;
+            }
+
+            throw new JsonException(
+                $"Expected a JSON string or number but found {reader.TokenType}.");
+        }
+
+        public override void Write(
+            Utf8JsonWriter writer,
+            string value,
+            JsonSerializerOptions options)
+        {
+            writer.WriteStringValue(value);
+        }
+    }
 
     private readonly HttpClient _httpClient;
     private readonly IBlaaizTokenService _tokenService;
