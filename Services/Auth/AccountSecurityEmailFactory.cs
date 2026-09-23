@@ -30,25 +30,19 @@ public static class AccountSecurityEmailFactory
     }
 
     public static (string Subject, string Body) CreateMobileEmailConfirmation(
-        string mobileDeepLinkBaseUrl,
+        string frontendBaseUrl,
         Guid userId,
         string encodedToken,
         string firstName)
     {
-        var link = BuildFragmentLink(
-            $"{mobileDeepLinkBaseUrl.TrimEnd('/')}/confirm-email",
-            new Dictionary<string, string?>
-            {
-                ["userId"] = userId.ToString(),
-                ["token"] = encodedToken
-            });
+        var link = BuildMobileWebLink(frontendBaseUrl, "confirm-email", userId, encodedToken);
 
         return (
             "Confirm your KorridorX email address",
             CreateBody(
                 firstName,
-                "Confirm your email address in the KorridorX app",
-                "Open KorridorX",
+                "Confirm your email address",
+                "Confirm email",
                 link,
                 "If you did not create this account, you can ignore this message."));
     }
@@ -78,25 +72,19 @@ public static class AccountSecurityEmailFactory
     }
 
     public static (string Subject, string Body) CreateMobilePasswordReset(
-        string mobileDeepLinkBaseUrl,
+        string frontendBaseUrl,
         Guid userId,
         string encodedToken,
         string firstName)
     {
-        var link = BuildFragmentLink(
-            $"{mobileDeepLinkBaseUrl.TrimEnd('/')}/reset-password",
-            new Dictionary<string, string?>
-            {
-                ["userId"] = userId.ToString(),
-                ["token"] = encodedToken
-            });
+        var link = BuildMobileWebLink(frontendBaseUrl, "reset-password", userId, encodedToken);
 
         return (
             "Reset your KorridorX password",
             CreateBody(
                 firstName,
-                "Reset your password in the KorridorX app",
-                "Open KorridorX",
+                "Reset your password",
+                "Reset password",
                 link,
                 "If you did not request a password reset, secure your email account and contact KorridorX support."));
     }
@@ -137,7 +125,9 @@ public static class AccountSecurityEmailFactory
         var encoder = HtmlEncoder.Default;
         return $"<p>Hello {encoder.Encode(firstName)},</p>" +
                $"<p>{encoder.Encode(heading)} by selecting the secure link below.</p>" +
-               $"<p><a href=\"{encoder.Encode(link)}\">{encoder.Encode(actionLabel)}</a></p>" +
+               $"<p><a href=\"{encoder.Encode(link)}\" style=\"display:inline-block;padding:14px 24px;background:#123d35;color:#ffffff;text-decoration:none;border-radius:6px;font-weight:bold;\">{encoder.Encode(actionLabel)}</a></p>" +
+               "<p>If the button does not work, copy and paste this address into your browser:</p>" +
+               $"<p style=\"overflow-wrap:anywhere;word-break:break-all;\"><a href=\"{encoder.Encode(link)}\">{encoder.Encode(link)}</a></p>" +
                "<p>This link is single-use and expires automatically.</p>" +
                $"<p>{encoder.Encode(fallback)}</p>";
     }
@@ -153,6 +143,36 @@ public static class AccountSecurityEmailFactory
             $"<p>Hello {encoder.Encode(firstName)},</p>" +
             $"<p>{encoder.Encode(message)}</p>" +
             "<p>If you did not make this change, contact KorridorX support immediately.</p>");
+    }
+
+    private static string BuildMobileWebLink(
+        string frontendBaseUrl,
+        string action,
+        Guid userId,
+        string encodedToken)
+    {
+        // Email clients can strip custom URI schemes. Hand off to the app only
+        // after a user opens the web page and chooses to continue in the app.
+        if (!Uri.TryCreate(frontendBaseUrl, UriKind.Absolute, out var uri) ||
+            (uri.Scheme != Uri.UriSchemeHttps &&
+             !(uri.Scheme == Uri.UriSchemeHttp && uri.IsLoopback)) ||
+            !string.IsNullOrEmpty(uri.UserInfo) ||
+            !string.IsNullOrEmpty(uri.Query) ||
+            !string.IsNullOrEmpty(uri.Fragment))
+        {
+            throw new ArgumentException(
+                "Account email links require an HTTPS frontend base URL (HTTP loopback is allowed for local development).",
+                nameof(frontendBaseUrl));
+        }
+
+        return BuildFragmentLink(
+            $"{frontendBaseUrl.TrimEnd('/')}/auth/{action}",
+            new Dictionary<string, string?>
+            {
+                ["userId"] = userId.ToString(),
+                ["token"] = encodedToken,
+                ["client"] = "mobile"
+            });
     }
 
     private static string BuildFragmentLink(

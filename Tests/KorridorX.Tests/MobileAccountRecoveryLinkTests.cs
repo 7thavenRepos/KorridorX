@@ -8,35 +8,68 @@ public sealed class MobileAccountRecoveryLinkTests
     private static readonly Guid UserId =
         Guid.Parse("6b7be493-08ca-47e9-8c28-20de50fa829c");
 
-    [Fact]
-    public void Mobile_password_reset_uses_the_guarded_app_link_and_fragment()
+    [Theory]
+    [InlineData(false, "confirm-email")]
+    [InlineData(true, "reset-password")]
+    public void Mobile_email_uses_https_fragment_and_a_copyable_fallback(bool reset, string action)
     {
-        var message = AccountSecurityEmailFactory.CreateMobilePasswordReset(
-            "korridorx://account-security/",
-            UserId,
-            "safe-token",
-            "Consumer");
+        var token = "safe+token/with&characters=";
+        var message = reset
+            ? AccountSecurityEmailFactory.CreateMobilePasswordReset("https://staging.korridorx.com/", UserId, token, "Kay <test>")
+            : AccountSecurityEmailFactory.CreateMobileEmailConfirmation("https://staging.korridorx.com/", UserId, token, "Kay <test>");
+        var matches = System.Text.RegularExpressions.Regex.Matches(message.Body, "href=\"([^\"]+)\"");
+        Assert.Equal(2, matches.Count);
+        var link = System.Net.WebUtility.HtmlDecode(matches[0].Groups[1].Value);
+        Assert.Equal(link, System.Net.WebUtility.HtmlDecode(matches[1].Groups[1].Value));
+        var uri = new Uri(link);
+        Assert.Equal("https", uri.Scheme);
+        Assert.Equal("staging.korridorx.com", uri.Host);
+        Assert.Equal($"/auth/{action}", uri.AbsolutePath);
+        Assert.Empty(uri.Query);
+        var fragment = Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(uri.Fragment[1..]);
+        Assert.Equal(UserId.ToString(), fragment["userId"].ToString());
+        Assert.Equal(token, fragment["token"].ToString());
+        Assert.Equal("mobile", fragment["client"].ToString());
+        Assert.Equal(3, fragment.Count);
+        Assert.DoesNotContain("korridorx://", message.Body);
+        Assert.DoesNotContain("Kay <test>", message.Body);
+        Assert.Contains("Kay &lt;test&gt;", message.Body);
+        Assert.Contains("copy and paste", message.Body);
+        Assert.Contains("background:", message.Body);
+        Assert.Contains(link, System.Net.WebUtility.HtmlDecode(message.Body));
+    }
 
-        Assert.Contains("korridorx://account-security/reset-password", message.Body);
-        Assert.Contains("#userId=", message.Body);
-        Assert.Contains(UserId.ToString(), message.Body);
-        Assert.Contains("safe-token", message.Body);
-        Assert.DoesNotContain("?userId=", message.Body);
+    [Theory]
+    [InlineData("http://localhost:4200")]
+    [InlineData("http://127.0.0.1:4200")]
+    public void Mobile_email_supports_local_web_development(string frontendBaseUrl)
+    {
+        var message = AccountSecurityEmailFactory.CreateMobileEmailConfirmation(frontendBaseUrl, UserId, "token", "Kay");
+        Assert.Contains(frontendBaseUrl + "/auth/confirm-email#", message.Body);
+    }
+
+    [Theory]
+    [InlineData("korridorx://account-security")]
+    [InlineData("javascript:alert(1)")]
+    [InlineData("http://staging.korridorx.com")]
+    [InlineData("https://user:password@staging.korridorx.com")]
+    [InlineData("https://staging.korridorx.com?redirect=elsewhere")]
+    [InlineData("https://staging.korridorx.com#fragment")]
+    public void Mobile_email_rejects_non_web_or_unsafe_base_urls(string baseUrl)
+    {
+        Assert.Throws<ArgumentException>(() => AccountSecurityEmailFactory.CreateMobileEmailConfirmation(baseUrl, UserId, "token", "Kay"));
+        Assert.Throws<ArgumentException>(() => AccountSecurityEmailFactory.CreateMobilePasswordReset(baseUrl, UserId, "token", "Kay"));
     }
 
     [Fact]
-    public void Mobile_email_confirmation_uses_the_guarded_app_link_and_fragment()
+    public void Business_email_retains_its_web_flow_without_a_mobile_marker()
     {
-        var message = AccountSecurityEmailFactory.CreateMobileEmailConfirmation(
-            "korridorx://account-security",
-            UserId,
-            "safe-token",
-            "Consumer");
-
-        Assert.Contains("korridorx://account-security/confirm-email", message.Body);
-        Assert.Contains("#userId=", message.Body);
-        Assert.Contains(UserId.ToString(), message.Body);
-        Assert.Contains("safe-token", message.Body);
+        var confirmation = AccountSecurityEmailFactory.CreateEmailConfirmation("https://staging.korridorx.com", UserId, "token", "Kay");
+        var reset = AccountSecurityEmailFactory.CreatePasswordReset("https://staging.korridorx.com", UserId, "token", "Kay");
+        Assert.Contains("/auth/confirm-email#", confirmation.Body);
+        Assert.Contains("/auth/reset-password#", reset.Body);
+        Assert.DoesNotContain("client=mobile", confirmation.Body);
+        Assert.DoesNotContain("client=mobile", reset.Body);
     }
 
     [Theory]

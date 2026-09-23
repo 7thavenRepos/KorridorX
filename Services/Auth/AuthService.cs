@@ -847,7 +847,7 @@ public class AuthService : IAuthService
             var encodedToken = IdentityTokenCodec.Encode(token);
             var message = user.UserType == UserType.Consumer
                 ? AccountSecurityEmailFactory.CreateMobilePasswordReset(
-                    _accountOptions.MobileDeepLinkBaseUrl,
+                    _accountOptions.FrontendBaseUrl,
                     user.Id,
                     encodedToken,
                     user.FirstName)
@@ -1211,7 +1211,7 @@ public class AuthService : IAuthService
         var encodedToken = IdentityTokenCodec.Encode(token);
         var message = user.UserType == UserType.Consumer
             ? AccountSecurityEmailFactory.CreateMobileEmailConfirmation(
-                _accountOptions.MobileDeepLinkBaseUrl,
+                _accountOptions.FrontendBaseUrl,
                 user.Id,
                 encodedToken,
                 user.FirstName)
