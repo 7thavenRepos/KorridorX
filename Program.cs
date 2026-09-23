@@ -257,6 +257,7 @@ builder.Services.AddScoped<IBankDirectoryService, BankDirectoryService>();
 builder.Services.AddScoped<IProviderOperationsQueryService, ProviderOperationsQueryService>();
 builder.Services.AddScoped<IKycService, KycService>();
 builder.Services.AddScoped<IBusinessKybService, BusinessKybService>();
+builder.Services.AddScoped<BusinessKybNotificationService>();
 builder.Services.AddScoped<IAdminKycService, AdminKycService>();
 builder.Services.AddScoped<IAdminBusinessKybService, AdminBusinessKybService>();
 builder.Services.AddScoped<IBlaaizWebhookService, BlaaizWebhookService>();

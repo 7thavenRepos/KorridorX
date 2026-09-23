@@ -293,7 +293,10 @@ public sealed class BusinessKybStartRecoveryDatabaseTests(ReleaseCandidateDataba
         ((CallbackProvider)(object)provider).DocumentUpload = documentUpload;
         var context = new Context(selected);
         return new BusinessKybService(db, provider, new EphemeralDataProtectionProvider(), Options.Create(new BlaaizOptions()),
-            new NoOpComplianceScreeningService(), new BusinessAccessService(db, context), context);
+            new NoOpComplianceScreeningService(), new BusinessAccessService(db, context), context,
+            new BusinessKybNotificationService(
+                new KorridorX.Services.Notifications.NotificationQueueService(db, Options.Create(new NotificationDeliveryOptions())),
+                Options.Create(new SecurityOptions())));
     }
     private sealed class Context(Guid? selected) : IBusinessContextAccessor { public Guid? GetSelectedBusinessProfileId() => selected; }
     public class CallbackProvider : DispatchProxy

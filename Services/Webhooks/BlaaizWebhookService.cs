@@ -14,6 +14,7 @@ using KorridorX.Services.Compliance;
 using KorridorX.Services.EmbeddedFinance;
 using KorridorX.Services.DigitalAssets;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.Options;
 
 namespace KorridorX.Services.Webhooks;
@@ -29,6 +30,7 @@ public class BlaaizWebhookService : IBlaaizWebhookService
     private readonly IEmbeddedInboundCollectionService _embeddedInboundCollections;
     private readonly IEmbeddedPayoutSettlementService _embeddedPayoutSettlement;
     private readonly IDigitalAssetDepositIntentSettlementService _digitalAssetDepositIntents;
+    private readonly BusinessKybNotificationService _kybNotifications;
 
     public BlaaizWebhookService(
         AppDbContext db,
@@ -39,7 +41,8 @@ public class BlaaizWebhookService : IBlaaizWebhookService
         IComplianceScreeningService screeningService,
         IEmbeddedInboundCollectionService embeddedInboundCollections,
         IEmbeddedPayoutSettlementService embeddedPayoutSettlement,
-        IDigitalAssetDepositIntentSettlementService digitalAssetDepositIntents)
+        IDigitalAssetDepositIntentSettlementService digitalAssetDepositIntents,
+        BusinessKybNotificationService kybNotifications)
     {
         _db = db;
         _options = options.Value;
@@ -50,6 +53,7 @@ public class BlaaizWebhookService : IBlaaizWebhookService
         _embeddedInboundCollections = embeddedInboundCollections;
         _embeddedPayoutSettlement = embeddedPayoutSettlement;
         _digitalAssetDepositIntents = digitalAssetDepositIntents;
+        _kybNotifications = kybNotifications;
     }
 
     public Task<BlaaizWebhookResult> ProcessCollectionWebhookAsync(
@@ -103,10 +107,16 @@ public class BlaaizWebhookService : IBlaaizWebhookService
                 x.ProviderEventId == eventId,
                 ct);
 
-        var retryVirtualAccount = existing is not null &&
-            existing.ProcessingStatus == WebhookProcessingStatus.Failed &&
+        var customerStatusEvent = eventType.Equals("customer.status_changed", StringComparison.OrdinalIgnoreCase);
+        var retryableEvent = customerStatusEvent ||
             eventType.StartsWith("virtual_account.", StringComparison.OrdinalIgnoreCase);
-        if (existing is not null && !retryVirtualAccount)
+        if (existing is not null && customerStatusEvent && existing.RawPayloadJson != rawPayload)
+            throw new InvalidOperationException("A customer-status event ID cannot be reused with a different payload.");
+
+        var retryEvent = existing is not null &&
+            existing.ProcessingStatus == WebhookProcessingStatus.Failed &&
+            retryableEvent;
+        if (existing is not null && !retryEvent)
         {
             return new BlaaizWebhookResult(
                 existing.Id,
@@ -115,10 +125,10 @@ public class BlaaizWebhookService : IBlaaizWebhookService
                 true);
         }
 
-        if (retryVirtualAccount)
+        if (retryEvent)
         {
             if (existing!.RawPayloadJson != rawPayload)
-                throw new InvalidOperationException("A virtual-account event ID cannot be reused with a different payload.");
+                throw new InvalidOperationException("A webhook event ID cannot be reused with a different payload.");
             var claimed = await _db.WebhookEvents.Where(x => x.Id == existing.Id &&
                     x.ProcessingStatus == WebhookProcessingStatus.Failed)
                 .ExecuteUpdateAsync(setters => setters.SetProperty(x => x.ProcessingStatus, WebhookProcessingStatus.Processing), ct);
@@ -126,7 +136,7 @@ public class BlaaizWebhookService : IBlaaizWebhookService
                 return new BlaaizWebhookResult(existing.Id, existing.EventType, WebhookProcessingStatus.Processing.ToString(), true);
         }
 
-        var webhook = retryVirtualAccount
+        var webhook = retryEvent
             ? await _db.WebhookEvents.SingleAsync(x => x.Id == existing!.Id, ct)
             : new WebhookEvent
         {
@@ -154,7 +164,7 @@ public class BlaaizWebhookService : IBlaaizWebhookService
         };
 
         webhook.Attempts.Add(attempt);
-        if (!retryVirtualAccount) _db.WebhookEvents.Add(webhook);
+        if (!retryEvent) _db.WebhookEvents.Add(webhook);
         else _db.Set<WebhookProcessingAttempt>().Add(attempt);
 
         try
@@ -184,8 +194,13 @@ public class BlaaizWebhookService : IBlaaizWebhookService
             throw;
         }
 
+        // A customer state, its email intent and its processed receipt commit together.
+        // Provider/screening failures must never leave a partially approved business.
+        IDbContextTransaction? customerTransaction = null;
         try
         {
+            if (customerStatusEvent)
+                customerTransaction = await _db.Database.BeginTransactionAsync(ct);
             var processed = await RouteEventAsync(eventType, root, data, rawPayload, ct);
             webhook.ProcessingStatus = processed
                 ? WebhookProcessingStatus.Processed
@@ -197,6 +212,8 @@ public class BlaaizWebhookService : IBlaaizWebhookService
             attempt.FinishedAt = now;
 
             await _db.SaveChangesAsync(ct);
+            if (customerTransaction is not null)
+                await customerTransaction.CommitAsync(ct);
 
             return new BlaaizWebhookResult(
                 webhook.Id,
@@ -206,6 +223,16 @@ public class BlaaizWebhookService : IBlaaizWebhookService
         }
         catch (Exception ex)
         {
+            if (customerTransaction is not null)
+            {
+                await customerTransaction.RollbackAsync(CancellationToken.None);
+                await customerTransaction.DisposeAsync();
+                customerTransaction = null;
+                _db.ChangeTracker.Clear();
+                // The receipt/attempt were saved before the transaction began.
+                webhook = await _db.WebhookEvents.SingleAsync(x => x.Id == webhook.Id, CancellationToken.None);
+                attempt = await _db.Set<WebhookProcessingAttempt>().SingleAsync(x => x.Id == attempt.Id, CancellationToken.None);
+            }
             var now = DateTime.UtcNow;
             webhook.ProcessingStatus = WebhookProcessingStatus.Failed;
             webhook.ErrorMessage = Truncate(ex.Message, 2000);
@@ -214,8 +241,13 @@ public class BlaaizWebhookService : IBlaaizWebhookService
             attempt.ErrorMessage = Truncate(ex.Message, 2000);
             attempt.FinishedAt = now;
 
-            await _db.SaveChangesAsync(ct);
+            await _db.SaveChangesAsync(customerStatusEvent ? CancellationToken.None : ct);
             throw;
+        }
+        finally
+        {
+            if (customerTransaction is not null)
+                await customerTransaction.DisposeAsync();
         }
     }
 
@@ -706,6 +738,15 @@ public class BlaaizWebhookService : IBlaaizWebhookService
     {
         var businessProfileId = providerCustomer.BusinessProfileId!.Value;
         var businessProfile = providerCustomer.BusinessProfile!;
+        // Share the existing submission/profile lock. Different provider event IDs
+        // for the same transition must not race each other into duplicate emails.
+        var lockKey = $"korridorx:business-kyb-profile:{businessProfileId:D}";
+        await _db.Database.ExecuteSqlInterpolatedAsync(
+            $"SELECT pg_advisory_xact_lock(hashtextextended({lockKey}, 0))", ct);
+        await _db.Entry(providerCustomer).ReloadAsync(ct);
+        await _db.Entry(businessProfile).ReloadAsync(ct);
+        if (providerStatus is not ("VERIFIED" or "REJECTED" or "PROCESSING" or "PENDING"))
+            throw new InvalidOperationException("Unsupported provider KYB status.");
         var status = MapProviderKybStatus(providerStatus);
         var now = DateTime.UtcNow;
 
@@ -716,14 +757,24 @@ public class BlaaizWebhookService : IBlaaizWebhookService
             .OrderByDescending(x => x.CreatedAt)
             .FirstOrDefaultAsync(ct);
 
+        if (application?.ReviewedAt is { } lastDecision && updatedAt < lastDecision)
+            return false;
+
+        var previousStatus = application?.Status ?? businessProfile.KybStatus;
+
         RemittanceBusinessCustomerResult? providerSnapshot = null;
         if (application is not null &&
-            providerStatus is "VERIFIED" or "REJECTED" or "PROCESSING")
+            providerStatus is "VERIFIED" or "REJECTED" or "PROCESSING" or "PENDING")
         {
             providerSnapshot = await _provider.GetBusinessCustomerAsync(
                 businessProfileId,
                 providerCustomer.ProviderCustomerId,
                 ct);
+
+            if (!string.Equals(providerSnapshot.ProviderCustomerId, providerCustomer.ProviderCustomerId, StringComparison.Ordinal) ||
+                !string.Equals(providerSnapshot.ProviderStatus, providerStatus, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException(
+                    "The current provider customer does not confirm this KYB status. Retry the original event after status synchronization.");
         }
 
         providerCustomer.ProviderStatus = providerSnapshot?.ProviderStatus ?? providerStatus;
@@ -782,14 +833,16 @@ public class BlaaizWebhookService : IBlaaizWebhookService
         {
             businessProfile.KybRejectionReason = null;
             application.ReviewNote = null;
-            await _screeningService.ScreenBusinessAsync(
-                businessProfileId,
-                ScreeningReason.Onboarding,
-                null,
-                null,
-                ct);
+            if (previousStatus != KybStatus.Approved)
+                await _screeningService.ScreenBusinessAsync(
+                    businessProfileId,
+                    ScreeningReason.Onboarding,
+                    null,
+                    null,
+                    ct);
         }
 
+        await _kybNotifications.QueueStatusChangeAsync(application, previousStatus, ct);
         return true;
     }
 

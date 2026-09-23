@@ -218,7 +218,7 @@ public sealed class BlaaizVirtualAccountWorkflowTests(ReleaseCandidateDatabaseFi
         s.ProviderAccount, s.Customer, null, "12345678", "{}", DateTime.UtcNow);
     private const string Secret = "test-only-virtual-account-webhook-secret";
     private static BlaaizWebhookService Webhooks(AppDbContext db) => new(db,
-        Options.Create(new BlaaizOptions { IsEnabled = true, WebhookSigningSecret = Secret }), null!, null!, null!, null!, null!, null!, null!);
+        Options.Create(new BlaaizOptions { IsEnabled = true, WebhookSigningSecret = Secret }), null!, null!, null!, null!, null!, null!, null!, null!);
     private static Task<BlaaizWebhookResult> Signed(BlaaizWebhookService service, string payload)
     {
         var timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString();

@@ -50,6 +50,7 @@ public class BusinessKybService : IBusinessKybService
     private readonly IComplianceScreeningService _screeningService;
     private readonly IBusinessAccessService _businessAccess;
     private readonly IBusinessContextAccessor _businessContext;
+    private readonly BusinessKybNotificationService _notifications;
 
     public BusinessKybService(
         AppDbContext db,
@@ -58,7 +59,8 @@ public class BusinessKybService : IBusinessKybService
         IOptions<BlaaizOptions> blaaizOptions,
         IComplianceScreeningService screeningService,
         IBusinessAccessService businessAccess,
-        IBusinessContextAccessor businessContext)
+        IBusinessContextAccessor businessContext,
+        BusinessKybNotificationService notifications)
     {
         _db = db;
         _provider = provider;
@@ -68,6 +70,7 @@ public class BusinessKybService : IBusinessKybService
         _screeningService = screeningService;
         _businessAccess = businessAccess;
         _businessContext = businessContext;
+        _notifications = notifications;
     }
 
     public async Task<BusinessKybApplicationDto> StartAsync(
@@ -609,7 +612,11 @@ public class BusinessKybService : IBusinessKybService
         await using var startLease = await BusinessKybStartLease.AcquireAsync(_db, userId, ct);
         var application = await GetOwnedApplicationAsync(userId, applicationId, true, ct);
         await startLease.LockBusinessAsync(application.BusinessProfileId, ct);
+        // A status webhook can finish while this request is waiting for the lock.
+        await _db.Entry(application).ReloadAsync(ct);
+        await _db.Entry(application.BusinessProfile).ReloadAsync(ct);
         EnsureEditable(application);
+        var previousStatus = application.Status;
 
         ValidateSubmissionReadiness(application);
 
@@ -662,6 +669,7 @@ public class BusinessKybService : IBusinessKybService
             providerCustomer.LastUpdatedByUserId = userId;
         }
 
+        await _notifications.QueueStatusChangeAsync(application, previousStatus, ct);
         await _db.SaveChangesAsync(ct);
         return ToApplicationDto(application, application.BusinessProfile);
     }
