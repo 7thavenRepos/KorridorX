@@ -233,10 +233,13 @@ public class KycService : IKycService
         CreateKycDocumentUploadUrlRequestDto request,
         CancellationToken ct = default)
     {
-        var application = await GetOwnedApplicationAsync(userId, applicationId, true, ct);
-        EnsureEditable(application);
+        // Do not keep the tracked KYC aggregate alive across the external provider
+        // call. Provider token/audit work can save through the same scoped DbContext,
+        // and the request can spend meaningful time outside our process.
+        var snapshot = await GetOwnedApplicationAsync(userId, applicationId, false, ct);
+        EnsureEditable(snapshot);
 
-        if (string.IsNullOrWhiteSpace(application.ProviderApplicationId))
+        if (string.IsNullOrWhiteSpace(snapshot.ProviderApplicationId))
         {
             throw new InvalidOperationException("Save identity information before uploading KYC documents.");
         }
@@ -246,63 +249,112 @@ public class KycService : IKycService
             throw new InvalidOperationException("KYC documents must be PDF, JPEG, or PNG files.");
         }
 
+        var expectedProviderApplicationId = snapshot.ProviderApplicationId;
         var result = await _provider.RequestIndividualKycUploadUrlAsync(
             new RemittanceKycUploadUrlRequest(
-                application.KycProfile.CustomerProfileId,
-                application.ProviderApplicationId,
+                snapshot.KycProfile.CustomerProfileId,
+                expectedProviderApplicationId,
                 request.DocumentType),
             ct);
 
-        var documentType = request.DocumentType.ToString();
-        var document = application.Documents
-            .FirstOrDefault(x => !x.IsDeleted && x.DocumentType == documentType);
+        return await PersistDocumentUploadRequestAsync(
+            userId,
+            applicationId,
+            expectedProviderApplicationId,
+            request,
+            result,
+            ct);
+    }
 
-        var now = DateTime.UtcNow;
-        if (document is null)
+    private async Task<KycDocumentUploadUrlDto> PersistDocumentUploadRequestAsync(
+        Guid userId,
+        Guid applicationId,
+        string expectedProviderApplicationId,
+        CreateKycDocumentUploadUrlRequestDto request,
+        RemittanceKycUploadUrlResult result,
+        CancellationToken ct)
+    {
+        for (var attempt = 0; attempt < 2; attempt++)
         {
-            document = new KycDocument
+            // The provider has already created the signed upload request. Retry only
+            // local persistence so a transient EF conflict never creates a second
+            // provider-side upload artifact.
+            _db.ChangeTracker.Clear();
+
+            var application = await GetOwnedApplicationAsync(userId, applicationId, true, ct);
+            EnsureEditable(application);
+
+            if (!string.Equals(
+                    application.ProviderApplicationId,
+                    expectedProviderApplicationId,
+                    StringComparison.Ordinal))
             {
-                KycApplicationId = application.Id,
-                KycApplication = application,
-                DocumentType = documentType,
-                CreatedByUserId = userId
-            };
+                throw new InvalidOperationException(
+                    "KYC identity changed while the upload request was being prepared. Refresh and try again.");
+            }
 
-            application.Documents.Add(document);
+            var documentType = request.DocumentType.ToString();
+            var document = application.Documents
+                .FirstOrDefault(x => !x.IsDeleted && x.DocumentType == documentType);
+
+            var now = DateTime.UtcNow;
+            if (document is null)
+            {
+                document = new KycDocument
+                {
+                    KycApplicationId = application.Id,
+                    KycApplication = application,
+                    DocumentType = documentType,
+                    CreatedByUserId = userId
+                };
+
+                application.Documents.Add(document);
+            }
+
+            document.FileName = request.FileName.Trim();
+            document.MimeType = request.MimeType.Trim().ToLowerInvariant();
+            document.StorageProvider = "BlaaizS3";
+            document.StorageKey = result.ProviderFileId;
+            document.StorageUrl = null;
+            document.ProviderFileId = result.ProviderFileId;
+            document.IsUploaded = false;
+            document.UploadConfirmedAt = null;
+            document.IsAttachedToProvider = false;
+            document.AttachedToProviderAt = null;
+            document.RejectionReason = null;
+            document.UploadedAt = now;
+            document.LastUpdatedAt = now;
+            document.LastUpdatedByUserId = userId;
+
+            if (application.Status == KycStatus.Rejected)
+            {
+                application.Status = KycStatus.Pending;
+                application.ReviewNote = null;
+                application.KycProfile.Status = KycStatus.Pending;
+                application.KycProfile.RejectionReason = null;
+                application.KycProfile.CustomerProfile.KycStatus = KycStatus.Pending;
+            }
+
+            try
+            {
+                await _db.SaveChangesAsync(ct);
+
+                return new KycDocumentUploadUrlDto(
+                    document.Id,
+                    request.DocumentType,
+                    result.ProviderFileId,
+                    result.UploadUrl,
+                    result.UploadHeaders);
+            }
+            catch (DbUpdateConcurrencyException) when (attempt == 0)
+            {
+                // Re-query and retry local persistence once using the exact same
+                // provider file ID and signed upload URL.
+            }
         }
 
-        document.FileName = request.FileName.Trim();
-        document.MimeType = request.MimeType.Trim().ToLowerInvariant();
-        document.StorageProvider = "BlaaizS3";
-        document.StorageKey = result.ProviderFileId;
-        document.StorageUrl = null;
-        document.ProviderFileId = result.ProviderFileId;
-        document.IsUploaded = false;
-        document.UploadConfirmedAt = null;
-        document.IsAttachedToProvider = false;
-        document.AttachedToProviderAt = null;
-        document.RejectionReason = null;
-        document.UploadedAt = now;
-        document.LastUpdatedAt = now;
-        document.LastUpdatedByUserId = userId;
-
-        if (application.Status == KycStatus.Rejected)
-        {
-            application.Status = KycStatus.Pending;
-            application.ReviewNote = null;
-            application.KycProfile.Status = KycStatus.Pending;
-            application.KycProfile.RejectionReason = null;
-            application.KycProfile.CustomerProfile.KycStatus = KycStatus.Pending;
-        }
-
-        await _db.SaveChangesAsync(ct);
-
-        return new KycDocumentUploadUrlDto(
-            document.Id,
-            request.DocumentType,
-            result.ProviderFileId,
-            result.UploadUrl,
-            result.UploadHeaders);
+        throw new DbUpdateConcurrencyException(
+            "KYC document upload state changed repeatedly while the request was being persisted.");
     }
 
     public async Task<KycDocumentDto> ConfirmDocumentUploadAsync(
@@ -312,29 +364,50 @@ public class KycService : IKycService
         ConfirmKycDocumentUploadRequestDto request,
         CancellationToken ct = default)
     {
-        var application = await GetOwnedApplicationAsync(userId, applicationId, true, ct);
-        EnsureEditable(application);
+        var providerFileId = request.ProviderFileId.Trim();
 
-        var document = application.Documents.FirstOrDefault(x => x.Id == documentId && !x.IsDeleted);
-        if (document is null)
+        for (var attempt = 0; attempt < 2; attempt++)
         {
-            throw new InvalidOperationException("KYC document not found.");
+            _db.ChangeTracker.Clear();
+
+            var application = await GetOwnedApplicationAsync(userId, applicationId, true, ct);
+            EnsureEditable(application);
+
+            var document = application.Documents.FirstOrDefault(x =>
+                x.Id == documentId &&
+                !x.IsDeleted);
+
+            if (document is null)
+            {
+                throw new InvalidOperationException("KYC document not found.");
+            }
+
+            if (!string.Equals(document.ProviderFileId, providerFileId, StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException("The provider file ID does not match this upload request.");
+            }
+
+            var now = DateTime.UtcNow;
+            document.IsUploaded = true;
+            document.UploadConfirmedAt = now;
+            document.UploadedAt = now;
+            document.LastUpdatedAt = now;
+            document.LastUpdatedByUserId = userId;
+
+            try
+            {
+                await _db.SaveChangesAsync(ct);
+                return ToDocumentDto(document);
+            }
+            catch (DbUpdateConcurrencyException) when (attempt == 0)
+            {
+                // The provider upload already succeeded. Re-query and retry only
+                // the idempotent local confirmation once.
+            }
         }
 
-        if (!string.Equals(document.ProviderFileId, request.ProviderFileId.Trim(), StringComparison.Ordinal))
-        {
-            throw new InvalidOperationException("The provider file ID does not match this upload request.");
-        }
-
-        var now = DateTime.UtcNow;
-        document.IsUploaded = true;
-        document.UploadConfirmedAt = now;
-        document.UploadedAt = now;
-        document.LastUpdatedAt = now;
-        document.LastUpdatedByUserId = userId;
-
-        await _db.SaveChangesAsync(ct);
-        return ToDocumentDto(document);
+        throw new DbUpdateConcurrencyException(
+            "KYC document confirmation changed repeatedly while the request was being persisted.");
     }
 
     public async Task<KycApplicationDto> SubmitApplicationAsync(
