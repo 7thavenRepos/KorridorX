@@ -1,4 +1,4 @@
-﻿using KorridorX.Configuration;
+using KorridorX.Configuration;
 using Microsoft.Extensions.Configuration;
 
 namespace KorridorX.Tests;
@@ -8,7 +8,7 @@ public sealed class HostingOptionsBindingTests
     [Fact]
     public void AllowedOrigins_UsesConfiguredOriginsWithoutRetainingLocalhostDefault()
     {
-        const string stagingOrigin = "https://staging.korridorx.com";
+        const string stagingOrigin = "https://app.staging.korridorx.com";
 
         var configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>

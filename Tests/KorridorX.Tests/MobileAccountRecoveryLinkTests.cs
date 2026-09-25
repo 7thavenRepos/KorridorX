@@ -15,15 +15,15 @@ public sealed class MobileAccountRecoveryLinkTests
     {
         var token = "safe+token/with&characters=";
         var message = reset
-            ? AccountSecurityEmailFactory.CreateMobilePasswordReset("https://staging.korridorx.com/", UserId, token, "Kay <test>")
-            : AccountSecurityEmailFactory.CreateMobileEmailConfirmation("https://staging.korridorx.com/", UserId, token, "Kay <test>");
+            ? AccountSecurityEmailFactory.CreateMobilePasswordReset("https://app.staging.korridorx.com/", UserId, token, "Kay <test>")
+            : AccountSecurityEmailFactory.CreateMobileEmailConfirmation("https://app.staging.korridorx.com/", UserId, token, "Kay <test>");
         var matches = System.Text.RegularExpressions.Regex.Matches(message.Body, "href=\"([^\"]+)\"");
         Assert.Equal(2, matches.Count);
         var link = System.Net.WebUtility.HtmlDecode(matches[0].Groups[1].Value);
         Assert.Equal(link, System.Net.WebUtility.HtmlDecode(matches[1].Groups[1].Value));
         var uri = new Uri(link);
         Assert.Equal("https", uri.Scheme);
-        Assert.Equal("staging.korridorx.com", uri.Host);
+        Assert.Equal("app.staging.korridorx.com", uri.Host);
         Assert.Equal($"/auth/{action}", uri.AbsolutePath);
         Assert.Empty(uri.Query);
         var fragment = Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(uri.Fragment[1..]);
@@ -51,10 +51,10 @@ public sealed class MobileAccountRecoveryLinkTests
     [Theory]
     [InlineData("korridorx://account-security")]
     [InlineData("javascript:alert(1)")]
-    [InlineData("http://staging.korridorx.com")]
-    [InlineData("https://user:password@staging.korridorx.com")]
-    [InlineData("https://staging.korridorx.com?redirect=elsewhere")]
-    [InlineData("https://staging.korridorx.com#fragment")]
+    [InlineData("http://app.staging.korridorx.com")]
+    [InlineData("https://user:password@app.staging.korridorx.com")]
+    [InlineData("https://app.staging.korridorx.com?redirect=elsewhere")]
+    [InlineData("https://app.staging.korridorx.com#fragment")]
     public void Mobile_email_rejects_non_web_or_unsafe_base_urls(string baseUrl)
     {
         Assert.Throws<ArgumentException>(() => AccountSecurityEmailFactory.CreateMobileEmailConfirmation(baseUrl, UserId, "token", "Kay"));
@@ -64,8 +64,8 @@ public sealed class MobileAccountRecoveryLinkTests
     [Fact]
     public void Business_email_retains_its_web_flow_without_a_mobile_marker()
     {
-        var confirmation = AccountSecurityEmailFactory.CreateEmailConfirmation("https://staging.korridorx.com", UserId, "token", "Kay");
-        var reset = AccountSecurityEmailFactory.CreatePasswordReset("https://staging.korridorx.com", UserId, "token", "Kay");
+        var confirmation = AccountSecurityEmailFactory.CreateEmailConfirmation("https://app.staging.korridorx.com", UserId, "token", "Kay");
+        var reset = AccountSecurityEmailFactory.CreatePasswordReset("https://app.staging.korridorx.com", UserId, "token", "Kay");
         Assert.Contains("/auth/confirm-email#", confirmation.Body);
         Assert.Contains("/auth/reset-password#", reset.Body);
         Assert.DoesNotContain("client=mobile", confirmation.Body);

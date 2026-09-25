@@ -41,7 +41,7 @@ public sealed class HostingOptionsValidatorTests
         new()
         {
             ApplicationName = "KorridorX",
-            AllowedOrigins = ["https://staging.korridorx.com"],
+            AllowedOrigins = ["https://app.staging.korridorx.com"],
             RequireHttpsRedirection = true,
             SwaggerEnabled = swaggerEnabled,
             JsonConsoleLogging = true,

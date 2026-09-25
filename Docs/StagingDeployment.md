@@ -41,7 +41,7 @@ Because Staging is a deployed environment, also configure the existing
 `.env.staging` with:
 
 - `REQUIRE_CONFIRMED_EMAIL=true`;
-- `ACCOUNT_FRONTEND_BASE_URL=https://staging.korridorx.com`;
+- `ACCOUNT_FRONTEND_BASE_URL=https://app.staging.korridorx.com`;
 - `MFA_ENFORCE_FOR_PRIVILEGED_ROLES=true`;
 - `NOTIFICATION_WORKER_ENABLED=true`;
 - `SMTP_ENABLED=true`, plus a staging/sandbox SMTP host and sender address.
