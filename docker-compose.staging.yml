@@ -37,6 +37,7 @@ services:
       Jwt__Key: ${JWT_KEY:?JWT_KEY is required}
       AllowedHosts: ${ALLOWED_HOSTS:?ALLOWED_HOSTS is required}
       Hosting__AllowedOrigins__0: ${ALLOWED_ORIGIN:?ALLOWED_ORIGIN is required}
+      Hosting__AllowedOrigins__1: https://staging.korridorx.com
       Hosting__RequireHttpsRedirection: ${REQUIRE_HTTPS_REDIRECTION:-true}
       Security__Accounts__RequireConfirmedEmail: ${REQUIRE_CONFIRMED_EMAIL:-true}
       Security__Accounts__FrontendBaseUrl: ${ACCOUNT_FRONTEND_BASE_URL:?ACCOUNT_FRONTEND_BASE_URL is required}
