@@ -303,12 +303,14 @@ public class KycService : IKycService
                 document = new KycDocument
                 {
                     KycApplicationId = application.Id,
-                    KycApplication = application,
                     DocumentType = documentType,
                     CreatedByUserId = userId
                 };
 
-                application.Documents.Add(document);
+                // BaseEntity assigns a Guid before EF sees this entity. Explicitly add
+                // the new document so relationship graph tracking cannot infer Modified
+                // for an entity that does not exist in the database yet.
+                _db.KycDocuments.Add(document);
             }
 
             document.FileName = request.FileName.Trim();
