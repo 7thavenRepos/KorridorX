@@ -30,3 +30,44 @@ public sealed class RetryNotificationRequestDto
     [MaxLength(1000)]
     public string Reason { get; set; } = string.Empty;
 }
+
+public sealed class RegisterMobilePushDeviceRequestDto
+{
+    [Required]
+    [MaxLength(20)]
+    public string Platform { get; set; } =
+        string.Empty;
+
+    [Required]
+    [MaxLength(4096)]
+    public string PushToken { get; set; } =
+        string.Empty;
+
+    [Required]
+    [MaxLength(200)]
+    public string DeviceFingerprint { get; set; } =
+        string.Empty;
+
+    [Required]
+    [MaxLength(200)]
+    public string DeviceName { get; set; } =
+        string.Empty;
+}
+
+public sealed class UnregisterMobilePushDeviceRequestDto
+{
+    [Required]
+    [MaxLength(4096)]
+    public string PushToken { get; set; } =
+        string.Empty;
+}
+
+public record MobilePushDeviceDto(
+    Guid Id,
+    string Platform,
+    string DeviceName,
+    bool IsActive,
+    DateTime LastSeenAt);
+
+public record UnregisterMobilePushDeviceResultDto(
+    bool Unregistered);

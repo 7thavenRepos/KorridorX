@@ -1,3 +1,4 @@
+using KorridorX.Models.Identity;
 using KorridorX.Models.Notifications;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
@@ -28,5 +29,59 @@ public class NotificationMessageConfiguration : IEntityTypeConfiguration<Notific
         builder.Property(x => x.ErrorMessage).HasMaxLength(1000);
         builder.Property(x => x.RelatedEntityType).HasMaxLength(100);
         builder.Property(x => x.RelatedEntityId).HasMaxLength(100);
+    }
+}
+
+public class MobilePushDeviceConfiguration
+    : IEntityTypeConfiguration<MobilePushDevice>
+{
+    public void Configure(
+        EntityTypeBuilder<MobilePushDevice> builder)
+    {
+        builder.HasIndex(
+            x => x.PushTokenHash)
+            .IsUnique();
+
+        builder.HasIndex(
+            x => new
+            {
+                x.UserId,
+                x.IsActive
+            });
+
+        builder.HasIndex(
+            x => new
+            {
+                x.UserId,
+                x.Platform,
+                x.DeviceFingerprint
+            });
+
+        builder.Property(
+            x => x.Platform)
+            .HasMaxLength(20);
+
+        builder.Property(
+            x => x.PushToken)
+            .HasMaxLength(4096);
+
+        builder.Property(
+            x => x.PushTokenHash)
+            .HasMaxLength(64);
+
+        builder.Property(
+            x => x.DeviceFingerprint)
+            .HasMaxLength(200);
+
+        builder.Property(
+            x => x.DeviceName)
+            .HasMaxLength(200);
+
+        builder.HasOne<ApplicationUser>()
+            .WithMany()
+            .HasForeignKey(
+                x => x.UserId)
+            .OnDelete(
+                DeleteBehavior.Cascade);
     }
 }

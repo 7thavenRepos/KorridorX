@@ -153,6 +153,7 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<Guid
 
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
     public DbSet<NotificationMessage> NotificationMessages => Set<NotificationMessage>();
+    public DbSet<MobilePushDevice> MobilePushDevices => Set<MobilePushDevice>();
     public DbSet<SupportTicket> SupportTickets => Set<SupportTicket>();
     public DbSet<SupportTicketMessage> SupportTicketMessages => Set<SupportTicketMessage>();
     public DbSet<TransferDispute> TransferDisputes => Set<TransferDispute>();

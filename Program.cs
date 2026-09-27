@@ -359,6 +359,7 @@ builder.Services.AddHttpClient(EmbeddedWebhookSender.HttpClientName, client =>
 });
 builder.Services.AddScoped<INotificationQueueService, NotificationQueueService>();
 builder.Services.AddScoped<INotificationOperationsService, NotificationOperationsService>();
+builder.Services.AddScoped<IMobilePushDeviceService, MobilePushDeviceService>();
 builder.Services.AddScoped<INotificationDeliveryProvider, SmtpNotificationDeliveryProvider>();
 builder.Services.AddScoped<IAuditService, AuditService>();
 builder.Services.AddScoped<IAdminUserManagementService, AdminUserManagementService>();
