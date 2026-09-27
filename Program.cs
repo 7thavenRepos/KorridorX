@@ -360,7 +360,10 @@ builder.Services.AddHttpClient(EmbeddedWebhookSender.HttpClientName, client =>
 builder.Services.AddScoped<INotificationQueueService, NotificationQueueService>();
 builder.Services.AddScoped<INotificationOperationsService, NotificationOperationsService>();
 builder.Services.AddScoped<IMobilePushDeviceService, MobilePushDeviceService>();
-builder.Services.AddScoped<INotificationDeliveryProvider, SmtpNotificationDeliveryProvider>();
+builder.Services.AddScoped<SmtpNotificationDeliveryProvider>();
+builder.Services.AddScoped<FirebasePushNotificationDeliveryProvider>();
+builder.Services.AddSingleton<IFirebasePushSender, FirebasePushSender>();
+builder.Services.AddScoped<INotificationDeliveryProvider, RoutingNotificationDeliveryProvider>();
 builder.Services.AddScoped<IAuditService, AuditService>();
 builder.Services.AddScoped<IAdminUserManagementService, AdminUserManagementService>();
 builder.Services.AddScoped<IOperationalHealthService, OperationalHealthService>();

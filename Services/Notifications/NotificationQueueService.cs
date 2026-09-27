@@ -1,3 +1,5 @@
+using System.Net;
+using System.Text.RegularExpressions;
 using KorridorX.Configuration;
 using KorridorX.Data;
 using KorridorX.Dtos.Notifications;
@@ -60,7 +62,8 @@ public class NotificationQueueService : INotificationQueueService
         foreach (var member in members)
             recipients[member.UserId] = member.Email;
 
-        foreach (var recipient in recipients.Where(x => !string.IsNullOrWhiteSpace(x.Value)))
+        foreach (var recipient in recipients.Where(
+                     x => !string.IsNullOrWhiteSpace(x.Value)))
         {
             AddEmail(
                 recipient.Key,
@@ -70,6 +73,14 @@ public class NotificationQueueService : INotificationQueueService
                 relatedEntityType,
                 relatedEntityId.ToString());
         }
+
+        await AddPushNotificationsAsync(
+            recipients.Keys,
+            subject,
+            body,
+            relatedEntityType,
+            relatedEntityId.ToString(),
+            ct);
     }
 
     public async Task QueueUserAsync(
@@ -86,16 +97,24 @@ public class NotificationQueueService : INotificationQueueService
             .Select(x => x.Email)
             .FirstOrDefaultAsync(ct);
 
-        if (string.IsNullOrWhiteSpace(email))
-            return;
+        if (!string.IsNullOrWhiteSpace(email))
+        {
+            AddEmail(
+                userId,
+                email,
+                subject,
+                body,
+                relatedEntityType,
+                relatedEntityId?.ToString());
+        }
 
-        AddEmail(
-            userId,
-            email,
+        await AddPushNotificationsAsync(
+            [userId],
             subject,
             body,
             relatedEntityType,
-            relatedEntityId?.ToString());
+            relatedEntityId?.ToString(),
+            ct);
     }
 
     public Task QueueEmailAsync(
@@ -127,7 +146,10 @@ public class NotificationQueueService : INotificationQueueService
     {
         return await _db.NotificationMessages
             .AsNoTracking()
-            .Where(x => x.UserId == userId && !x.IsDeleted)
+            .Where(x =>
+                x.UserId == userId &&
+                x.Channel == NotificationChannels.Email &&
+                !x.IsDeleted)
             .OrderByDescending(x => x.CreatedAt)
             .Select(x => new NotificationMessageDto(
                 x.Id,
@@ -162,6 +184,7 @@ public class NotificationQueueService : INotificationQueueService
             .FirstOrDefaultAsync(x =>
                 x.Id == notificationId &&
                 x.UserId == userId &&
+                x.Channel == NotificationChannels.Email &&
                 !x.IsDeleted,
                 ct)
             ?? throw new InvalidOperationException("Notification not found.");
@@ -171,6 +194,49 @@ public class NotificationQueueService : INotificationQueueService
         await _db.SaveChangesAsync(ct);
 
         return ToDto(notification);
+    }
+
+    private async Task AddPushNotificationsAsync(
+        IEnumerable<Guid> userIds,
+        string subject,
+        string body,
+        string? relatedEntityType,
+        string? relatedEntityId,
+        CancellationToken ct)
+    {
+        if (!_options.Firebase.IsEnabled)
+            return;
+
+        var ids = userIds
+            .Distinct()
+            .ToArray();
+
+        if (ids.Length == 0)
+            return;
+
+        var devices = await _db.MobilePushDevices
+            .AsNoTracking()
+            .Where(x =>
+                ids.Contains(x.UserId) &&
+                x.IsActive &&
+                !x.IsDeleted)
+            .Select(x => new
+            {
+                x.UserId,
+                x.PushTokenHash
+            })
+            .ToListAsync(ct);
+
+        foreach (var device in devices)
+        {
+            AddPush(
+                device.UserId,
+                device.PushTokenHash,
+                subject,
+                body,
+                relatedEntityType,
+                relatedEntityId);
+        }
     }
 
     private void AddEmail(
@@ -195,6 +261,75 @@ public class NotificationQueueService : INotificationQueueService
             RelatedEntityType = TruncateNullable(relatedEntityType, 100),
             RelatedEntityId = TruncateNullable(relatedEntityId, 100)
         });
+    }
+
+    private void AddPush(
+        Guid userId,
+        string pushTokenHash,
+        string subject,
+        string body,
+        string? relatedEntityType,
+        string? relatedEntityId)
+    {
+        _db.NotificationMessages.Add(new NotificationMessage
+        {
+            UserId = userId,
+            Channel = NotificationChannels.Push,
+            Recipient = pushTokenHash,
+            Subject = Truncate(subject, 255),
+            Body = BuildPushBody(body, relatedEntityType),
+            Status = NotificationStatuses.Pending,
+            AttemptCount = 0,
+            MaxAttempts = _options.MaxAttempts,
+            NextAttemptAt = DateTime.UtcNow,
+            RelatedEntityType = TruncateNullable(relatedEntityType, 100),
+            RelatedEntityId = TruncateNullable(relatedEntityId, 100)
+        });
+    }
+
+    private static string BuildPushBody(
+        string body,
+        string? relatedEntityType)
+    {
+        if (!string.IsNullOrWhiteSpace(relatedEntityType) &&
+            relatedEntityType.StartsWith(
+                NotificationSecurityPolicy.AccountSecurityEntityType,
+                StringComparison.OrdinalIgnoreCase))
+        {
+            return "Open KorridorX to review this account security update.";
+        }
+
+        if (string.Equals(
+            relatedEntityType,
+            "SupportTicket",
+            StringComparison.OrdinalIgnoreCase))
+        {
+            return "Open KorridorX to review this support ticket update.";
+        }
+
+        if (string.Equals(
+            relatedEntityType,
+            "TransferDispute",
+            StringComparison.OrdinalIgnoreCase))
+        {
+            return "Open KorridorX to review this transfer dispute update.";
+        }
+
+        if (string.Equals(
+            relatedEntityType,
+            "Transfer",
+            StringComparison.OrdinalIgnoreCase))
+        {
+            return "Open KorridorX to review this transfer update.";
+        }
+
+        var plain = Regex.Replace(body, "<[^>]+>", " ");
+        plain = WebUtility.HtmlDecode(plain);
+        plain = Regex.Replace(plain, @"\s+", " ").Trim();
+
+        return plain.Length == 0
+            ? "Open KorridorX to view this update."
+            : Truncate(plain, 240);
     }
 
     private static NotificationMessageDto ToDto(NotificationMessage x) =>

@@ -97,7 +97,8 @@ public sealed class NotificationDeliveryWorker : BackgroundService
             .AsNoTracking()
             .Where(x =>
                 !x.IsDeleted &&
-                (x.Status == NotificationStatuses.Pending || x.Status == NotificationStatuses.Retry) &&
+                (x.Status == NotificationStatuses.Pending ||
+                 x.Status == NotificationStatuses.Retry) &&
                 (x.NextAttemptAt == null || x.NextAttemptAt <= now) &&
                 x.AttemptCount < x.MaxAttempts)
             .OrderBy(x => x.CreatedAt)
@@ -133,7 +134,8 @@ public sealed class NotificationDeliveryWorker : BackgroundService
             .FirstOrDefaultAsync(x =>
                 x.Id == notificationId &&
                 !x.IsDeleted &&
-                (x.Status == NotificationStatuses.Pending || x.Status == NotificationStatuses.Retry),
+                (x.Status == NotificationStatuses.Pending ||
+                 x.Status == NotificationStatuses.Retry),
                 ct);
 
         if (notification is null)
@@ -201,6 +203,15 @@ public sealed class NotificationDeliveryWorker : BackgroundService
         notification.LockId = null;
         notification.LastUpdatedAt = completedAt;
 
+        if (!string.IsNullOrWhiteSpace(result.InvalidPushTokenHash))
+        {
+            await DeactivateInvalidPushDevicesAsync(
+                db,
+                result.InvalidPushTokenHash,
+                completedAt,
+                ct);
+        }
+
         if (result.Success)
         {
             notification.Status = NotificationStatuses.Sent;
@@ -209,7 +220,16 @@ public sealed class NotificationDeliveryWorker : BackgroundService
             notification.ErrorMessage = null;
             notification.NextAttemptAt = null;
         }
-        else if (notification.AttemptCount >= notification.MaxAttempts)
+        else if (result.IsCancelled)
+        {
+            notification.Status = NotificationStatuses.Cancelled;
+            notification.ErrorMessage = Truncate(
+                result.ErrorMessage ?? "Notification delivery was cancelled.",
+                1000);
+            notification.NextAttemptAt = null;
+        }
+        else if (result.IsPermanentFailure ||
+                 notification.AttemptCount >= notification.MaxAttempts)
         {
             notification.Status = NotificationStatuses.DeadLetter;
             notification.DeadLetteredAt = completedAt;
@@ -232,6 +252,27 @@ public sealed class NotificationDeliveryWorker : BackgroundService
         }
 
         await db.SaveChangesAsync(ct);
+    }
+
+    private static async Task DeactivateInvalidPushDevicesAsync(
+        AppDbContext db,
+        string pushTokenHash,
+        DateTime now,
+        CancellationToken ct)
+    {
+        var devices = await db.MobilePushDevices
+            .Where(x =>
+                !x.IsDeleted &&
+                x.IsActive &&
+                x.PushTokenHash == pushTokenHash)
+            .ToListAsync(ct);
+
+        foreach (var device in devices)
+        {
+            device.IsActive = false;
+            device.DisabledAt = now;
+            device.LastUpdatedAt = now;
+        }
     }
 
     private static string Truncate(string value, int maxLength) =>

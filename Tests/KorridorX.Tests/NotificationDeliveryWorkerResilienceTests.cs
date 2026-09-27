@@ -2,6 +2,7 @@ using System.Reflection;
 using KorridorX.BackgroundJobs;
 using KorridorX.Configuration;
 using KorridorX.Data;
+using KorridorX.Models.Identity;
 using KorridorX.Models.Notifications;
 using KorridorX.Services.Notifications;
 using KorridorX.Tests.Infrastructure;
@@ -217,6 +218,144 @@ public sealed class NotificationDeliveryWorkerResilienceTests
         Assert.DoesNotContain(
             "stale@example.test",
             provider.Recipients);
+    }
+
+    [DatabaseIntegrationFact]
+    public async Task Permanent_invalid_push_token_dead_letters_and_deactivates_device()
+    {
+        Guid notificationId;
+        Guid deviceId;
+        string pushTokenHash;
+
+        await using (var setupScope =
+            _fixture.Factory.Services.CreateAsyncScope())
+        {
+            var db =
+                setupScope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+            var user = new ApplicationUser
+            {
+                Id = Guid.NewGuid(),
+                UserName = $"push-worker-{Guid.NewGuid():N}",
+                CountryCode = "CA"
+            };
+
+            pushTokenHash = $"INVALID-{Guid.NewGuid():N}";
+
+            var device = new MobilePushDevice
+            {
+                UserId = user.Id,
+                Platform = MobilePushPlatforms.Android,
+                PushToken = $"token-{Guid.NewGuid():N}",
+                PushTokenHash = pushTokenHash,
+                DeviceFingerprint = $"fingerprint-{Guid.NewGuid():N}",
+                DeviceName = "Worker invalid-token test",
+                IsActive = true,
+                LastSeenAt = DateTime.UtcNow
+            };
+
+            var notification = NewNotification(
+                pushTokenHash,
+                createdAt: DateTime.UnixEpoch.AddDays(24),
+                attemptCount: 0,
+                maxAttempts: 3);
+
+            notification.Channel = NotificationChannels.Push;
+            notification.UserId = user.Id;
+
+            db.Users.Add(user);
+            db.MobilePushDevices.Add(device);
+            db.NotificationMessages.Add(notification);
+            await db.SaveChangesAsync();
+
+            deviceId = device.Id;
+            notificationId = notification.Id;
+        }
+
+        var provider = new RecipientAwareProvider(
+            recipient => new NotificationDeliveryResult(
+                false,
+                ErrorMessage: "FCM registration token is unregistered.",
+                IsPermanentFailure: true,
+                InvalidPushTokenHash: recipient));
+
+        await InvokeProcessBatchAsync(
+            provider,
+            batchSize: 1);
+
+        await using var verifyScope =
+            _fixture.Factory.Services.CreateAsyncScope();
+
+        var dbVerify =
+            verifyScope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        var stored = await dbVerify.NotificationMessages
+            .AsNoTracking()
+            .SingleAsync(x => x.Id == notificationId);
+
+        var storedDevice = await dbVerify.MobilePushDevices
+            .AsNoTracking()
+            .SingleAsync(x => x.Id == deviceId);
+
+        Assert.Equal(NotificationStatuses.DeadLetter, stored.Status);
+        Assert.Equal(1, stored.AttemptCount);
+        Assert.NotNull(stored.DeadLetteredAt);
+        Assert.Null(stored.NextAttemptAt);
+        Assert.False(storedDevice.IsActive);
+        Assert.NotNull(storedDevice.DisabledAt);
+    }
+
+    [DatabaseIntegrationFact]
+    public async Task Cancelled_push_delivery_is_terminal_without_dead_lettering()
+    {
+        Guid notificationId;
+
+        await using (var setupScope =
+            _fixture.Factory.Services.CreateAsyncScope())
+        {
+            var db =
+                setupScope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+            var notification = NewNotification(
+                $"inactive-{Guid.NewGuid():N}",
+                createdAt: DateTime.UnixEpoch.AddDays(25),
+                attemptCount: 0,
+                maxAttempts: 3);
+
+            notification.Channel = NotificationChannels.Push;
+
+            db.NotificationMessages.Add(notification);
+            await db.SaveChangesAsync();
+
+            notificationId = notification.Id;
+        }
+
+        var provider = new RecipientAwareProvider(
+            _ => new NotificationDeliveryResult(
+                false,
+                ErrorMessage: "The registered push device is no longer active.",
+                IsCancelled: true));
+
+        await InvokeProcessBatchAsync(
+            provider,
+            batchSize: 1);
+
+        await using var verifyScope =
+            _fixture.Factory.Services.CreateAsyncScope();
+
+        var dbVerify =
+            verifyScope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        var stored = await dbVerify.NotificationMessages
+            .AsNoTracking()
+            .SingleAsync(x => x.Id == notificationId);
+
+        Assert.Equal(NotificationStatuses.Cancelled, stored.Status);
+        Assert.Equal(1, stored.AttemptCount);
+        Assert.Null(stored.DeadLetteredAt);
+        Assert.Null(stored.NextAttemptAt);
+        Assert.Null(stored.LockId);
+        Assert.Null(stored.LockedAt);
     }
 
     private async Task InvokeProcessBatchAsync(

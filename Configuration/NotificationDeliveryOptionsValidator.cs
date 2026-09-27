@@ -30,6 +30,14 @@ public sealed class NotificationDeliveryOptionsValidator : IValidateOptions<Noti
                 errors.Add("NotificationDelivery:Smtp:FromAddress is required when SMTP is enabled.");
         }
 
+        if (options.Firebase.IsEnabled)
+        {
+            if (!options.WorkerEnabled)
+                errors.Add("NotificationDelivery:WorkerEnabled must be true when Firebase push delivery is enabled.");
+            if (string.IsNullOrWhiteSpace(options.Firebase.ProjectId))
+                errors.Add("NotificationDelivery:Firebase:ProjectId is required when Firebase push delivery is enabled.");
+        }
+
         return errors.Count == 0
             ? ValidateOptionsResult.Success
             : ValidateOptionsResult.Fail(errors);

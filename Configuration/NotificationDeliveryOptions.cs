@@ -14,6 +14,7 @@ public class NotificationDeliveryOptions
     public int ProcessingTimeoutMinutes { get; set; } = 10;
 
     public SmtpDeliveryOptions Smtp { get; set; } = new();
+    public FirebasePushDeliveryOptions Firebase { get; set; } = new();
 }
 
 public class SmtpDeliveryOptions
@@ -38,4 +39,12 @@ public class SmtpDeliveryOptions
 
     [MaxLength(255)]
     public string FromName { get; set; } = "KorridorX";
+}
+
+public class FirebasePushDeliveryOptions
+{
+    public bool IsEnabled { get; set; } = false;
+
+    [MaxLength(200)]
+    public string ProjectId { get; set; } = "";
 }
