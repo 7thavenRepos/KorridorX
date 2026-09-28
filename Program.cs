@@ -39,6 +39,7 @@ using KorridorX.Services.Webhooks;
 using KorridorX.Services.Security;
 using KorridorX.Services.Support;
 using KorridorX.Services.Treasury;
+using KorridorX.Services.Wallets;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.HttpOverrides;
@@ -295,6 +296,7 @@ builder.Services.AddScoped<INonProductionTestUserSeeder, NonProductionTestUserSe
 builder.Services.AddScoped<IdentitySeedRunner>();
 
 builder.Services.AddScoped<ICustomerProfileService, CustomerProfileService>();
+builder.Services.AddScoped<IConsumerWalletService, ConsumerWalletService>();
 builder.Services.AddScoped<IRecipientService, RecipientService>();
 builder.Services.AddScoped<IBusinessBeneficiaryService, BusinessBeneficiaryService>();
 builder.Services.AddScoped<IBusinessAccessService, BusinessAccessService>();
