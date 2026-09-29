@@ -9,6 +9,7 @@ using KorridorX.Services.References;
 using KorridorX.Services.Compliance;
 using KorridorX.Services.Payments;
 using KorridorX.Services.Security;
+using KorridorX.Services.Wallets;
 using Microsoft.EntityFrameworkCore;
 
 namespace KorridorX.Services.Transfers;
@@ -24,6 +25,7 @@ public class TransferService : ITransferService
     private readonly ITransactionMonitoringService _transactionMonitoringService;
     private readonly IOutboundFundsRestrictionService _outboundFundsRestrictions;
     private readonly ITransactionPinService _transactionPinService;
+    private readonly IConsumerTransferFundingService _consumerFunding;
 
     public TransferService(
         AppDbContext db,
@@ -34,7 +36,8 @@ public class TransferService : ITransferService
         IComplianceScreeningService screeningService,
         ITransactionMonitoringService transactionMonitoringService,
         IOutboundFundsRestrictionService outboundFundsRestrictions,
-        ITransactionPinService transactionPinService)
+        ITransactionPinService transactionPinService,
+        IConsumerTransferFundingService consumerFunding)
     {
         _db = db;
         _referenceGenerator = referenceGenerator;
@@ -45,6 +48,7 @@ public class TransferService : ITransferService
         _transactionMonitoringService = transactionMonitoringService;
         _outboundFundsRestrictions = outboundFundsRestrictions;
         _transactionPinService = transactionPinService;
+        _consumerFunding = consumerFunding;
     }
 
     public async Task<TransferDetailsDto> CreateTransferAsync(
@@ -249,6 +253,8 @@ public class TransferService : ITransferService
                 Title: "Transfer created",
                 Description: "Your transfer has been created and is pending payment."));
 
+        await _consumerFunding.PrepareTransferAsync(userId, transfer, ct);
+
         await _transferRiskService.AssessAsync(transfer, userId, ct);
         await _screeningService.ScreenTransferAsync(transfer, userId, ct);
         await _transactionMonitoringService.MonitorAsync(transfer, userId, ct);
@@ -411,6 +417,13 @@ public class TransferService : ITransferService
             await tx.CommitAsync(ct);
             return await GetTransferByIdAsync(userId, transfer.Id, ct);
         }
+
+        await _consumerFunding.ReleaseActiveTransferReservationAsync(
+            transfer,
+            reason,
+            userId,
+            "CustomerCancellation",
+            ct);
 
         _transferStatusService.ApplyTransition(
             transfer,

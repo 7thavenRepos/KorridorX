@@ -2,6 +2,7 @@ using KorridorX.Models.Enums;
 using KorridorX.Models.Payments;
 using KorridorX.Services.Transfers;
 using KorridorX.Services.BusinessFunding;
+using KorridorX.Services.Wallets;
 
 namespace KorridorX.Services.Payments;
 
@@ -20,13 +21,16 @@ public class PayoutStatusService : IPayoutStatusService
 
     private readonly ITransferStatusService _transferStatusService;
     private readonly IBusinessFundingService _businessFundingService;
+    private readonly IConsumerTransferFundingService _consumerFunding;
 
     public PayoutStatusService(
         ITransferStatusService transferStatusService,
-        IBusinessFundingService businessFundingService)
+        IBusinessFundingService businessFundingService,
+        IConsumerTransferFundingService consumerFunding)
     {
         _transferStatusService = transferStatusService;
         _businessFundingService = businessFundingService;
+        _consumerFunding = consumerFunding;
     }
 
     public bool CanTransition(PayoutStatus currentStatus, PayoutStatus newStatus)
@@ -190,12 +194,74 @@ public class PayoutStatusService : IPayoutStatusService
                 transfer,
                 context.ChangedByUserId,
                 source);
+            _consumerFunding.CaptureTransferReservation(
+                transfer,
+                context.ChangedByUserId,
+                source);
 
             return;
         }
 
         if (newStatus is PayoutStatus.Failed or PayoutStatus.Reversed)
         {
+            var consumerWalletRestored = _consumerFunding.ReleaseTransferReservation(
+                transfer,
+                reason ?? "Recipient payout could not be completed.",
+                context.ChangedByUserId,
+                source);
+
+            if (consumerWalletRestored)
+            {
+                if (_transferStatusService.CanTransition(transfer.Status, TransferStatus.Failed))
+                {
+                    _transferStatusService.ApplyTransition(
+                        transfer,
+                        TransferStatus.Failed,
+                        new TransferStatusTransitionContext(
+                            source,
+                            reason ?? "Recipient payout failed. Reserved funds were returned to your wallet.",
+                            context.ChangedByUserId,
+                            EventType: newStatus == PayoutStatus.Reversed ? "PAYOUT_REVERSED_WALLET_RESTORED" : "PAYOUT_FAILED_WALLET_RESTORED",
+                            Title: "Funds returned to wallet",
+                            Description: "The payout could not be completed and the reserved funds are available in your wallet again.",
+                            MetadataJson: context.MetadataJson,
+                            OccurredAt: occurredAt));
+                }
+                else
+                {
+                    if (_transferStatusService.CanTransition(transfer.Status, TransferStatus.RefundPending))
+                    {
+                        _transferStatusService.ApplyTransition(
+                            transfer,
+                            TransferStatus.RefundPending,
+                            new TransferStatusTransitionContext(
+                                source,
+                                "The payout was reversed and wallet restoration is being recorded.",
+                                context.ChangedByUserId,
+                                MetadataJson: context.MetadataJson,
+                                OccurredAt: occurredAt));
+                    }
+
+                    if (_transferStatusService.CanTransition(transfer.Status, TransferStatus.Refunded))
+                    {
+                        _transferStatusService.ApplyTransition(
+                            transfer,
+                            TransferStatus.Refunded,
+                            new TransferStatusTransitionContext(
+                                source,
+                                "The reversed payout amount was restored to the consumer wallet.",
+                                context.ChangedByUserId,
+                                EventType: "WALLET_FUNDS_RESTORED",
+                                Title: "Funds returned to wallet",
+                                Description: "The transfer amount has been restored to your wallet.",
+                                MetadataJson: context.MetadataJson,
+                                OccurredAt: occurredAt));
+                    }
+                }
+
+                return;
+            }
+
             if (_transferStatusService.CanTransition(transfer.Status, TransferStatus.RefundPending))
             {
                 _transferStatusService.ApplyTransition(

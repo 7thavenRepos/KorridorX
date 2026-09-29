@@ -15,6 +15,7 @@ using KorridorX.Services.References;
 using KorridorX.Services.Compliance;
 using Microsoft.EntityFrameworkCore;
 using KorridorX.Services.Providers;
+using KorridorX.Services.Wallets;
 
 namespace KorridorX.Services.Payments;
 
@@ -27,6 +28,7 @@ public class CollectionService : ICollectionService
     private readonly IRemittanceProvider _remittanceProvider;
     private readonly IComplianceGateService _complianceGateService;
     private readonly IProviderWalletResolver _wallets;
+    private readonly IConsumerTransferFundingService _consumerFunding;
 
     public CollectionService(
         AppDbContext db,
@@ -35,7 +37,8 @@ public class CollectionService : ICollectionService
         ICollectionStatusService collectionStatusService,
         IRemittanceProvider remittanceProvider,
         IComplianceGateService complianceGateService,
-        IProviderWalletResolver wallets)
+        IProviderWalletResolver wallets,
+        IConsumerTransferFundingService consumerFunding)
     {
         _db = db;
         _referenceGenerator = referenceGenerator;
@@ -44,6 +47,7 @@ public class CollectionService : ICollectionService
         _remittanceProvider = remittanceProvider;
         _complianceGateService = complianceGateService;
         _wallets = wallets;
+        _consumerFunding = consumerFunding;
     }
 
     public async Task<IReadOnlyList<CollectionPaymentMethodDto>> GetAvailablePaymentMethodsAsync(
@@ -111,6 +115,12 @@ public class CollectionService : ICollectionService
                 $"A collection cannot be created while the transfer status is '{transfer.Status}'.");
         }
 
+        var funding = await _consumerFunding.GetFundingAsync(userId, transfer.Id, ct);
+        if (funding.ExternalFundingRequired <= 0m)
+        {
+            throw new InvalidOperationException("This transfer is already fully funded from the consumer wallet.");
+        }
+
         if (!_paymentMethodPolicy.IsSupported(
                 transfer.SourceCountryCode,
                 transfer.SourceCurrencyCode,
@@ -128,11 +138,12 @@ public class CollectionService : ICollectionService
             TransferId = transfer.Id,
             Transfer = transfer,
             Purpose = PaymentOperationPurpose.Remittance,
+            FinancialAccountId = funding.FinancialAccountId,
             RelatedEntityType = nameof(Transfer),
             RelatedEntityId = transfer.Id,
             Reference = reference,
             CurrencyCode = transfer.SourceCurrencyCode,
-            Amount = transfer.TotalPayableAmount,
+            Amount = funding.ExternalFundingRequired,
             PaymentMethod = request.PaymentMethod,
             Status = CollectionStatus.Pending,
             ProviderCode = transfer.ProviderCode,
@@ -149,7 +160,7 @@ public class CollectionService : ICollectionService
                 transferId = transfer.Id,
                 transferReference = transfer.Reference,
                 collectionReference = reference,
-                amount = transfer.TotalPayableAmount,
+                amount = funding.ExternalFundingRequired,
                 currencyCode = transfer.SourceCurrencyCode,
                 paymentMethod = request.PaymentMethod.ToString()
             }),
@@ -322,7 +333,7 @@ public class CollectionService : ICollectionService
                     request.InteracExpiryHours),
                 ct);
 
-            _collectionStatusService.ApplyTransition(
+            await _collectionStatusService.ApplyTransitionAsync(
                 collection,
                 CollectionStatus.Initiated,
                 new CollectionStatusTransitionContext(
@@ -365,7 +376,7 @@ public class CollectionService : ICollectionService
         }
         catch (ProviderIntegrationException ex)
         {
-            _collectionStatusService.ApplyTransition(
+            await _collectionStatusService.ApplyTransitionAsync(
                 collection,
                 CollectionStatus.Failed,
                 new CollectionStatusTransitionContext(
@@ -634,7 +645,7 @@ public class CollectionService : ICollectionService
                     request.InteracExpiryHours),
                 ct);
 
-            _collectionStatusService.ApplyTransition(
+            await _collectionStatusService.ApplyTransitionAsync(
                 collection,
                 CollectionStatus.Initiated,
                 new CollectionStatusTransitionContext(
@@ -672,7 +683,7 @@ public class CollectionService : ICollectionService
         }
         catch (ProviderIntegrationException ex)
         {
-            _collectionStatusService.ApplyTransition(
+            await _collectionStatusService.ApplyTransitionAsync(
                 collection,
                 CollectionStatus.Failed,
                 new CollectionStatusTransitionContext(

@@ -297,6 +297,7 @@ builder.Services.AddScoped<IdentitySeedRunner>();
 
 builder.Services.AddScoped<ICustomerProfileService, CustomerProfileService>();
 builder.Services.AddScoped<IConsumerWalletService, ConsumerWalletService>();
+builder.Services.AddScoped<IConsumerTransferFundingService, ConsumerTransferFundingService>();
 builder.Services.AddScoped<IRecipientService, RecipientService>();
 builder.Services.AddScoped<IBusinessBeneficiaryService, BusinessBeneficiaryService>();
 builder.Services.AddScoped<IBusinessAccessService, BusinessAccessService>();

@@ -222,7 +222,7 @@ public class ProviderReconciliationService : IProviderReconciliationService
 
             if (collection.Status == status || _collectionStatusService.CanTransition(collection.Status, status))
             {
-                _collectionStatusService.ApplyTransition(
+                await _collectionStatusService.ApplyTransitionAsync(
                     collection,
                     status,
                     new CollectionStatusTransitionContext(
@@ -270,7 +270,7 @@ public class ProviderReconciliationService : IProviderReconciliationService
         if (collection.Status == status ||
             _collectionStatusService.CanTransition(collection.Status, status))
         {
-            _collectionStatusService.ApplyTransition(
+            await _collectionStatusService.ApplyTransitionAsync(
                 collection,
                 status,
                 new CollectionStatusTransitionContext(

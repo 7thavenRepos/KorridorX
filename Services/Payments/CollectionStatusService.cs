@@ -3,6 +3,7 @@ using KorridorX.Models.Enums;
 using KorridorX.Models.Payments;
 using KorridorX.Models.Transfers;
 using KorridorX.Services.Transfers;
+using KorridorX.Services.Wallets;
 
 namespace KorridorX.Services.Payments;
 
@@ -54,13 +55,16 @@ public class CollectionStatusService : ICollectionStatusService
 
     private readonly AppDbContext _db;
     private readonly ITransferStatusService _transferStatusService;
+    private readonly IConsumerTransferFundingService _consumerFunding;
 
     public CollectionStatusService(
         AppDbContext db,
-        ITransferStatusService transferStatusService)
+        ITransferStatusService transferStatusService,
+        IConsumerTransferFundingService consumerFunding)
     {
         _db = db;
         _transferStatusService = transferStatusService;
+        _consumerFunding = consumerFunding;
     }
 
     public bool CanTransition(
@@ -116,6 +120,32 @@ public class CollectionStatusService : ICollectionStatusService
         return true;
     }
 
+    public async Task<bool> ApplyTransitionAsync(
+        Collection collection,
+        CollectionStatus newStatus,
+        CollectionStatusTransitionContext context,
+        CollectionAttempt? attempt = null,
+        CancellationToken ct = default)
+    {
+        var changed = ApplyTransition(collection, newStatus, context, attempt);
+
+        if (changed &&
+            newStatus == CollectionStatus.Successful &&
+            collection.Purpose == PaymentOperationPurpose.Remittance &&
+            collection.FinancialAccountId.HasValue &&
+            collection.Transfer?.CustomerProfileId is not null &&
+            collection.Transfer.BusinessProfileId is null)
+        {
+            await _consumerFunding.ApplySuccessfulCollectionAsync(
+                collection,
+                context.ChangedByUserId,
+                context.Source,
+                ct);
+        }
+
+        return changed;
+    }
+
 
     private static void ValidateTransferState(
         Collection collection,
@@ -156,6 +186,19 @@ public class CollectionStatusService : ICollectionStatusService
         switch (newStatus)
         {
             case CollectionStatus.Successful:
+                if (collection.FinancialAccountId.HasValue &&
+                    transfer.CustomerProfileId.HasValue &&
+                    !transfer.BusinessProfileId.HasValue)
+                {
+                    AddCollectionTimelineEvent(
+                        transfer.Id,
+                        newStatus,
+                        reason,
+                        context.MetadataJson,
+                        occurredAt);
+                    break;
+                }
+
                 if (transfer.Status == TransferStatus.PendingPayment)
                 {
                     _transferStatusService.ApplyTransition(

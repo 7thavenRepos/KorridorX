@@ -14,4 +14,11 @@ public interface ICollectionStatusService
         CollectionStatus newStatus,
         CollectionStatusTransitionContext context,
         CollectionAttempt? attempt = null);
+
+    Task<bool> ApplyTransitionAsync(
+        Collection collection,
+        CollectionStatus newStatus,
+        CollectionStatusTransitionContext context,
+        CollectionAttempt? attempt = null,
+        CancellationToken ct = default);
 }

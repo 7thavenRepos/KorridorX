@@ -429,7 +429,7 @@ public class BlaaizWebhookService : IBlaaizWebhookService
         if (collection.Status == mappedStatus ||
             _collectionStatusService.CanTransition(collection.Status, mappedStatus))
         {
-            _collectionStatusService.ApplyTransition(
+            await _collectionStatusService.ApplyTransitionAsync(
                 collection,
                 mappedStatus,
                 new CollectionStatusTransitionContext(

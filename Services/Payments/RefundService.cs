@@ -36,6 +36,15 @@ public class RefundService : IRefundService
     {
         var collection = await LoadCollectionAsync(collectionId, ct);
 
+        if (collection.Purpose == PaymentOperationPurpose.Remittance &&
+            collection.FinancialAccountId.HasValue &&
+            collection.Transfer?.CustomerProfileId is not null &&
+            collection.Transfer.BusinessProfileId is null)
+        {
+            throw new InvalidOperationException(
+                "Consumer wallet funding collections are not refunded to the provider. Transfer failures restore funds to the consumer wallet.");
+        }
+
         if (collection.Status == CollectionStatus.Refunded)
         {
             return ToDto(collection);
@@ -82,7 +91,7 @@ public class RefundService : IRefundService
             collection.Id,
             ct);
 
-        ApplyProviderRefund(collection, result, reason, changedByUserId, "Admin");
+        await ApplyProviderRefundAsync(collection, result, reason, changedByUserId, "Admin", ct);
         await UpsertProviderTransactionAsync(collection, result, ct);
         await _db.SaveChangesAsync(ct);
 
@@ -107,7 +116,7 @@ public class RefundService : IRefundService
             collection.Id,
             ct);
 
-        ApplyProviderRefund(collection, result, collection.RefundReason, changedByUserId, "Reconciliation");
+        await ApplyProviderRefundAsync(collection, result, collection.RefundReason, changedByUserId, "Reconciliation", ct);
         await UpsertProviderTransactionAsync(collection, result, ct);
         await _db.SaveChangesAsync(ct);
 
@@ -143,12 +152,13 @@ public class RefundService : IRefundService
         return collection;
     }
 
-    private void ApplyProviderRefund(
+    private async Task ApplyProviderRefundAsync(
         Collection collection,
         RemittanceRefundResult result,
         string? reason,
         Guid changedByUserId,
-        string source)
+        string source,
+        CancellationToken ct)
     {
         if (!string.Equals(collection.CurrencyCode, result.CurrencyCode, StringComparison.OrdinalIgnoreCase))
         {
@@ -180,7 +190,7 @@ public class RefundService : IRefundService
 
         if (collection.Status == status || _collectionStatusService.CanTransition(collection.Status, status))
         {
-            _collectionStatusService.ApplyTransition(
+            await _collectionStatusService.ApplyTransitionAsync(
                 collection,
                 status,
                 new CollectionStatusTransitionContext(
@@ -190,7 +200,8 @@ public class RefundService : IRefundService
                     ProviderResponseId: result.ProviderRefundId,
                     ResponsePayloadJson: result.RawResponseJson,
                     MetadataJson: metadata,
-                    OccurredAt: result.ProviderUpdatedAt ?? result.ProviderCreatedAt));
+                    OccurredAt: result.ProviderUpdatedAt ?? result.ProviderCreatedAt),
+                ct: ct);
         }
     }
 

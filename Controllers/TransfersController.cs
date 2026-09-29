@@ -3,6 +3,7 @@ using System.Security.Claims;
 using KorridorX.Dtos.Transfers;
 using KorridorX.Infrastructure;
 using KorridorX.Services.Transfers;
+using KorridorX.Services.Wallets;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.Mvc;
@@ -16,10 +17,14 @@ namespace KorridorX.Controllers;
 public class TransfersController : ControllerBase
 {
     private readonly ITransferService _transferService;
+    private readonly IConsumerTransferFundingService _consumerFunding;
 
-    public TransfersController(ITransferService transferService)
+    public TransfersController(
+        ITransferService transferService,
+        IConsumerTransferFundingService consumerFunding)
     {
         _transferService = transferService;
+        _consumerFunding = consumerFunding;
     }
 
     [HttpPost]
@@ -68,6 +73,16 @@ public class TransfersController : ControllerBase
             result.Items,
             result.Meta,
             "Transfers retrieved successfully."));
+    }
+
+    [HttpGet("{transferId:guid}/funding")]
+    public async Task<IActionResult> GetTransferFunding(
+        [FromRoute] Guid transferId,
+        CancellationToken ct)
+    {
+        var userId = GetUserId();
+        var result = await _consumerFunding.GetFundingAsync(userId, transferId, ct);
+        return Ok(ApiResponses.Ok(result, "Transfer funding retrieved successfully."));
     }
 
     [HttpPost("{transferId:guid}/cancel")]
