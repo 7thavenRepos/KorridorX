@@ -56,15 +56,18 @@ public class CollectionStatusService : ICollectionStatusService
     private readonly AppDbContext _db;
     private readonly ITransferStatusService _transferStatusService;
     private readonly IConsumerTransferFundingService _consumerFunding;
+    private readonly IConsumerWalletFundingCreditService _walletFundingCredits;
 
     public CollectionStatusService(
         AppDbContext db,
         ITransferStatusService transferStatusService,
-        IConsumerTransferFundingService consumerFunding)
+        IConsumerTransferFundingService consumerFunding,
+        IConsumerWalletFundingCreditService walletFundingCredits)
     {
         _db = db;
         _transferStatusService = transferStatusService;
         _consumerFunding = consumerFunding;
+        _walletFundingCredits = walletFundingCredits;
     }
 
     public bool CanTransition(
@@ -129,18 +132,29 @@ public class CollectionStatusService : ICollectionStatusService
     {
         var changed = ApplyTransition(collection, newStatus, context, attempt);
 
-        if (changed &&
-            newStatus == CollectionStatus.Successful &&
-            collection.Purpose == PaymentOperationPurpose.Remittance &&
-            collection.FinancialAccountId.HasValue &&
-            collection.Transfer?.CustomerProfileId is not null &&
-            collection.Transfer.BusinessProfileId is null)
+        if (changed && newStatus == CollectionStatus.Successful)
         {
-            await _consumerFunding.ApplySuccessfulCollectionAsync(
-                collection,
-                context.ChangedByUserId,
-                context.Source,
-                ct);
+            if (collection.Purpose == PaymentOperationPurpose.Remittance &&
+                collection.FinancialAccountId.HasValue &&
+                collection.Transfer?.CustomerProfileId is not null &&
+                collection.Transfer.BusinessProfileId is null)
+            {
+                await _consumerFunding.ApplySuccessfulCollectionAsync(
+                    collection,
+                    context.ChangedByUserId,
+                    context.Source,
+                    ct);
+            }
+            else if (collection.Purpose == PaymentOperationPurpose.AccountFunding &&
+                     collection.FinancialAccountId.HasValue &&
+                     !collection.TransferId.HasValue)
+            {
+                await _walletFundingCredits.ApplySuccessfulCollectionAsync(
+                    collection,
+                    context.ChangedByUserId,
+                    context.Source,
+                    ct);
+            }
         }
 
         return changed;

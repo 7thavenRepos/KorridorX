@@ -16,10 +16,14 @@ namespace KorridorX.Controllers;
 public sealed class WalletsController : ControllerBase
 {
     private readonly IConsumerWalletService _wallets;
+    private readonly IConsumerWalletFundingService _funding;
 
-    public WalletsController(IConsumerWalletService wallets)
+    public WalletsController(
+        IConsumerWalletService wallets,
+        IConsumerWalletFundingService funding)
     {
         _wallets = wallets;
+        _funding = funding;
     }
 
     [HttpGet]
@@ -52,6 +56,71 @@ public sealed class WalletsController : ControllerBase
         return Ok(ApiResponses.Ok(
             result,
             "Wallet is ready."));
+    }
+
+    [HttpGet("{walletId:guid}/funding-methods")]
+    public async Task<IActionResult> GetFundingMethods(
+        [FromRoute] Guid walletId,
+        CancellationToken ct)
+    {
+        var result = await _funding.GetFundingMethodsAsync(GetUserId(), walletId, ct);
+
+        return Ok(ApiResponses.Ok(
+            result,
+            "Wallet funding methods retrieved successfully."));
+    }
+
+    [HttpPost("{walletId:guid}/collections")]
+    public async Task<IActionResult> CreateFundingCollection(
+        [FromRoute] Guid walletId,
+        [FromBody] CreateConsumerWalletFundingCollectionRequestDto request,
+        CancellationToken ct)
+    {
+        var result = await _funding.CreateCollectionAsync(
+            GetUserId(),
+            walletId,
+            request,
+            ct);
+
+        return Ok(ApiResponses.Ok(
+            result,
+            "Wallet funding collection created successfully."));
+    }
+
+    [HttpPost("{walletId:guid}/collections/{collectionId:guid}/initiate")]
+    public async Task<IActionResult> InitiateFundingCollection(
+        [FromRoute] Guid walletId,
+        [FromRoute] Guid collectionId,
+        [FromBody] KorridorX.Dtos.Payments.InitiateCollectionRequestDto request,
+        CancellationToken ct)
+    {
+        var result = await _funding.InitiateCollectionAsync(
+            GetUserId(),
+            walletId,
+            collectionId,
+            request,
+            ct);
+
+        return Ok(ApiResponses.Ok(
+            result,
+            "Wallet funding collection initiated successfully."));
+    }
+
+    [HttpGet("{walletId:guid}/collections/{collectionId:guid}")]
+    public async Task<IActionResult> GetFundingCollection(
+        [FromRoute] Guid walletId,
+        [FromRoute] Guid collectionId,
+        CancellationToken ct)
+    {
+        var result = await _funding.GetCollectionAsync(
+            GetUserId(),
+            walletId,
+            collectionId,
+            ct);
+
+        return Ok(ApiResponses.Ok(
+            result,
+            "Wallet funding collection retrieved successfully."));
     }
 
     private Guid GetUserId()
