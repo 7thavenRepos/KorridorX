@@ -30,6 +30,11 @@ services:
       - "${API_BIND_ADDRESS:-127.0.0.1}:${API_PORT:-8080}:8080"
     environment:
       ASPNETCORE_ENVIRONMENT: Staging
+      # Public OAuth IDs for Consumer Google sign-in in this staging deployment.
+      ConsumerExternalAuth__Google__Enabled: "true"
+      ConsumerExternalAuth__Google__ClientIds__0: "483161506312-dgp5rl35n2lv07u1gp7vvl707rmbijvb.apps.googleusercontent.com"
+      ConsumerExternalAuth__Google__PresenterClientIds__0: "483161506312-sr24g50am5lf4an3ksedp74dfbiekre0.apps.googleusercontent.com"
+      ConsumerExternalAuth__Apple__Enabled: "false"
       ASPNETCORE_HTTP_PORTS: 8080
       ConnectionStrings__DefaultConnection: Host=postgres;Port=5432;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD};Pooling=true
       Jwt__Issuer: ${JWT_ISSUER:?JWT_ISSUER is required}
@@ -69,8 +74,12 @@ services:
       NotificationDelivery__Smtp__Password: ${SMTP_PASSWORD:-}
       NotificationDelivery__Smtp__FromAddress: ${SMTP_FROM_ADDRESS:?SMTP_FROM_ADDRESS is required}
       NotificationDelivery__Smtp__FromName: ${SMTP_FROM_NAME:-KorridorX Staging}
+      NotificationDelivery__Firebase__IsEnabled: ${FIREBASE_PUSH_ENABLED}
+      NotificationDelivery__Firebase__ProjectId: ${FIREBASE_PROJECT_ID}
+      GOOGLE_APPLICATION_CREDENTIALS: ${GOOGLE_APPLICATION_CREDENTIALS}
     volumes:
       - korridorx-staging-dataprotection:/var/lib/korridorx/keys
+      - ${FIREBASE_SERVICE_ACCOUNT_HOST_PATH}:/run/secrets/korridorx-firebase-admin.json:ro
     networks:
       - korridorx-staging
 
