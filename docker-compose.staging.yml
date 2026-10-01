@@ -34,6 +34,7 @@ services:
       ConsumerExternalAuth__Google__Enabled: "true"
       ConsumerExternalAuth__Google__ClientIds__0: "483161506312-dgp5rl35n2lv07u1gp7vvl707rmbijvb.apps.googleusercontent.com"
       ConsumerExternalAuth__Google__PresenterClientIds__0: "483161506312-sr24g50am5lf4an3ksedp74dfbiekre0.apps.googleusercontent.com"
+      ConsumerExternalAuth__Google__PresenterClientIds__1: "483161506312-g2cv1redgtvqp8bjud931ovrdirg72kp.apps.googleusercontent.com"
       ConsumerExternalAuth__Apple__Enabled: "false"
       ASPNETCORE_HTTP_PORTS: 8080
       ConnectionStrings__DefaultConnection: Host=postgres;Port=5432;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD};Pooling=true
