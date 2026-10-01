@@ -6,6 +6,7 @@ public static class MfaSecurityPolicy
 {
     public const string AuthenticationMethodClaim = "amr";
     public const string PasswordAuthenticationMethod = "pwd";
+    public const string ExternalAuthenticationMethod = "federated";
     public const string MfaAuthenticationMethod = "mfa";
 
     private static readonly HashSet<string> PrivilegedRoles = new(

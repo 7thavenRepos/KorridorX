@@ -1,4 +1,4 @@
-﻿using System.IdentityModel.Tokens.Jwt;
+using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
@@ -26,8 +26,11 @@ public class JwtTokenService : IJwtTokenService
 
     public async Task<(string Token, DateTime ExpiresAt)> GenerateAccessTokenAsync(
         ApplicationUser user,
-        bool mfaAuthenticated = false)
+        bool mfaAuthenticated = false,
+        string authenticationMethod = MfaSecurityPolicy.PasswordAuthenticationMethod)
     {
+        if (authenticationMethod is not (MfaSecurityPolicy.PasswordAuthenticationMethod or MfaSecurityPolicy.ExternalAuthenticationMethod))
+            throw new InvalidOperationException("Invalid authentication method.");
         var expiresAt = DateTime.UtcNow.AddMinutes(_jwtOptions.AccessTokenMinutes);
 
         var roles = await _userManager.GetRolesAsync(user);
@@ -45,7 +48,7 @@ public class JwtTokenService : IJwtTokenService
             new("userType", user.UserType.ToString()),
             new("email_confirmed", user.EmailConfirmed ? "true" : "false"),
             new(MfaSecurityPolicy.AuthenticationMethodClaim,
-                MfaSecurityPolicy.PasswordAuthenticationMethod),
+                authenticationMethod),
             new(SecurityStampSecurity.ClaimType, SecurityStampSecurity.Hash(securityStamp))
         };
 

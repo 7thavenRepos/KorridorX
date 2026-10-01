@@ -18,7 +18,7 @@ using System.Text.Encodings.Web;
 
 namespace KorridorX.Services.Auth;
 
-public class AuthService : IAuthService
+public partial class AuthService : IAuthService
 {
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly AppDbContext _db;
@@ -255,74 +255,7 @@ public class AuthService : IAuthService
             throw new UnauthorizedApiException("Email confirmation is required before sign-in.", "EMAIL_CONFIRMATION_REQUIRED");
         }
 
-        var roles = await _userManager.GetRolesAsync(user);
-        var mfaRequired =
-            (_mfaOptions.EnforceForPrivilegedRoles &&
-             MfaSecurityPolicy.RequiresMfa(roles)) ||
-            await _userManager.GetTwoFactorEnabledAsync(user);
-
-        if (mfaRequired)
-        {
-            var enrolled = await _userManager.GetTwoFactorEnabledAsync(user);
-            var purpose = enrolled
-                ? MfaChallengePurposes.Verification
-                : MfaChallengePurposes.Enrollment;
-
-            if (!enrolled)
-            {
-                var resetKeyResult = await _userManager.ResetAuthenticatorKeyAsync(user);
-                if (!resetKeyResult.Succeeded)
-                    throw new InvalidOperationException("Authenticator enrollment could not be initialized.");
-            }
-
-            var challenge = await _mfaChallenges.CreateAsync(
-                user.Id,
-                purpose,
-                ipAddress,
-                userAgent,
-                request.DeviceFingerprint,
-                request.DeviceName,
-                ct);
-
-            _audit.Stage(new AuditRecordRequest(
-                Action: "MFA_CHALLENGE_ISSUED",
-                Category: "Authentication",
-                EntityName: nameof(ApplicationUser),
-                EntityId: user.Id.ToString(),
-                Metadata: new { Purpose = purpose },
-                UserId: user.Id));
-
-            await _db.SaveChangesAsync(ct);
-
-            return new LoginResultDto(
-                enrolled
-                    ? LoginStatuses.MfaRequired
-                    : LoginStatuses.MfaEnrollmentRequired,
-                null,
-                challenge);
-        }
-
-        await _userManager.ResetAccessFailedCountAsync(user);
-        await RecordLoginAsync(user.Id, request, ipAddress, userAgent, true, null, ct, saveImmediately: false);
-
-        var refresh = _jwtTokenService.GenerateRefreshToken();
-        _db.RefreshTokens.Add(CreateRefreshToken(
-            user.Id,
-            refresh.Token,
-            refresh.ExpiresAt,
-            ipAddress,
-            userAgent,
-            request.DeviceFingerprint,
-            request.DeviceName));
-
-        await EnforceSessionLimitAsync(user.Id, ct);
-        await _db.SaveChangesAsync(ct);
-
-        var access = await _jwtTokenService.GenerateAccessTokenAsync(user);
-        return new LoginResultDto(
-            LoginStatuses.Authenticated,
-            ToAuthResponse(user, access, refresh),
-            null);
+        return await CompleteVerifiedLoginAsync(user, request, ipAddress, userAgent, ct);
     }
 
     public async Task<MfaEnrollmentSetupDto> GetMfaEnrollmentSetupAsync(
@@ -580,6 +513,11 @@ public class AuthService : IAuthService
             }
         }
 
+        var method = await _db.UserTokens.AsNoTracking()
+            .Where(x => x.UserId == user.Id && x.LoginProvider == SessionMethodProvider && x.Name == "Session:" + existing.Id.ToString("N"))
+            .Select(x => x.Value).SingleOrDefaultAsync(ct) ?? MfaSecurityPolicy.PasswordAuthenticationMethod;
+        if (method == MfaSecurityPolicy.ExternalAuthenticationMethod)
+            ExternalIdentityPolicy.RequireConsumer(user.UserType, roles);
         var replacement = _jwtTokenService.GenerateRefreshToken();
         var replacementHash = RefreshTokenSecurity.Hash(replacement.Token);
         var now = DateTime.UtcNow;
@@ -591,7 +529,7 @@ public class AuthService : IAuthService
         existing.ReplacedByToken = replacementHash;
         existing.LastUsedAt = now;
 
-        _db.RefreshTokens.Add(new RefreshToken
+        var replacementSession = new RefreshToken
         {
             UserId = user.Id,
             Token = replacementHash,
@@ -601,12 +539,14 @@ public class AuthService : IAuthService
             DeviceFingerprint = Clean(request.DeviceFingerprint ?? existing.DeviceFingerprint, 250),
             DeviceName = Clean(request.DeviceName ?? existing.DeviceName, 250),
             LastUsedAt = now
-        });
+        };
+        _db.RefreshTokens.Add(replacementSession);
+        StageExternalSessionMethod(user.Id, replacementSession.Id, method);
 
         await EnforceSessionLimitAsync(user.Id, ct);
         await _db.SaveChangesAsync(ct);
 
-        var access = await _jwtTokenService.GenerateAccessTokenAsync(user, mfaRequired);
+        var access = await _jwtTokenService.GenerateAccessTokenAsync(user, mfaRequired, method);
         return ToAuthResponse(user, access, replacement);
     }
 
@@ -1082,17 +1022,21 @@ public class AuthService : IAuthService
         CancellationToken ct)
     {
         var refresh = _jwtTokenService.GenerateRefreshToken();
-        _db.RefreshTokens.Add(CreateRefreshToken(
+        var session = CreateRefreshToken(
             user.Id,
             refresh.Token,
             refresh.ExpiresAt,
             ipAddress ?? challenge.IpAddress,
             userAgent ?? challenge.UserAgent,
             challenge.DeviceFingerprint,
-            challenge.DeviceName));
+            challenge.DeviceName);
+        _db.RefreshTokens.Add(session);
+        StageExternalSessionMethod(user.Id, session.Id, challenge.AuthenticationMethod);
+        if (challenge.AuthenticationMethod == MfaSecurityPolicy.ExternalAuthenticationMethod)
+            ExternalIdentityPolicy.RequireConsumer(user.UserType, await _userManager.GetRolesAsync(user));
 
         await EnforceSessionLimitAsync(user.Id, ct);
-        var access = await _jwtTokenService.GenerateAccessTokenAsync(user, mfaAuthenticated: true);
+        var access = await _jwtTokenService.GenerateAccessTokenAsync(user, mfaAuthenticated: true, authenticationMethod: challenge.AuthenticationMethod);
         return ToAuthResponse(user, access, refresh);
     }
 

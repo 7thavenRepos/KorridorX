@@ -23,7 +23,8 @@ public sealed record StoredMfaChallenge(
     string? IpAddress,
     string? UserAgent,
     string? DeviceFingerprint,
-    string? DeviceName);
+    string? DeviceName,
+    string AuthenticationMethod = MfaSecurityPolicy.PasswordAuthenticationMethod);
 
 public sealed record MfaChallengeRedemption(
     StoredMfaChallenge Challenge,
@@ -39,7 +40,8 @@ public interface IMfaChallengeStore
         string? userAgent,
         string? deviceFingerprint,
         string? deviceName,
-        CancellationToken ct = default);
+        CancellationToken ct = default,
+        string authenticationMethod = MfaSecurityPolicy.PasswordAuthenticationMethod);
 
     Task<StoredMfaChallenge> ReadAsync(
         MfaEnrollmentSetupRequestDto request,
@@ -101,7 +103,8 @@ public sealed class MfaChallengeStore : IMfaChallengeStore
         string? userAgent,
         string? deviceFingerprint,
         string? deviceName,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        string authenticationMethod = MfaSecurityPolicy.PasswordAuthenticationMethod)
     {
         await _db.UserTokens
             .Where(x =>
@@ -125,7 +128,8 @@ public sealed class MfaChallengeStore : IMfaChallengeStore
             Clean(ipAddress, 100),
             Clean(userAgent, 1000),
             Clean(deviceFingerprint, 250),
-            Clean(deviceName, 250));
+            Clean(deviceName, 250),
+            authenticationMethod);
 
         _db.UserTokens.Add(new IdentityUserToken<Guid>
         {

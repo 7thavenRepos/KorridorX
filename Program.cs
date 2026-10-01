@@ -288,7 +288,20 @@ builder.Services.AddHttpClient(OpenSanctionsScreeningProvider.HttpClientName, (s
 
 builder.Services.AddScoped<IJwtTokenService, JwtTokenService>();
 builder.Services.AddScoped<IMfaChallengeStore, MfaChallengeStore>();
-builder.Services.AddScoped<IAuthService, AuthService>();
+builder.Services.AddScoped<AuthService>();
+builder.Services.AddScoped<IAuthService>(sp => sp.GetRequiredService<AuthService>());
+builder.Services.AddOptions<ConsumerExternalAuthOptions>()
+    .Bind(builder.Configuration.GetSection(ConsumerExternalAuthOptions.SectionName)).ValidateOnStart();
+builder.Services.AddSingleton<IValidateOptions<ConsumerExternalAuthOptions>, ConsumerExternalAuthOptionsValidator>();
+builder.Services.AddScoped<ExternalAuthChallengeService>();
+builder.Services.AddScoped<IExternalProviderTokenVerifier, ExternalProviderTokenVerifier>();
+builder.Services.AddSingleton<IExternalSigningKeySource, ExternalSigningKeySource>();
+builder.Services.AddScoped<IConsumerExternalAuthService, ConsumerExternalAuthService>();
+builder.Services.AddHttpClient(ExternalSigningKeySource.HttpClientName, client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(10);
+    client.MaxResponseContentBufferSize = 65536;
+}).ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
 builder.Services.AddScoped<IRoleSeeder, RoleSeeder>();
 builder.Services.AddScoped<ISeedUserProvisioner, SeedUserProvisioner>();
 builder.Services.AddScoped<ISuperAdminSeeder, SuperAdminSeeder>();
