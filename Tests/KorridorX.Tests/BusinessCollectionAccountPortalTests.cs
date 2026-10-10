@@ -161,10 +161,14 @@ public sealed class BusinessCollectionAccountPortalTests(ReleaseCandidateDatabas
         await db.SaveChangesAsync();
         var ready = Assert.Single((await service.GetAccountsAsync(s.Owner.Id, s.Customer.Id)).Accounts);
         Assert.True(ready.IsReady); Assert.Equal("12345678", ready.AccountNumber); Assert.NotNull(ready.BankDetails?.Iban);
+        Assert.True(ready.FundingInstructions!.IsReady);
+        Assert.Contains(ready.FundingInstructions.Fields, x => x.Key == "iban" && x.Value == "DE89370400440532013000");
         Assert.DoesNotContain("never-return-raw-metadata", System.Text.Json.JsonSerializer.Serialize(ready));
         entity.Status = CollectionAccountStatus.Suspended; await db.SaveChangesAsync();
         var suspended = Assert.Single((await service.GetAccountsAsync(s.Owner.Id, s.Customer.Id)).Accounts);
         Assert.False(suspended.IsReady); Assert.Null(suspended.BankDetails); Assert.Null(suspended.AccountNumber);
+        Assert.False(suspended.FundingInstructions!.IsReady);
+        Assert.Empty(suspended.FundingInstructions.Fields);
         entity.Status = CollectionAccountStatus.Active;
         var wallet = await db.ProviderWalletConfigurations.SingleAsync(x => x.Environment == s.Environment); wallet.IsActive = false;
         await db.SaveChangesAsync();

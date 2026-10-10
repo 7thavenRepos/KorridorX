@@ -1,3 +1,4 @@
+using KorridorX.Dtos.Payments;
 using System.ComponentModel.DataAnnotations;
 using KorridorX.Models.Enums;
 using KorridorX.Services.EmbeddedFinance;
@@ -23,7 +24,10 @@ public sealed record BusinessCollectionAccountDto(
     decimal SettledBalance, decimal AvailableBalance, decimal HeldBalance,
     ProviderAccountMappingStatus? ProviderStatus, bool IsReady, bool CanRequestBankDetails,
     IReadOnlyList<string> Requirements, string? AccountNumber, string? AccountName,
-    string? BankName, VirtualAccountBankDetails? BankDetails, DateTime? LastUpdatedAt);
+    string? BankName, VirtualAccountBankDetails? BankDetails, DateTime? LastUpdatedAt)
+{
+    public FundingInstructionsDto? FundingInstructions { get; init; }
+}
 
 public sealed record BusinessCollectionOverviewDto(
     BusinessCollectionCustomerDto Customer, bool CanManage, bool BusinessVerified,

@@ -35,6 +35,7 @@ public record CollectionDto
     public string ProviderCode { get; init; } = "";
     public string? ProviderCollectionId { get; init; }
     public string? ProviderReference { get; init; }
+    public FundingInstructionsDto? FundingInstructions { get; init; }
     public string? CheckoutUrl { get; init; }
     public DateTime? ProviderExpiresAt { get; init; }
     public string? VirtualAccountNumber { get; init; }

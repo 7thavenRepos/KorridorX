@@ -474,6 +474,7 @@ public sealed class ConsumerWalletFundingService : IConsumerWalletFundingService
                 ProviderCode = collection.ProviderCode,
                 ProviderCollectionId = collection.ProviderCollectionId,
                 ProviderReference = collection.ProviderReference,
+                FundingInstructions = FundingInstructionsFactory.ForCollection(collection),
                 CheckoutUrl = collection.CheckoutUrl,
                 ProviderExpiresAt = collection.ProviderExpiresAt,
                 InitiatedAt = collection.InitiatedAt,

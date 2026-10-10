@@ -9,7 +9,7 @@ public sealed record BlaaizVirtualAccountState(
     string Id, string? CustomerId, string? WalletId, string? Currency,
     ProviderAccountMappingStatus Status, string? AccountNumber, string? AccountName,
     string? BankName, string? BankCode, string? SortCode, string? Iban,
-    string? Reference, string? FailureReason)
+    string? Reference, string? FailureReason, string? RoutingNumber = null)
 {
     public static BlaaizVirtualAccountState ParseResponse(
         string raw, string walletId, string? customerId = null, string? assetCode = null)
@@ -81,7 +81,8 @@ public sealed record BlaaizVirtualAccountState(
             Bounded(Read(item, "bank_name"), 200), Bounded(Read(item, "bank_code"), 50),
             Bounded(sortCode, 50), Bounded(iban, 50),
             Bounded(Read(item, "account_reference") ?? Read(item, "reservation_reference"), 150),
-            Bounded(Read(item, "user_reason") ?? Read(item, "rejection_reason"), 1000));
+            Bounded(Read(item, "user_reason") ?? Read(item, "rejection_reason"), 1000),
+            Bounded(Read(item, "routing_number"), 50));
     }
 
     public void Apply(ProviderAccountMapping mapping, string selectedWalletId)
@@ -120,7 +121,7 @@ public sealed record BlaaizVirtualAccountState(
 
     public string Metadata(string walletId) => JsonSerializer.Serialize(new
     {
-        BankCode, SortCode, Iban, providerWalletId = walletId, providerAccountStatus = Status.ToString()
+        BankCode, SortCode, Iban, RoutingNumber, providerWalletId = walletId, providerAccountStatus = Status.ToString()
     });
 
     public static VirtualAccountBankDetails? BankDetails(string? metadata)
@@ -129,7 +130,7 @@ public sealed record BlaaizVirtualAccountState(
         try
         {
             using var doc = JsonDocument.Parse(metadata);
-            return new(Read(doc.RootElement, "BankCode"), Read(doc.RootElement, "SortCode"), Read(doc.RootElement, "Iban"));
+            return new(Read(doc.RootElement, "BankCode"), Read(doc.RootElement, "SortCode"), Read(doc.RootElement, "Iban"), Read(doc.RootElement, "RoutingNumber"));
         }
         catch (Exception ex) when (ex is JsonException or InvalidOperationException) { return null; }
     }
@@ -152,4 +153,4 @@ public sealed record BlaaizVirtualAccountState(
         ? throw new InvalidOperationException("Blaaiz bank account field exceeds its supported length.") : value;
 }
 
-public sealed record VirtualAccountBankDetails(string? BankCode, string? SortCode, string? Iban);
+public sealed record VirtualAccountBankDetails(string? BankCode, string? SortCode, string? Iban, string? RoutingNumber = null);

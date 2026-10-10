@@ -1,3 +1,4 @@
+using KorridorX.Services.Payments;
 using System.Net.Mail;
 using KorridorX.Configuration;
 using KorridorX.Data;
@@ -134,7 +135,13 @@ public sealed class BusinessCollectionAccountService(
                 account.FinancialAccount.SettledBalance, account.FinancialAccount.AvailableBalance, account.FinancialAccount.HeldBalance,
                 mapping?.Status, showDetails, requirements.Count == 0 && mapping?.Status != ProviderAccountMappingStatus.Active, requirements,
                 showDetails ? mapping!.AccountNumber : null, showDetails ? mapping!.AccountName : null, showDetails ? mapping!.BankName : null,
-                showDetails ? BlaaizVirtualAccountState.BankDetails(mapping!.MetadataJson) : null, mapping?.LastUpdatedAt ?? account.LastUpdatedAt);
+                showDetails ? BlaaizVirtualAccountState.BankDetails(mapping!.MetadataJson) : null, mapping?.LastUpdatedAt ?? account.LastUpdatedAt)
+            {
+                FundingInstructions = FundingInstructionsFactory.ForBankAccount(account.AssetCode, showDetails,
+                    showDetails ? mapping!.AccountNumber : null, showDetails ? mapping!.AccountName : null,
+                    showDetails ? mapping!.BankName : null,
+                    showDetails ? BlaaizVirtualAccountState.BankDetails(mapping!.MetadataJson) : null)
+            };
         }).ToList();
         return new(providerCustomer, canManage, verified,
             eligible.Select(x => new BusinessCollectionAssetDto(x.Code, x.Name, WalletReady(defaults.FirstOrDefault(w => w.AssetCode == x.Code), x.Code))).ToList(), rows);
