@@ -41,4 +41,7 @@
 		<PackageReference Include="Swashbuckle.AspNetCore" Version="6.9.0" />
 	</ItemGroup>
 
+  <ItemGroup>
+    <EmbeddedResource Include="Content/SearchHelp/catalog.json" LogicalName="KorridorX.Content.SearchHelp.catalog.json" />
+  </ItemGroup>
 </Project>

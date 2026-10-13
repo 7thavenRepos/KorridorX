@@ -1,0 +1,4149 @@
+[
+  {
+    "slug": "page-dashboard",
+    "portal": "business",
+    "title": "Business overview",
+    "summary": "Open business overview in the business workspace.",
+    "category": "Getting started",
+    "pageRoute": "/business/dashboard",
+    "keywords": [
+      "Business overview",
+      "Getting started"
+    ],
+    "adminRoles": [],
+    "permissions": [],
+    "businessRoles": [],
+    "allowNoBusiness": true,
+    "isPage": true,
+    "reviewedOn": "2026-10-13"
+  },
+  {
+    "slug": "page-beneficiaries",
+    "portal": "business",
+    "title": "Beneficiaries",
+    "summary": "Open beneficiaries in the business workspace.",
+    "category": "Payments",
+    "pageRoute": "/business/beneficiaries",
+    "keywords": [
+      "Beneficiaries",
+      "Payments"
+    ],
+    "adminRoles": [],
+    "permissions": [
+      "ViewBeneficiaries"
+    ],
+    "businessRoles": [],
+    "allowNoBusiness": false,
+    "isPage": true,
+    "reviewedOn": "2026-10-13"
+  },
+  {
+    "slug": "page-transfers",
+    "portal": "business",
+    "title": "Transfers",
+    "summary": "Open transfers in the business workspace.",
+    "category": "Payments",
+    "pageRoute": "/business/transfers",
+    "keywords": [
+      "Transfers",
+      "Payments"
+    ],
+    "adminRoles": [],
+    "permissions": [
+      "ViewTransfers"
+    ],
+    "businessRoles": [],
+    "allowNoBusiness": false,
+    "isPage": true,
+    "reviewedOn": "2026-10-13"
+  },
+  {
+    "slug": "page-funding",
+    "portal": "business",
+    "title": "Business wallets",
+    "summary": "Open business wallets in the business workspace.",
+    "category": "Funding and wallets",
+    "pageRoute": "/business/funding",
+    "keywords": [
+      "Business wallets",
+      "Funding and wallets"
+    ],
+    "adminRoles": [],
+    "permissions": [
+      "ViewWallets"
+    ],
+    "businessRoles": [],
+    "allowNoBusiness": false,
+    "isPage": true,
+    "reviewedOn": "2026-10-13"
+  },
+  {
+    "slug": "page-verification",
+    "portal": "business",
+    "title": "Business verification",
+    "summary": "Open business verification in the business workspace.",
+    "category": "Verification",
+    "pageRoute": "/business/verification",
+    "keywords": [
+      "Business verification",
+      "Verification"
+    ],
+    "adminRoles": [],
+    "permissions": [],
+    "businessRoles": [
+      "Owner",
+      "Admin",
+      "Compliance"
+    ],
+    "allowNoBusiness": true,
+    "isPage": true,
+    "reviewedOn": "2026-10-13"
+  },
+  {
+    "slug": "page-batches",
+    "portal": "business",
+    "title": "Payment batches",
+    "summary": "Open payment batches in the business workspace.",
+    "category": "Payments",
+    "pageRoute": "/business/batches",
+    "keywords": [
+      "Payment batches",
+      "Payments"
+    ],
+    "adminRoles": [],
+    "permissions": [
+      "ViewBatches"
+    ],
+    "businessRoles": [],
+    "allowNoBusiness": false,
+    "isPage": true,
+    "reviewedOn": "2026-10-13"
+  },
+  {
+    "slug": "page-reports",
+    "portal": "business",
+    "title": "Transfer reports",
+    "summary": "Open transfer reports in the business workspace.",
+    "category": "Reporting",
+    "pageRoute": "/business/reports",
+    "keywords": [
+      "Transfer reports",
+      "Reporting"
+    ],
+    "adminRoles": [],
+    "permissions": [
+      "ViewReports"
+    ],
+    "businessRoles": [],
+    "allowNoBusiness": false,
+    "isPage": true,
+    "reviewedOn": "2026-10-13"
+  },
+  {
+    "slug": "page-support",
+    "portal": "business",
+    "title": "Support centre",
+    "summary": "Open support centre in the business workspace.",
+    "category": "Support",
+    "pageRoute": "/business/support",
+    "keywords": [
+      "Support centre",
+      "Support"
+    ],
+    "adminRoles": [],
+    "permissions": [],
+    "businessRoles": [],
+    "allowNoBusiness": true,
+    "isPage": true,
+    "reviewedOn": "2026-10-13"
+  },
+  {
+    "slug": "page-team",
+    "portal": "business",
+    "title": "Team and approvals",
+    "summary": "Open team and approvals in the business workspace.",
+    "category": "Team",
+    "pageRoute": "/business/team",
+    "keywords": [
+      "Team and approvals",
+      "Team"
+    ],
+    "adminRoles": [],
+    "permissions": [
+      "ManageBusinessUsers"
+    ],
+    "businessRoles": [],
+    "allowNoBusiness": false,
+    "isPage": true,
+    "reviewedOn": "2026-10-13"
+  },
+  {
+    "slug": "page-trading",
+    "portal": "business",
+    "title": "Trading",
+    "summary": "Open trading in the business workspace.",
+    "category": "Trading",
+    "pageRoute": "/business/trading",
+    "keywords": [
+      "Trading",
+      "Trading"
+    ],
+    "adminRoles": [],
+    "permissions": [
+      "ViewTrading"
+    ],
+    "businessRoles": [],
+    "allowNoBusiness": false,
+    "isPage": true,
+    "reviewedOn": "2026-10-13"
+  },
+  {
+    "slug": "page-digital-assets",
+    "portal": "business",
+    "title": "Digital assets",
+    "summary": "Open digital assets in the business workspace.",
+    "category": "Digital assets",
+    "pageRoute": "/business/digital-assets",
+    "keywords": [
+      "Digital assets",
+      "Digital assets"
+    ],
+    "adminRoles": [],
+    "permissions": [
+      "ViewDigitalAssets"
+    ],
+    "businessRoles": [],
+    "allowNoBusiness": false,
+    "isPage": true,
+    "reviewedOn": "2026-10-13"
+  },
+  {
+    "slug": "page-customer-accounts",
+    "portal": "business",
+    "title": "Customer accounts",
+    "summary": "Open customer accounts in the business workspace.",
+    "category": "Customer accounts",
+    "pageRoute": "/business/customer-accounts",
+    "keywords": [
+      "Customer accounts",
+      "Customer accounts"
+    ],
+    "adminRoles": [],
+    "permissions": [
+      "ViewEmbeddedFinance"
+    ],
+    "businessRoles": [],
+    "allowNoBusiness": false,
+    "isPage": true,
+    "reviewedOn": "2026-10-13"
+  },
+  {
+    "slug": "page-embedded-finance",
+    "portal": "business",
+    "title": "Embedded Finance",
+    "summary": "Open embedded finance in the business workspace.",
+    "category": "Integrations",
+    "pageRoute": "/business/embedded-finance",
+    "keywords": [
+      "Embedded Finance",
+      "Integrations"
+    ],
+    "adminRoles": [],
+    "permissions": [
+      "ManageApiAccess"
+    ],
+    "businessRoles": [],
+    "allowNoBusiness": false,
+    "isPage": true,
+    "reviewedOn": "2026-10-13"
+  },
+  {
+    "slug": "page-account",
+    "portal": "business",
+    "title": "Account and security",
+    "summary": "Open account and security in the business workspace.",
+    "category": "Security",
+    "pageRoute": "/business/account",
+    "keywords": [
+      "Account and security",
+      "Security"
+    ],
+    "adminRoles": [],
+    "permissions": [],
+    "businessRoles": [],
+    "allowNoBusiness": true,
+    "isPage": true,
+    "reviewedOn": "2026-10-13"
+  },
+  {
+    "slug": "page-dashboard",
+    "portal": "admin",
+    "title": "Operations overview",
+    "summary": "Open operations overview in the admin workspace.",
+    "category": "Getting started",
+    "pageRoute": "/admin/dashboard",
+    "keywords": [
+      "Operations overview",
+      "Getting started"
+    ],
+    "adminRoles": [
+      "Compliance",
+      "InternalAudit",
+      "Support",
+      "Operations",
+      "Admin",
+      "SuperAdmin"
+    ],
+    "permissions": [],
+    "businessRoles": [],
+    "allowNoBusiness": false,
+    "isPage": true,
+    "reviewedOn": "2026-10-13"
+  },
+  {
+    "slug": "page-users",
+    "portal": "admin",
+    "title": "User management",
+    "summary": "Open user management in the admin workspace.",
+    "category": "Administration",
+    "pageRoute": "/admin/users",
+    "keywords": [
+      "User management",
+      "Administration"
+    ],
+    "adminRoles": [
+      "Admin",
+      "SuperAdmin"
+    ],
+    "permissions": [],
+    "businessRoles": [],
+    "allowNoBusiness": false,
+    "isPage": true,
+    "reviewedOn": "2026-10-13"
+  },
+  {
+    "slug": "page-master-data",
+    "portal": "admin",
+    "title": "Master data",
+    "summary": "Open master data in the admin workspace.",
+    "category": "Master data",
+    "pageRoute": "/admin/master-data",
+    "keywords": [
+      "Master data",
+      "Master data"
+    ],
+    "adminRoles": [
+      "Admin",
+      "SuperAdmin"
+    ],
+    "permissions": [],
+    "businessRoles": [],
+    "allowNoBusiness": false,
+    "isPage": true,
+    "reviewedOn": "2026-10-13"
+  },
+  {
+    "slug": "page-provider-wallets",
+    "portal": "admin",
+    "title": "Provider wallets",
+    "summary": "Open provider wallets in the admin workspace.",
+    "category": "Provider wallets",
+    "pageRoute": "/admin/provider-wallets",
+    "keywords": [
+      "Provider wallets",
+      "Provider wallets"
+    ],
+    "adminRoles": [
+      "SuperAdmin"
+    ],
+    "permissions": [],
+    "businessRoles": [],
+    "allowNoBusiness": false,
+    "isPage": true,
+    "reviewedOn": "2026-10-13"
+  },
+  {
+    "slug": "page-fx",
+    "portal": "admin",
+    "title": "FX rates and pricing",
+    "summary": "Open fx rates and pricing in the admin workspace.",
+    "category": "Finance",
+    "pageRoute": "/admin/fx",
+    "keywords": [
+      "FX rates and pricing",
+      "Finance"
+    ],
+    "adminRoles": [
+      "Operations",
+      "Admin",
+      "SuperAdmin"
+    ],
+    "permissions": [],
+    "businessRoles": [],
+    "allowNoBusiness": false,
+    "isPage": true,
+    "reviewedOn": "2026-10-13"
+  },
+  {
+    "slug": "page-finance",
+    "portal": "admin",
+    "title": "Finance and close",
+    "summary": "Open finance and close in the admin workspace.",
+    "category": "Finance",
+    "pageRoute": "/admin/finance",
+    "keywords": [
+      "Finance and close",
+      "Finance"
+    ],
+    "adminRoles": [
+      "Operations",
+      "Admin",
+      "SuperAdmin"
+    ],
+    "permissions": [],
+    "businessRoles": [],
+    "allowNoBusiness": false,
+    "isPage": true,
+    "reviewedOn": "2026-10-13"
+  },
+  {
+    "slug": "page-trading-wallets",
+    "portal": "admin",
+    "title": "Trading and business wallets",
+    "summary": "Open trading and business wallets in the admin workspace.",
+    "category": "Trading",
+    "pageRoute": "/admin/trading-wallets",
+    "keywords": [
+      "Trading and business wallets",
+      "Trading"
+    ],
+    "adminRoles": [
+      "Admin",
+      "SuperAdmin"
+    ],
+    "permissions": [],
+    "businessRoles": [],
+    "allowNoBusiness": false,
+    "isPage": true,
+    "reviewedOn": "2026-10-13"
+  },
+  {
+    "slug": "page-providers",
+    "portal": "admin",
+    "title": "Provider operations and reconciliation",
+    "summary": "Open provider operations and reconciliation in the admin workspace.",
+    "category": "Providers",
+    "pageRoute": "/admin/providers",
+    "keywords": [
+      "Provider operations and reconciliation",
+      "Providers"
+    ],
+    "adminRoles": [
+      "Operations",
+      "Admin",
+      "SuperAdmin"
+    ],
+    "permissions": [],
+    "businessRoles": [],
+    "allowNoBusiness": false,
+    "isPage": true,
+    "reviewedOn": "2026-10-13"
+  },
+  {
+    "slug": "page-compliance",
+    "portal": "admin",
+    "title": "Compliance, KYC and AML",
+    "summary": "Open compliance, kyc and aml in the admin workspace.",
+    "category": "Compliance",
+    "pageRoute": "/admin/compliance",
+    "keywords": [
+      "Compliance, KYC and AML",
+      "Compliance"
+    ],
+    "adminRoles": [
+      "Compliance",
+      "Admin",
+      "SuperAdmin"
+    ],
+    "permissions": [],
+    "businessRoles": [],
+    "allowNoBusiness": false,
+    "isPage": true,
+    "reviewedOn": "2026-10-13"
+  },
+  {
+    "slug": "page-retention",
+    "portal": "admin",
+    "title": "Data retention and legal holds",
+    "summary": "Open data retention and legal holds in the admin workspace.",
+    "category": "Compliance",
+    "pageRoute": "/admin/retention",
+    "keywords": [
+      "Data retention and legal holds",
+      "Compliance"
+    ],
+    "adminRoles": [
+      "Compliance",
+      "Admin",
+      "SuperAdmin"
+    ],
+    "permissions": [],
+    "businessRoles": [],
+    "allowNoBusiness": false,
+    "isPage": true,
+    "reviewedOn": "2026-10-13"
+  },
+  {
+    "slug": "page-outbound-restrictions",
+    "portal": "admin",
+    "title": "Outbound funds restrictions",
+    "summary": "Open outbound funds restrictions in the admin workspace.",
+    "category": "Compliance",
+    "pageRoute": "/admin/outbound-restrictions",
+    "keywords": [
+      "Outbound funds restrictions",
+      "Compliance"
+    ],
+    "adminRoles": [
+      "Compliance",
+      "InternalAudit",
+      "Operations",
+      "Admin",
+      "SuperAdmin"
+    ],
+    "permissions": [],
+    "businessRoles": [],
+    "allowNoBusiness": false,
+    "isPage": true,
+    "reviewedOn": "2026-10-13"
+  },
+  {
+    "slug": "page-support",
+    "portal": "admin",
+    "title": "Support, disputes and investigations",
+    "summary": "Open support, disputes and investigations in the admin workspace.",
+    "category": "Support",
+    "pageRoute": "/admin/support",
+    "keywords": [
+      "Support, disputes and investigations",
+      "Support"
+    ],
+    "adminRoles": [
+      "Support",
+      "Operations",
+      "Admin",
+      "SuperAdmin"
+    ],
+    "permissions": [],
+    "businessRoles": [],
+    "allowNoBusiness": false,
+    "isPage": true,
+    "reviewedOn": "2026-10-13"
+  },
+  {
+    "slug": "page-digital-assets",
+    "portal": "admin",
+    "title": "Digital asset operations",
+    "summary": "Open digital asset operations in the admin workspace.",
+    "category": "Digital assets",
+    "pageRoute": "/admin/digital-assets",
+    "keywords": [
+      "Digital asset operations",
+      "Digital assets"
+    ],
+    "adminRoles": [
+      "Compliance",
+      "Operations",
+      "Admin",
+      "SuperAdmin"
+    ],
+    "permissions": [],
+    "businessRoles": [],
+    "allowNoBusiness": false,
+    "isPage": true,
+    "reviewedOn": "2026-10-13"
+  },
+  {
+    "slug": "page-embedded-finance",
+    "portal": "admin",
+    "title": "Embedded Finance operations",
+    "summary": "Open embedded finance operations in the admin workspace.",
+    "category": "Integrations",
+    "pageRoute": "/admin/embedded-finance",
+    "keywords": [
+      "Embedded Finance operations",
+      "Integrations"
+    ],
+    "adminRoles": [
+      "Compliance",
+      "InternalAudit",
+      "Operations",
+      "Admin",
+      "SuperAdmin"
+    ],
+    "permissions": [],
+    "businessRoles": [],
+    "allowNoBusiness": false,
+    "isPage": true,
+    "reviewedOn": "2026-10-13"
+  },
+  {
+    "slug": "page-monitoring",
+    "portal": "admin",
+    "title": "Monitoring, notifications and audit",
+    "summary": "Open monitoring, notifications and audit in the admin workspace.",
+    "category": "Monitoring",
+    "pageRoute": "/admin/monitoring",
+    "keywords": [
+      "Monitoring, notifications and audit",
+      "Monitoring"
+    ],
+    "adminRoles": [
+      "Compliance",
+      "InternalAudit",
+      "Operations",
+      "Admin",
+      "SuperAdmin"
+    ],
+    "permissions": [],
+    "businessRoles": [],
+    "allowNoBusiness": false,
+    "isPage": true,
+    "reviewedOn": "2026-10-13"
+  },
+  {
+    "slug": "page-treasury",
+    "portal": "admin",
+    "title": "Treasury and liquidity",
+    "summary": "Open treasury and liquidity in the admin workspace.",
+    "category": "Treasury",
+    "pageRoute": "/admin/treasury",
+    "keywords": [
+      "Treasury and liquidity",
+      "Treasury"
+    ],
+    "adminRoles": [
+      "Operations",
+      "Admin",
+      "SuperAdmin"
+    ],
+    "permissions": [],
+    "businessRoles": [],
+    "allowNoBusiness": false,
+    "isPage": true,
+    "reviewedOn": "2026-10-13"
+  },
+  {
+    "slug": "page-treasury-thresholds",
+    "portal": "admin",
+    "title": "Liquidity thresholds",
+    "summary": "Open liquidity thresholds in the admin workspace.",
+    "category": "Treasury",
+    "pageRoute": "/admin/treasury/thresholds",
+    "keywords": [
+      "Liquidity thresholds",
+      "Treasury"
+    ],
+    "adminRoles": [
+      "Operations",
+      "Admin",
+      "SuperAdmin"
+    ],
+    "permissions": [],
+    "businessRoles": [],
+    "allowNoBusiness": false,
+    "isPage": true,
+    "reviewedOn": "2026-10-13"
+  },
+  {
+    "slug": "page-treasury-internal-transfers",
+    "portal": "admin",
+    "title": "Internal liquidity transfers",
+    "summary": "Open internal liquidity transfers in the admin workspace.",
+    "category": "Treasury",
+    "pageRoute": "/admin/treasury/internal-transfers",
+    "keywords": [
+      "Internal liquidity transfers",
+      "Treasury"
+    ],
+    "adminRoles": [
+      "Operations",
+      "Admin",
+      "SuperAdmin"
+    ],
+    "permissions": [],
+    "businessRoles": [],
+    "allowNoBusiness": false,
+    "isPage": true,
+    "reviewedOn": "2026-10-13"
+  },
+  {
+    "slug": "page-treasury-rebalancing",
+    "portal": "admin",
+    "title": "Provider rebalancing",
+    "summary": "Open provider rebalancing in the admin workspace.",
+    "category": "Treasury",
+    "pageRoute": "/admin/treasury/rebalancing",
+    "keywords": [
+      "Provider rebalancing",
+      "Treasury"
+    ],
+    "adminRoles": [
+      "Operations",
+      "Admin",
+      "SuperAdmin"
+    ],
+    "permissions": [],
+    "businessRoles": [],
+    "allowNoBusiness": false,
+    "isPage": true,
+    "reviewedOn": "2026-10-13"
+  },
+  {
+    "slug": "page-treasury-settlements",
+    "portal": "admin",
+    "title": "Settlement management",
+    "summary": "Open settlement management in the admin workspace.",
+    "category": "Treasury",
+    "pageRoute": "/admin/treasury/settlements",
+    "keywords": [
+      "Settlement management",
+      "Treasury"
+    ],
+    "adminRoles": [
+      "Operations",
+      "Admin",
+      "SuperAdmin"
+    ],
+    "permissions": [],
+    "businessRoles": [],
+    "allowNoBusiness": false,
+    "isPage": true,
+    "reviewedOn": "2026-10-13"
+  },
+  {
+    "slug": "page-account",
+    "portal": "admin",
+    "title": "Account and security",
+    "summary": "Open account and security in the admin workspace.",
+    "category": "Security",
+    "pageRoute": "/admin/account",
+    "keywords": [
+      "Account and security",
+      "Security"
+    ],
+    "adminRoles": [
+      "Compliance",
+      "InternalAudit",
+      "Support",
+      "Operations",
+      "Admin",
+      "SuperAdmin"
+    ],
+    "permissions": [],
+    "businessRoles": [],
+    "allowNoBusiness": false,
+    "isPage": true,
+    "reviewedOn": "2026-10-13"
+  },
+  {
+    "slug": "find-records-and-guides",
+    "portal": "admin",
+    "title": "Find records, pages and how-to guides",
+    "summary": "Use one search to locate permitted records and instructions.",
+    "category": "Getting started",
+    "pageRoute": "/admin/dashboard",
+    "keywords": [
+      "search wiki readme library help recipient beneficiary payroll"
+    ],
+    "adminRoles": [
+      "Compliance",
+      "InternalAudit",
+      "Support",
+      "Operations",
+      "Admin",
+      "SuperAdmin"
+    ],
+    "permissions": [],
+    "businessRoles": [],
+    "allowNoBusiness": false,
+    "isPage": false,
+    "reviewedOn": "2026-10-13",
+    "prerequisites": [
+      "Sign in to the admin portal with permission to open Operations overview.",
+      "Use your assigned operational role; documentation does not grant additional authority."
+    ],
+    "steps": [
+      {
+        "title": "Confirm your workspace",
+        "instruction": "Check the signed-in account. In Business also verify the selected business name before searching."
+      },
+      {
+        "title": "Enter a search",
+        "instruction": "Use the header field or Ctrl+K (Command+K on macOS). Type at least two characters of a reference, name, currency or task."
+      },
+      {
+        "title": "Inspect matches",
+        "instruction": "Suggestions combine records, pages and guides. Use Tab to reach an item and Escape to close suggestions."
+      },
+      {
+        "title": "See all matches",
+        "instruction": "Press Enter or choose View all results. Select a category to page through its matches. Exact identifiers and references rank first."
+      },
+      {
+        "title": "Open the result",
+        "instruction": "Transfers and batches use their existing detail routes. Other records open an authorized metadata summary with a source-module link."
+      },
+      {
+        "title": "Read without leaving a form",
+        "instruction": "Use the header Help button for this page or choose Help & Guides in the sidebar for the full library."
+      }
+    ],
+    "expectedResult": "Results, counts and guides relate only to the current account and permitted business context.",
+    "warnings": [
+      "A search summary is not a payment confirmation. Search does not submit any financial action.",
+      "Credentials, raw provider payloads, identity documents and bank account numbers are not included."
+    ],
+    "troubleshooting": [
+      "No matches: try the exact reference, a shorter name or another category. Use the source module for a record type not covered by this search.",
+      "An unavailable or timeout response is not a zero-result search. Retry an exact reference or a single category.",
+      "Changing account or business clears displayed results; access is checked again when a record is opened."
+    ]
+  },
+  {
+    "slug": "account-security",
+    "portal": "admin",
+    "title": "Manage account security and browser-wide sign-in",
+    "summary": "Inspect your account, MFA recovery and active sessions.",
+    "category": "Security",
+    "pageRoute": "/admin/account",
+    "keywords": [
+      "mfa 2fa login recovery security sessions password"
+    ],
+    "adminRoles": [
+      "Compliance",
+      "InternalAudit",
+      "Support",
+      "Operations",
+      "Admin",
+      "SuperAdmin"
+    ],
+    "permissions": [],
+    "businessRoles": [],
+    "allowNoBusiness": false,
+    "isPage": false,
+    "reviewedOn": "2026-10-13",
+    "prerequisites": [
+      "Sign in to the admin portal with permission to open Account and security.",
+      "Use your assigned operational role; documentation does not grant additional authority."
+    ],
+    "steps": [
+      {
+        "title": "Open your account",
+        "instruction": "Choose Account & security from the account menu. Confirm the name, email and access roles displayed."
+      },
+      {
+        "title": "Review MFA",
+        "instruction": "Read Multi-factor authentication, its enabled/required state and the remaining recovery-code count."
+      },
+      {
+        "title": "Use the intended action",
+        "instruction": "Choose Generate new recovery codes or Reset your authenticator only when needed. Complete Current password, verification method and the requested authenticator or recovery code."
+      },
+      {
+        "title": "Secure new recovery codes",
+        "instruction": "After generating codes, use Copy codes or Download .txt, store them privately and choose I saved them. Previous recovery codes are invalidated."
+      },
+      {
+        "title": "Review signed-in sessions",
+        "instruction": "Use the session controls to sign out an unwanted device or other sessions. Inspect the updated list."
+      },
+      {
+        "title": "Use another browser tab",
+        "instruction": "A new protected tab at the same application address reuses the current browser-profile login. Logging out or changing account invalidates the older account state in other tabs."
+      }
+    ],
+    "expectedResult": "Account security and session changes are reflected by the existing security screen.",
+    "warnings": [
+      "This screen does not introduce a password-change or transaction-PIN form. Use only the controls actually displayed.",
+      "Different browser profiles and private browsing sessions have separate storage. Never share passwords, bearer tokens or recovery codes."
+    ],
+    "troubleshooting": [
+      "A missing or disabled action can indicate insufficient permission, unavailable configuration or an incompatible record status. Check the current account and selected record; do not bypass the restriction.",
+      "Correct the field errors shown. After an uncertain submission, refresh the record before trying again to avoid duplicate operations."
+    ]
+  },
+  {
+    "slug": "find-records-and-guides",
+    "portal": "business",
+    "title": "Find records, pages and how-to guides",
+    "summary": "Use one search to locate permitted records and instructions.",
+    "category": "Getting started",
+    "pageRoute": "/business/dashboard",
+    "keywords": [
+      "search wiki readme library help recipient beneficiary payroll"
+    ],
+    "adminRoles": [],
+    "permissions": [],
+    "businessRoles": [],
+    "allowNoBusiness": true,
+    "isPage": false,
+    "reviewedOn": "2026-10-13",
+    "prerequisites": [
+      "Sign in to the business portal with permission to open Business overview.",
+      "Check the selected business in the sidebar before proceeding."
+    ],
+    "steps": [
+      {
+        "title": "Confirm your workspace",
+        "instruction": "Check the signed-in account. In Business also verify the selected business name before searching."
+      },
+      {
+        "title": "Enter a search",
+        "instruction": "Use the header field or Ctrl+K (Command+K on macOS). Type at least two characters of a reference, name, currency or task."
+      },
+      {
+        "title": "Inspect matches",
+        "instruction": "Suggestions combine records, pages and guides. Use Tab to reach an item and Escape to close suggestions."
+      },
+      {
+        "title": "See all matches",
+        "instruction": "Press Enter or choose View all results. Select a category to page through its matches. Exact identifiers and references rank first."
+      },
+      {
+        "title": "Open the result",
+        "instruction": "Transfers and batches use their existing detail routes. Other records open an authorized metadata summary with a source-module link."
+      },
+      {
+        "title": "Read without leaving a form",
+        "instruction": "Use the header Help button for this page or choose Help & Guides in the sidebar for the full library."
+      }
+    ],
+    "expectedResult": "Results, counts and guides relate only to the current account and permitted business context.",
+    "warnings": [
+      "A search summary is not a payment confirmation. Search does not submit any financial action.",
+      "Credentials, raw provider payloads, identity documents and bank account numbers are not included."
+    ],
+    "troubleshooting": [
+      "No matches: try the exact reference, a shorter name or another category. Use the source module for a record type not covered by this search.",
+      "An unavailable or timeout response is not a zero-result search. Retry an exact reference or a single category.",
+      "Changing account or business clears displayed results; access is checked again when a record is opened."
+    ]
+  },
+  {
+    "slug": "account-security",
+    "portal": "business",
+    "title": "Manage account security and browser-wide sign-in",
+    "summary": "Inspect your account, MFA recovery and active sessions.",
+    "category": "Security",
+    "pageRoute": "/business/account",
+    "keywords": [
+      "mfa 2fa login recovery security sessions password"
+    ],
+    "adminRoles": [],
+    "permissions": [],
+    "businessRoles": [],
+    "allowNoBusiness": true,
+    "isPage": false,
+    "reviewedOn": "2026-10-13",
+    "prerequisites": [
+      "Sign in to the business portal with permission to open Account and security.",
+      "Check the selected business in the sidebar before proceeding."
+    ],
+    "steps": [
+      {
+        "title": "Open your account",
+        "instruction": "Choose Account & security from the account menu. Confirm the name, email and access roles displayed."
+      },
+      {
+        "title": "Review MFA",
+        "instruction": "Read Multi-factor authentication, its enabled/required state and the remaining recovery-code count."
+      },
+      {
+        "title": "Use the intended action",
+        "instruction": "Choose Generate new recovery codes or Reset your authenticator only when needed. Complete Current password, verification method and the requested authenticator or recovery code."
+      },
+      {
+        "title": "Secure new recovery codes",
+        "instruction": "After generating codes, use Copy codes or Download .txt, store them privately and choose I saved them. Previous recovery codes are invalidated."
+      },
+      {
+        "title": "Review signed-in sessions",
+        "instruction": "Use the session controls to sign out an unwanted device or other sessions. Inspect the updated list."
+      },
+      {
+        "title": "Use another browser tab",
+        "instruction": "A new protected tab at the same application address reuses the current browser-profile login. Logging out or changing account invalidates the older account state in other tabs."
+      }
+    ],
+    "expectedResult": "Account security and session changes are reflected by the existing security screen.",
+    "warnings": [
+      "This screen does not introduce a password-change or transaction-PIN form. Use only the controls actually displayed.",
+      "Different browser profiles and private browsing sessions have separate storage. Never share passwords, bearer tokens or recovery codes."
+    ],
+    "troubleshooting": [
+      "A missing or disabled action can indicate insufficient permission, unavailable configuration or an incompatible record status. Check the current account and selected record; do not bypass the restriction.",
+      "Correct the field errors shown. After an uncertain submission, refresh the record before trying again to avoid duplicate operations."
+    ]
+  },
+  {
+    "slug": "manage-beneficiary",
+    "portal": "business",
+    "title": "Add or edit a beneficiary",
+    "summary": "Save a recipient before preparing a payment.",
+    "category": "Payments",
+    "pageRoute": "/business/beneficiaries",
+    "keywords": [
+      "recipient beneficiary supplier"
+    ],
+    "adminRoles": [],
+    "permissions": [
+      "ViewBeneficiaries",
+      "ManageBeneficiaries"
+    ],
+    "businessRoles": [],
+    "allowNoBusiness": false,
+    "isPage": false,
+    "reviewedOn": "2026-10-13",
+    "prerequisites": [
+      "Sign in to the business portal with permission to open Beneficiaries.",
+      "Check the selected business in the sidebar before proceeding."
+    ],
+    "steps": [
+      {
+        "title": "Check for duplicates",
+        "instruction": "Choose Beneficiaries. Search by name, country or type and Apply filters before creating a recipient."
+      },
+      {
+        "title": "Open the form",
+        "instruction": "Choose Add beneficiary or select an existing record and choose Edit."
+      },
+      {
+        "title": "Enter the profile",
+        "instruction": "Select the beneficiary type and configured Country, complete Name and the applicable contact fields."
+      },
+      {
+        "title": "Save and verify",
+        "instruction": "Choose Save beneficiary, correct validation errors and open the resulting record. Bank accounts and mobile wallets are added separately."
+      }
+    ],
+    "expectedResult": "The saved beneficiary belongs to the selected business.",
+    "warnings": [
+      "Check the confirmation and returned status. Saving a request does not necessarily complete the operation."
+    ],
+    "troubleshooting": [
+      "A missing or disabled action can indicate insufficient permission, unavailable configuration or an incompatible record status. Check the current account and selected record; do not bypass the restriction.",
+      "Correct the field errors shown. After an uncertain submission, refresh the record before trying again to avoid duplicate operations."
+    ]
+  },
+  {
+    "slug": "beneficiary-bank-wallet",
+    "portal": "business",
+    "title": "Add a beneficiary bank account or mobile wallet",
+    "summary": "Attach a payout destination to an existing recipient.",
+    "category": "Payments",
+    "pageRoute": "/business/beneficiaries",
+    "keywords": [],
+    "adminRoles": [],
+    "permissions": [
+      "ViewBeneficiaries",
+      "ManageBeneficiaries"
+    ],
+    "businessRoles": [],
+    "allowNoBusiness": false,
+    "isPage": false,
+    "reviewedOn": "2026-10-13",
+    "prerequisites": [
+      "Sign in to the business portal with permission to open Beneficiaries.",
+      "Check the selected business in the sidebar before proceeding."
+    ],
+    "steps": [
+      {
+        "title": "Select the recipient",
+        "instruction": "Open Beneficiaries and select the intended saved record."
+      },
+      {
+        "title": "Choose the destination type",
+        "instruction": "Choose Add bank or Add wallet. For a bank select Currency / asset and Bank; for a mobile wallet select Provider."
+      },
+      {
+        "title": "Complete and verify",
+        "instruction": "Enter the account or wallet details and applicable routing fields. Use Verify account where offered and resolve any name mismatch."
+      },
+      {
+        "title": "Save and inspect",
+        "instruction": "Choose Add bank account or Add mobile wallet. Verify the destination is under the correct recipient; set a default only deliberately."
+      }
+    ],
+    "expectedResult": "The destination can be selected by compatible transfers.",
+    "warnings": [
+      "Saving a destination does not send money. Check names, currency, account details and routing before later payments."
+    ],
+    "troubleshooting": [
+      "A missing or disabled action can indicate insufficient permission, unavailable configuration or an incompatible record status. Check the current account and selected record; do not bypass the restriction.",
+      "Correct the field errors shown. After an uncertain submission, refresh the record before trying again to avoid duplicate operations."
+    ]
+  },
+  {
+    "slug": "quote-and-create-transfer",
+    "portal": "business",
+    "title": "Quote and create a transfer",
+    "summary": "Prepare a transfer with the intended destination and funding source.",
+    "category": "Payments",
+    "pageRoute": "/business/transfers",
+    "keywords": [
+      "send money fx quote pay supplier"
+    ],
+    "adminRoles": [],
+    "permissions": [
+      "ViewTransfers",
+      "CreateTransfers"
+    ],
+    "businessRoles": [],
+    "allowNoBusiness": false,
+    "isPage": false,
+    "reviewedOn": "2026-10-13",
+    "prerequisites": [
+      "Sign in to the business portal with permission to open Transfers.",
+      "Check the selected business in the sidebar before proceeding."
+    ],
+    "steps": [
+      {
+        "title": "Start a transfer",
+        "instruction": "Choose Transfers, then New transfer. Confirm the selected business."
+      },
+      {
+        "title": "Choose the corridor",
+        "instruction": "Select Source country, Destination country, Source currency / asset and Destination currency / asset; enter Source amount."
+      },
+      {
+        "title": "Select the beneficiary",
+        "instruction": "Complete Transfer type, Beneficiary, applicable Bank account, Purpose, Purpose note and Funding source."
+      },
+      {
+        "title": "Request and review a quote",
+        "instruction": "Choose Get quote. Read amounts, customer rate, fee, total payable and expiry."
+      },
+      {
+        "title": "Create and inspect",
+        "instruction": "Choose Create transfer while the quote is valid. Open the returned reference to inspect pending approval or funding requirements."
+      }
+    ],
+    "expectedResult": "A transfer record exists with its own approval, funding and processing state.",
+    "warnings": [
+      "A quote is not a completed payment. Refresh the transfer list before retrying an uncertain creation response."
+    ],
+    "troubleshooting": [
+      "A missing or disabled action can indicate insufficient permission, unavailable configuration or an incompatible record status. Check the current account and selected record; do not bypass the restriction.",
+      "Correct the field errors shown. After an uncertain submission, refresh the record before trying again to avoid duplicate operations."
+    ]
+  },
+  {
+    "slug": "fund-and-track-transfer",
+    "portal": "business",
+    "title": "Fund and track an existing transfer",
+    "summary": "Use the funding step that applies to the recorded transfer.",
+    "category": "Payments",
+    "pageRoute": "/business/transfers",
+    "keywords": [
+      "collection funding interac wallet request money"
+    ],
+    "adminRoles": [],
+    "permissions": [
+      "ViewTransfers",
+      "ManageFunding"
+    ],
+    "businessRoles": [],
+    "allowNoBusiness": false,
+    "isPage": false,
+    "reviewedOn": "2026-10-13",
+    "prerequisites": [
+      "Sign in to the business portal with permission to open Transfers.",
+      "Check the selected business in the sidebar before proceeding."
+    ],
+    "steps": [
+      {
+        "title": "Open the exact transfer",
+        "instruction": "Open its reference from Transfers or search. Read Transfer summary, approval state and funding source."
+      },
+      {
+        "title": "Refresh the current state",
+        "instruction": "Use Refresh or Retry funding status before acting after an uncertain response."
+      },
+      {
+        "title": "Fund from a wallet when eligible",
+        "instruction": "For a Business wallet transfer choose Fund from business wallet. Review the resulting funding state."
+      },
+      {
+        "title": "Create external funding when offered",
+        "instruction": "For External collection choose the supported payment method and Create Interac funding request where shown. Use only the returned instructions for this transfer."
+      },
+      {
+        "title": "Send the request when supported",
+        "instruction": "Enter Payer email and Request expiry (hours), then choose Send Interac request. Sending the request does not confirm payment."
+      },
+      {
+        "title": "Track completion",
+        "instruction": "Refresh the detail and review Approval history and Timeline. Wait for confirmed collection and subsequent payout states."
+      }
+    ],
+    "expectedResult": "Funding and transfer progress are visible on the existing detail screen.",
+    "warnings": [
+      "Do not reuse another transfer’s funding instructions. After a timeout refresh before creating another request."
+    ],
+    "troubleshooting": [
+      "A missing or disabled action can indicate insufficient permission, unavailable configuration or an incompatible record status. Check the current account and selected record; do not bypass the restriction.",
+      "Correct the field errors shown. After an uncertain submission, refresh the record before trying again to avoid duplicate operations."
+    ]
+  },
+  {
+    "slug": "review-transfer-approval",
+    "portal": "business",
+    "title": "Approve or reject a transfer",
+    "summary": "Review full transfer details under the configured approval policy.",
+    "category": "Payments",
+    "pageRoute": "/business/transfers",
+    "keywords": [],
+    "adminRoles": [],
+    "permissions": [
+      "ViewTransfers",
+      "ApproveTransfers"
+    ],
+    "businessRoles": [],
+    "allowNoBusiness": false,
+    "isPage": false,
+    "reviewedOn": "2026-10-13",
+    "prerequisites": [
+      "Sign in to the business portal with permission to open Transfers.",
+      "Check the selected business in the sidebar before proceeding."
+    ],
+    "steps": [
+      {
+        "title": "Open a pending record",
+        "instruction": "Confirm business, beneficiary, source/destination amounts, fees and funding source."
+      },
+      {
+        "title": "Read approval requirements",
+        "instruction": "Review the approval state and history; more than one approval may be required."
+      },
+      {
+        "title": "Record a decision",
+        "instruction": "Enter a meaningful Comment in Review transfer and choose Approve or Reject."
+      },
+      {
+        "title": "Verify the result",
+        "instruction": "Refresh the transfer and check approval history and any remaining funding or approval step."
+      }
+    ],
+    "expectedResult": "The decision is recorded and the transfer follows its existing policy.",
+    "warnings": [
+      "Do not approve from a search preview alone. Creator self-approval may be prohibited."
+    ],
+    "troubleshooting": [
+      "A missing or disabled action can indicate insufficient permission, unavailable configuration or an incompatible record status. Check the current account and selected record; do not bypass the restriction.",
+      "Correct the field errors shown. After an uncertain submission, refresh the record before trying again to avoid duplicate operations."
+    ]
+  },
+  {
+    "slug": "review-wallet-ledger",
+    "portal": "business",
+    "title": "Review wallet balances and activity",
+    "summary": "Distinguish available funds from held or pending amounts.",
+    "category": "Funding and wallets",
+    "pageRoute": "/business/funding",
+    "keywords": [],
+    "adminRoles": [],
+    "permissions": [
+      "ViewWallets"
+    ],
+    "businessRoles": [],
+    "allowNoBusiness": false,
+    "isPage": false,
+    "reviewedOn": "2026-10-13",
+    "prerequisites": [
+      "Sign in to the business portal with permission to open Business wallets.",
+      "Check the selected business in the sidebar before proceeding."
+    ],
+    "steps": [
+      {
+        "title": "Open your wallets",
+        "instruction": "Choose Business wallets / Funding in the selected business."
+      },
+      {
+        "title": "Select a currency",
+        "instruction": "Choose the relevant wallet card and read its status and available balance."
+      },
+      {
+        "title": "Inspect movements",
+        "instruction": "Review the wallet ledger’s dates, references and movements; inspect related transfer records when needed."
+      },
+      {
+        "title": "Refresh observations",
+        "instruction": "Use Refresh or Retry ledger after an update. Use transfer detail for its funding actions."
+      }
+    ],
+    "expectedResult": "The selected wallet’s recorded balance and activity can be reviewed.",
+    "warnings": [
+      "A displayed available balance is not a reservation and can change. Held or unconfirmed funds are not automatically spendable."
+    ],
+    "troubleshooting": [
+      "A missing or disabled action can indicate insufficient permission, unavailable configuration or an incompatible record status. Check the current account and selected record; do not bypass the restriction.",
+      "Correct the field errors shown. After an uncertain submission, refresh the record before trying again to avoid duplicate operations."
+    ]
+  },
+  {
+    "slug": "import-payment-batch",
+    "portal": "business",
+    "title": "Import and validate a payment batch",
+    "summary": "Create a batch using the supported CSV format.",
+    "category": "Payments",
+    "pageRoute": "/business/batches",
+    "keywords": [
+      "bulk payroll csv batch"
+    ],
+    "adminRoles": [],
+    "permissions": [
+      "ViewBatches",
+      "ManageBatches"
+    ],
+    "businessRoles": [],
+    "allowNoBusiness": false,
+    "isPage": false,
+    "reviewedOn": "2026-10-13",
+    "prerequisites": [
+      "Sign in to the business portal with permission to open Payment batches.",
+      "Check the selected business in the sidebar before proceeding."
+    ],
+    "steps": [
+      {
+        "title": "Open the importer",
+        "instruction": "Choose Payment batches, then Import CSV batch."
+      },
+      {
+        "title": "Prepare the file",
+        "instruction": "Use the importer’s current CSV structure. Check beneficiary references and amounts against the selected business."
+      },
+      {
+        "title": "Set and import",
+        "instruction": "Enter Batch name, Source country and Source currency, select the file, then Import & validate."
+      },
+      {
+        "title": "Inspect validation",
+        "instruction": "Open the returned batch and review item errors and totals. Correct invalid data before following the submission flow."
+      }
+    ],
+    "expectedResult": "A saved batch has item-level validation results; it has not necessarily been paid.",
+    "warnings": [
+      "Do not invent CSV headers. Check for an existing batch after an interrupted import before uploading again."
+    ],
+    "troubleshooting": [
+      "A missing or disabled action can indicate insufficient permission, unavailable configuration or an incompatible record status. Check the current account and selected record; do not bypass the restriction.",
+      "Correct the field errors shown. After an uncertain submission, refresh the record before trying again to avoid duplicate operations."
+    ]
+  },
+  {
+    "slug": "review-payment-batch",
+    "portal": "business",
+    "title": "Submit, review and track a payment batch",
+    "summary": "Follow batch approval and item outcomes.",
+    "category": "Payments",
+    "pageRoute": "/business/batches",
+    "keywords": [],
+    "adminRoles": [],
+    "permissions": [
+      "ViewBatches"
+    ],
+    "businessRoles": [],
+    "allowNoBusiness": false,
+    "isPage": false,
+    "reviewedOn": "2026-10-13",
+    "prerequisites": [
+      "Sign in to the business portal with permission to open Payment batches.",
+      "Check the selected business in the sidebar before proceeding."
+    ],
+    "steps": [
+      {
+        "title": "Open the batch",
+        "instruction": "Choose the exact batch reference from the list or search."
+      },
+      {
+        "title": "Inspect items",
+        "instruction": "Review recipients, validation messages and the total payable amount."
+      },
+      {
+        "title": "Use the permitted action",
+        "instruction": "Submit batch only when eligible. An authorized approver enters Approval comment and chooses Approve or Reject."
+      },
+      {
+        "title": "Track item outcomes",
+        "instruction": "Review updated batch and individual item states. Use Export CSV where permitted to retain results."
+      }
+    ],
+    "expectedResult": "Batch approval and processing remain visible at both batch and item level.",
+    "warnings": [
+      "A partially completed batch requires item-level investigation; do not blindly resubmit every payment."
+    ],
+    "troubleshooting": [
+      "A missing or disabled action can indicate insufficient permission, unavailable configuration or an incompatible record status. Check the current account and selected record; do not bypass the restriction.",
+      "Correct the field errors shown. After an uncertain submission, refresh the record before trying again to avoid duplicate operations."
+    ]
+  },
+  {
+    "slug": "complete-business-verification",
+    "portal": "business",
+    "title": "Complete business verification (KYB)",
+    "summary": "Prepare company information, beneficial owners and evidence.",
+    "category": "Verification",
+    "pageRoute": "/business/verification",
+    "keywords": [
+      "kyb onboarding verification documents owners"
+    ],
+    "adminRoles": [],
+    "permissions": [],
+    "businessRoles": [
+      "Owner",
+      "Admin"
+    ],
+    "allowNoBusiness": true,
+    "isPage": false,
+    "reviewedOn": "2026-10-13",
+    "prerequisites": [
+      "Sign in to the business portal with permission to open Business verification.",
+      "Check the selected business in the sidebar before proceeding."
+    ],
+    "steps": [
+      {
+        "title": "Review requirements",
+        "instruction": "Choose Business verification and read the current status and returned feedback."
+      },
+      {
+        "title": "Save the company profile",
+        "instruction": "Complete actual company details, addresses, business type, contacts and scope. Choose Start verification or Save company profile as displayed."
+      },
+      {
+        "title": "Add owners",
+        "instruction": "Choose Add owner; enter identity, ownership, control and signer information, then Save owner."
+      },
+      {
+        "title": "Upload evidence",
+        "instruction": "Use Upload front / Upload back for the correct owner where requested. In Business documents choose the requested type and Upload document."
+      },
+      {
+        "title": "Submit and track",
+        "instruction": "Review the application and choose Submit KYB application. Refresh and respond to any missing-evidence or rejection feedback."
+      }
+    ],
+    "expectedResult": "The application enters its recorded review state; compliance approval remains a separate decision.",
+    "warnings": [
+      "Use actual identity and company information. Do not reuse another business’s documents."
+    ],
+    "troubleshooting": [
+      "A missing or disabled action can indicate insufficient permission, unavailable configuration or an incompatible record status. Check the current account and selected record; do not bypass the restriction.",
+      "Correct the field errors shown. After an uncertain submission, refresh the record before trying again to avoid duplicate operations."
+    ]
+  },
+  {
+    "slug": "business-transfer-reports",
+    "portal": "business",
+    "title": "Filter and export transfer reports",
+    "summary": "Review a selected business and reporting period.",
+    "category": "Reporting",
+    "pageRoute": "/business/reports",
+    "keywords": [],
+    "adminRoles": [],
+    "permissions": [
+      "ViewReports"
+    ],
+    "businessRoles": [],
+    "allowNoBusiness": false,
+    "isPage": false,
+    "reviewedOn": "2026-10-13",
+    "prerequisites": [
+      "Sign in to the business portal with permission to open Transfer reports.",
+      "Check the selected business in the sidebar before proceeding."
+    ],
+    "steps": [
+      {
+        "title": "Open Transfer reports",
+        "instruction": "Confirm the selected business before reading totals."
+      },
+      {
+        "title": "Set the window",
+        "instruction": "Choose From and To, then Apply. Confirm the dates displayed."
+      },
+      {
+        "title": "Read currencies separately",
+        "instruction": "Inspect Source totals and Destination totals; do not add amounts in unlike currencies."
+      },
+      {
+        "title": "Export safely",
+        "instruction": "Choose Export CSV and retain the file under your business data-handling policy."
+      }
+    ],
+    "expectedResult": "The report and export use the selected business and date range.",
+    "warnings": [
+      "The report is not a provider settlement statement or an instruction to move money."
+    ],
+    "troubleshooting": [
+      "A missing or disabled action can indicate insufficient permission, unavailable configuration or an incompatible record status. Check the current account and selected record; do not bypass the restriction.",
+      "Correct the field errors shown. After an uncertain submission, refresh the record before trying again to avoid duplicate operations."
+    ]
+  },
+  {
+    "slug": "invite-manage-business-team",
+    "portal": "business",
+    "title": "Invite and manage business team members",
+    "summary": "Grant the permissions needed by each colleague.",
+    "category": "Team",
+    "pageRoute": "/business/team",
+    "keywords": [],
+    "adminRoles": [],
+    "permissions": [
+      "ManageBusinessUsers"
+    ],
+    "businessRoles": [],
+    "allowNoBusiness": false,
+    "isPage": false,
+    "reviewedOn": "2026-10-13",
+    "prerequisites": [
+      "Sign in to the business portal with permission to open Team and approvals.",
+      "Check the selected business in the sidebar before proceeding."
+    ],
+    "steps": [
+      {
+        "title": "Confirm the business",
+        "instruction": "Open Team & approvals and check the workspace name."
+      },
+      {
+        "title": "Prepare the invitation",
+        "instruction": "Choose Invite team member, enter Email, choose Role and review Permissions."
+      },
+      {
+        "title": "Send and track",
+        "instruction": "Choose Send invitation. Inspect Pending and previous invitations; Resend or Revoke only the intended invite."
+      },
+      {
+        "title": "Manage an existing member",
+        "instruction": "In Business users update role, permission selections or Active flag where allowed, then Save and verify."
+      }
+    ],
+    "expectedResult": "The invitation or membership change applies to this business.",
+    "warnings": [
+      "Do not grant broad permissions merely to reveal a menu. Owner-protection rules can restrict changes."
+    ],
+    "troubleshooting": [
+      "A missing or disabled action can indicate insufficient permission, unavailable configuration or an incompatible record status. Check the current account and selected record; do not bypass the restriction.",
+      "Correct the field errors shown. After an uncertain submission, refresh the record before trying again to avoid duplicate operations."
+    ]
+  },
+  {
+    "slug": "configure-transfer-approvals",
+    "portal": "business",
+    "title": "Configure the business transfer approval policy",
+    "summary": "Set required approvals and thresholds deliberately.",
+    "category": "Team",
+    "pageRoute": "/business/team",
+    "keywords": [],
+    "adminRoles": [],
+    "permissions": [
+      "ManageBusinessUsers"
+    ],
+    "businessRoles": [],
+    "allowNoBusiness": false,
+    "isPage": false,
+    "reviewedOn": "2026-10-13",
+    "prerequisites": [
+      "Sign in to the business portal with permission to open Team and approvals.",
+      "Check the selected business in the sidebar before proceeding."
+    ],
+    "steps": [
+      {
+        "title": "Open the policy",
+        "instruction": "Find Transfer approval policy in Team & approvals."
+      },
+      {
+        "title": "Set requirements",
+        "instruction": "Review Require transfer approval, Required approvals and Approval threshold."
+      },
+      {
+        "title": "Decide self-approval",
+        "instruction": "Set Allow transfer creator approval only under your approved policy."
+      },
+      {
+        "title": "Save and check",
+        "instruction": "Choose Save approval policy and reread the values. Existing transfers may retain their recorded requirements."
+      }
+    ],
+    "expectedResult": "The policy is saved; specific transfers continue through their own lifecycle.",
+    "warnings": [
+      "A policy change does not itself approve or reject a transfer."
+    ],
+    "troubleshooting": [
+      "A missing or disabled action can indicate insufficient permission, unavailable configuration or an incompatible record status. Check the current account and selected record; do not bypass the restriction.",
+      "Correct the field errors shown. After an uncertain submission, refresh the record before trying again to avoid duplicate operations."
+    ]
+  },
+  {
+    "slug": "convert-business-assets",
+    "portal": "business",
+    "title": "Convert assets using an instant quote",
+    "summary": "Request and execute an eligible instant conversion.",
+    "category": "Trading",
+    "pageRoute": "/business/trading",
+    "keywords": [
+      "fx exchange currency instant"
+    ],
+    "adminRoles": [],
+    "permissions": [
+      "ViewTrading",
+      "Trade"
+    ],
+    "businessRoles": [],
+    "allowNoBusiness": false,
+    "isPage": false,
+    "reviewedOn": "2026-10-13",
+    "prerequisites": [
+      "Sign in to the business portal with permission to open Trading.",
+      "Check the selected business in the sidebar before proceeding."
+    ],
+    "steps": [
+      {
+        "title": "Open Trading",
+        "instruction": "Review the selected business balances and available pairs."
+      },
+      {
+        "title": "Request the quote",
+        "instruction": "In Convert assets select Pair and Source amount, then Get quote."
+      },
+      {
+        "title": "Review and execute",
+        "instruction": "Check amounts, rate, fees and expiry. Choose Execute conversion only while valid and with sufficient available funds."
+      },
+      {
+        "title": "Inspect settlement",
+        "instruction": "Refresh Instant conversions and read the resulting state; pending or failed is not completed."
+      }
+    ],
+    "expectedResult": "A conversion record and settlement state are visible.",
+    "warnings": [
+      "Execution can move funds. Do not execute a live conversion merely to test the interface."
+    ],
+    "troubleshooting": [
+      "A missing or disabled action can indicate insufficient permission, unavailable configuration or an incompatible record status. Check the current account and selected record; do not bypass the restriction.",
+      "Correct the field errors shown. After an uncertain submission, refresh the record before trying again to avoid duplicate operations."
+    ]
+  },
+  {
+    "slug": "place-marketplace-order",
+    "portal": "business",
+    "title": "Place or cancel a marketplace order",
+    "summary": "Use the supported pair and order controls.",
+    "category": "Trading",
+    "pageRoute": "/business/trading",
+    "keywords": [],
+    "adminRoles": [],
+    "permissions": [
+      "ViewTrading",
+      "Trade"
+    ],
+    "businessRoles": [],
+    "allowNoBusiness": false,
+    "isPage": false,
+    "reviewedOn": "2026-10-13",
+    "prerequisites": [
+      "Sign in to the business portal with permission to open Trading.",
+      "Check the selected business in the sidebar before proceeding."
+    ],
+    "steps": [
+      {
+        "title": "Inspect the book",
+        "instruction": "Choose the pair in Trading and Refresh book."
+      },
+      {
+        "title": "Prepare the order",
+        "instruction": "Select Side and Type, enter Quantity and Limit price when required."
+      },
+      {
+        "title": "Place and track",
+        "instruction": "Review values, choose Place order, then inspect Marketplace orders and Marketplace trade history."
+      },
+      {
+        "title": "Cancel only eligible quantity",
+        "instruction": "Use Cancel when offered and review the remaining quantity and holds afterwards."
+      }
+    ],
+    "expectedResult": "Order states and resulting trades are visible.",
+    "warnings": [
+      "An order may reserve funds and execute through matching. Cancellation cannot undo quantity already filled."
+    ],
+    "troubleshooting": [
+      "A missing or disabled action can indicate insufficient permission, unavailable configuration or an incompatible record status. Check the current account and selected record; do not bypass the restriction.",
+      "Correct the field errors shown. After an uncertain submission, refresh the record before trying again to avoid duplicate operations."
+    ]
+  },
+  {
+    "slug": "business-rfq-workflow",
+    "portal": "business",
+    "title": "Request, quote and accept a business RFQ",
+    "summary": "Use the existing counterparty quotation workflow.",
+    "category": "Trading",
+    "pageRoute": "/business/trading",
+    "keywords": [],
+    "adminRoles": [],
+    "permissions": [
+      "ViewTrading",
+      "Trade"
+    ],
+    "businessRoles": [],
+    "allowNoBusiness": false,
+    "isPage": false,
+    "reviewedOn": "2026-10-13",
+    "prerequisites": [
+      "Sign in to the business portal with permission to open Trading.",
+      "Check the selected business in the sidebar before proceeding."
+    ],
+    "steps": [
+      {
+        "title": "Set the RFQ",
+        "instruction": "In Business RFQs select an allowed Counterparty, pair, side and quantity."
+      },
+      {
+        "title": "Create and quote",
+        "instruction": "Choose Create RFQ. An eligible counterparty reviews it and uses Submit quote with offered terms."
+      },
+      {
+        "title": "Review acceptance",
+        "instruction": "The requester checks quote values, expiry and funds before choosing Accept."
+      },
+      {
+        "title": "Track or cancel",
+        "instruction": "Inspect the updated RFQ and any resulting trade. Cancel RFQ only where the state permits it."
+      }
+    ],
+    "expectedResult": "RFQ decisions and resulting trading records can be inspected.",
+    "warnings": [
+      "Accepting a quote can commit funds. It is not a harmless interface test."
+    ],
+    "troubleshooting": [
+      "A missing or disabled action can indicate insufficient permission, unavailable configuration or an incompatible record status. Check the current account and selected record; do not bypass the restriction.",
+      "Correct the field errors shown. After an uncertain submission, refresh the record before trying again to avoid duplicate operations."
+    ]
+  },
+  {
+    "slug": "receive-digital-assets",
+    "portal": "business",
+    "title": "Create a digital-asset deposit intent or address",
+    "summary": "Use the supported asset and exact network instructions.",
+    "category": "Digital assets",
+    "pageRoute": "/business/digital-assets",
+    "keywords": [
+      "crypto receive usdt usdc"
+    ],
+    "adminRoles": [],
+    "permissions": [
+      "ViewDigitalAssets",
+      "ManageDigitalAssets"
+    ],
+    "businessRoles": [],
+    "allowNoBusiness": false,
+    "isPage": false,
+    "reviewedOn": "2026-10-13",
+    "prerequisites": [
+      "Sign in to the business portal with permission to open Digital assets.",
+      "Check the selected business in the sidebar before proceeding."
+    ],
+    "steps": [
+      {
+        "title": "Choose the receiving context",
+        "instruction": "Open Digital assets and select Asset account, Network and Provider."
+      },
+      {
+        "title": "Create the receiving record",
+        "instruction": "Enter Exact deposit amount and Create deposit intent, or use Create deposit address where supported."
+      },
+      {
+        "title": "Inspect the instructions",
+        "instruction": "Check asset, network, address, tag/memo and expiry. Copy address only from the intended record."
+      },
+      {
+        "title": "Track an approved deposit",
+        "instruction": "Use the exact asset/network and requested details. Refresh deposit intents, addresses and activity until the system confirms credit."
+      }
+    ],
+    "expectedResult": "The receiving record and its confirmation state are visible.",
+    "warnings": [
+      "Wrong networks or missing memos can cause loss. Creating an address or seeing an on-chain transaction does not itself confirm wallet credit."
+    ],
+    "troubleshooting": [
+      "A missing or disabled action can indicate insufficient permission, unavailable configuration or an incompatible record status. Check the current account and selected record; do not bypass the restriction.",
+      "Correct the field errors shown. After an uncertain submission, refresh the record before trying again to avoid duplicate operations."
+    ]
+  },
+  {
+    "slug": "send-digital-assets",
+    "portal": "business",
+    "title": "Add a destination and send digital assets",
+    "summary": "Review the network, destination and amount before submitting.",
+    "category": "Digital assets",
+    "pageRoute": "/business/digital-assets",
+    "keywords": [
+      "crypto withdrawal memo address"
+    ],
+    "adminRoles": [],
+    "permissions": [
+      "ViewDigitalAssets",
+      "ManageDigitalAssets"
+    ],
+    "businessRoles": [],
+    "allowNoBusiness": false,
+    "isPage": false,
+    "reviewedOn": "2026-10-13",
+    "prerequisites": [
+      "Sign in to the business portal with permission to open Digital assets.",
+      "Check the selected business in the sidebar before proceeding."
+    ],
+    "steps": [
+      {
+        "title": "Save the destination",
+        "instruction": "In Add withdrawal address choose Configured network and enter Blockchain address, required Destination tag / memo and Label, then Save destination."
+      },
+      {
+        "title": "Prepare withdrawal",
+        "instruction": "In Send digital assets select Destination and Amount. Complete any displayed reference or beneficiary/originator requirements."
+      },
+      {
+        "title": "Review and submit",
+        "instruction": "Check the asset, network, address, amount and fees, then Submit withdrawal only when authorized."
+      },
+      {
+        "title": "Track the state",
+        "instruction": "Refresh Withdrawal history and Digital-asset activity. Verify the final outcome before another attempt."
+      }
+    ],
+    "expectedResult": "The withdrawal request has a recorded processing or final state.",
+    "warnings": [
+      "Digital transfers may be irreversible. A saved destination or submitted request is not proof of completed settlement."
+    ],
+    "troubleshooting": [
+      "A missing or disabled action can indicate insufficient permission, unavailable configuration or an incompatible record status. Check the current account and selected record; do not bypass the restriction.",
+      "Correct the field errors shown. After an uncertain submission, refresh the record before trying again to avoid duplicate operations."
+    ]
+  },
+  {
+    "slug": "create-customer-currency-account",
+    "portal": "business",
+    "title": "Add a customer and currency account",
+    "summary": "Create related records and request supported bank details.",
+    "category": "Customer accounts",
+    "pageRoute": "/business/customer-accounts",
+    "keywords": [],
+    "adminRoles": [],
+    "permissions": [
+      "ViewEmbeddedFinance",
+      "ManageEmbeddedCustomers"
+    ],
+    "businessRoles": [],
+    "allowNoBusiness": false,
+    "isPage": false,
+    "reviewedOn": "2026-10-13",
+    "prerequisites": [
+      "Sign in to the business portal with permission to open Customer accounts.",
+      "Check the selected business in the sidebar before proceeding."
+    ],
+    "steps": [
+      {
+        "title": "Check existing customers",
+        "instruction": "Search Customer accounts by name/reference before Add customer."
+      },
+      {
+        "title": "Save the customer",
+        "instruction": "Complete Customer name, unique Customer reference, Country and applicable contact details, then Save customer."
+      },
+      {
+        "title": "Add the currency account",
+        "instruction": "Select the saved customer. In Add a currency account choose Currency and Account reference, then Add account."
+      },
+      {
+        "title": "Request and inspect details",
+        "instruction": "Where supported choose Request bank details. Read the provisioning status and Refresh status before retrying; copy details only after they are issued."
+      }
+    ],
+    "expectedResult": "Customer, currency account and bank-detail provisioning are separate visible states.",
+    "warnings": [
+      "An account record does not guarantee provider bank details have been issued. Check current records before recreating after a timeout."
+    ],
+    "troubleshooting": [
+      "A missing or disabled action can indicate insufficient permission, unavailable configuration or an incompatible record status. Check the current account and selected record; do not bypass the restriction.",
+      "Correct the field errors shown. After an uncertain submission, refresh the record before trying again to avoid duplicate operations."
+    ]
+  },
+  {
+    "slug": "business-api-application",
+    "portal": "business",
+    "title": "Create an API application and manage credentials",
+    "summary": "Choose explicit scopes and keep secrets out of search.",
+    "category": "Integrations",
+    "pageRoute": "/business/embedded-finance",
+    "keywords": [],
+    "adminRoles": [],
+    "permissions": [
+      "ManageApiAccess"
+    ],
+    "businessRoles": [],
+    "allowNoBusiness": false,
+    "isPage": false,
+    "reviewedOn": "2026-10-13",
+    "prerequisites": [
+      "Sign in to the business portal with permission to open Embedded Finance.",
+      "Check the selected business in the sidebar before proceeding."
+    ],
+    "steps": [
+      {
+        "title": "Open Embedded Finance",
+        "instruction": "Confirm the business and API-management permission."
+      },
+      {
+        "title": "Create the application",
+        "instruction": "Enter Name, optional Description, required Scopes and Allowed IP ranges, then Create application."
+      },
+      {
+        "title": "Issue credentials",
+        "instruction": "Select the application and complete its credential form, then Create. Store newly returned secrets only in approved secret storage."
+      },
+      {
+        "title": "Revoke deliberately",
+        "instruction": "Choose Revoke for the exact credential that should lose access and coordinate receiver/integration changes."
+      }
+    ],
+    "expectedResult": "Application and credential states can be inspected without exposing secrets in search.",
+    "warnings": [
+      "Never paste API credentials into search, guides, tickets, screenshots or source control. Revocation can interrupt an integration."
+    ],
+    "troubleshooting": [
+      "A missing or disabled action can indicate insufficient permission, unavailable configuration or an incompatible record status. Check the current account and selected record; do not bypass the restriction.",
+      "Correct the field errors shown. After an uncertain submission, refresh the record before trying again to avoid duplicate operations."
+    ]
+  },
+  {
+    "slug": "business-webhooks",
+    "portal": "business",
+    "title": "Configure and inspect business webhooks",
+    "summary": "Maintain endpoints and inspect delivery attempts.",
+    "category": "Integrations",
+    "pageRoute": "/business/embedded-finance",
+    "keywords": [],
+    "adminRoles": [],
+    "permissions": [
+      "ManageApiAccess"
+    ],
+    "businessRoles": [],
+    "allowNoBusiness": false,
+    "isPage": false,
+    "reviewedOn": "2026-10-13",
+    "prerequisites": [
+      "Sign in to the business portal with permission to open Embedded Finance.",
+      "Check the selected business in the sidebar before proceeding."
+    ],
+    "steps": [
+      {
+        "title": "Add an endpoint",
+        "instruction": "In Webhook endpoints enter an endpoint you control and the required subscriptions, then Add."
+      },
+      {
+        "title": "Store signing material safely",
+        "instruction": "Store a new signing secret securely; coordinate receiver changes before Rotate secret."
+      },
+      {
+        "title": "Inspect deliveries",
+        "instruction": "Read Recent webhook deliveries and previous errors before retrying an eligible delivery."
+      },
+      {
+        "title": "Control endpoint state",
+        "instruction": "Choose Enable or Disable deliberately and verify the saved state and subsequent delivery outcomes."
+      }
+    ],
+    "expectedResult": "Endpoints and delivery attempts are visible with their explicit states.",
+    "warnings": [
+      "Retries can repeat events. Never put a signing secret in the library or a search query."
+    ],
+    "troubleshooting": [
+      "A missing or disabled action can indicate insufficient permission, unavailable configuration or an incompatible record status. Check the current account and selected record; do not bypass the restriction.",
+      "Correct the field errors shown. After an uncertain submission, refresh the record before trying again to avoid duplicate operations."
+    ]
+  },
+  {
+    "slug": "business-support-ticket",
+    "portal": "business",
+    "title": "Open a ticket, reply and attach evidence",
+    "summary": "Describe the observed problem with its exact reference.",
+    "category": "Support",
+    "pageRoute": "/business/support",
+    "keywords": [],
+    "adminRoles": [],
+    "permissions": [],
+    "businessRoles": [],
+    "allowNoBusiness": true,
+    "isPage": false,
+    "reviewedOn": "2026-10-13",
+    "prerequisites": [
+      "Sign in to the business portal with permission to open Support centre.",
+      "Check the selected business in the sidebar before proceeding."
+    ],
+    "steps": [
+      {
+        "title": "Prepare a ticket",
+        "instruction": "In Support centre / Tickets complete Subject, Category, Priority and optional Transfer ID."
+      },
+      {
+        "title": "Describe and submit",
+        "instruction": "Include intended action, timestamp, reference and observed error without secrets, then Open ticket."
+      },
+      {
+        "title": "Read and reply",
+        "instruction": "Select the returned ticket, read Conversation, enter Reply and choose Send reply."
+      },
+      {
+        "title": "Attach evidence",
+        "instruction": "Use Add secure evidence and Upload evidence for an appropriate file; check the intended ticket received it."
+      }
+    ],
+    "expectedResult": "The ticket conversation is available only to its authorized account and support roles.",
+    "warnings": [
+      "Do not include passwords, access tokens, API keys, recovery codes or full card details."
+    ],
+    "troubleshooting": [
+      "A missing or disabled action can indicate insufficient permission, unavailable configuration or an incompatible record status. Check the current account and selected record; do not bypass the restriction.",
+      "Correct the field errors shown. After an uncertain submission, refresh the record before trying again to avoid duplicate operations."
+    ]
+  },
+  {
+    "slug": "business-dispute-notifications",
+    "portal": "business",
+    "title": "Raise a dispute and review notifications",
+    "summary": "Use support records rather than duplicating a disputed payment.",
+    "category": "Support",
+    "pageRoute": "/business/support",
+    "keywords": [],
+    "adminRoles": [],
+    "permissions": [],
+    "businessRoles": [],
+    "allowNoBusiness": true,
+    "isPage": false,
+    "reviewedOn": "2026-10-13",
+    "prerequisites": [
+      "Sign in to the business portal with permission to open Support centre.",
+      "Check the selected business in the sidebar before proceeding."
+    ],
+    "steps": [
+      {
+        "title": "Check for an existing dispute",
+        "instruction": "Open Transfer disputes and inspect the intended transfer."
+      },
+      {
+        "title": "Describe the issue",
+        "instruction": "Enter Transfer ID, Issue type, Reason and Requested refund amount when appropriate, then Open dispute."
+      },
+      {
+        "title": "Supply evidence and track",
+        "instruction": "Use Add evidence and Open support ticket to review the linked conversation. Withdraw only deliberately."
+      },
+      {
+        "title": "Read notifications",
+        "instruction": "Open Notifications and select the message to read and mark it as read."
+      }
+    ],
+    "expectedResult": "The dispute, linked ticket and notifications can be tracked.",
+    "warnings": [
+      "Opening or resolving a dispute does not itself prove a refund or reversal occurred."
+    ],
+    "troubleshooting": [
+      "A missing or disabled action can indicate insufficient permission, unavailable configuration or an incompatible record status. Check the current account and selected record; do not bypass the restriction.",
+      "Correct the field errors shown. After an uncertain submission, refresh the record before trying again to avoid duplicate operations."
+    ]
+  },
+  {
+    "slug": "admin-manage-users",
+    "portal": "admin",
+    "title": "Inspect users and manage account access",
+    "summary": "Review the intended identity before changing roles or status.",
+    "category": "Administration",
+    "pageRoute": "/admin/users",
+    "keywords": [],
+    "adminRoles": [
+      "Admin",
+      "SuperAdmin"
+    ],
+    "permissions": [],
+    "businessRoles": [],
+    "allowNoBusiness": false,
+    "isPage": false,
+    "reviewedOn": "2026-10-13",
+    "prerequisites": [
+      "Sign in to the admin portal with permission to open User management.",
+      "Use your assigned operational role; documentation does not grant additional authority."
+    ],
+    "steps": [
+      {
+        "title": "Find the account",
+        "instruction": "In User management use filters and Apply, then View on the intended user."
+      },
+      {
+        "title": "Inspect identity",
+        "instruction": "Confirm name, email and account status before changing access."
+      },
+      {
+        "title": "Save permitted role changes",
+        "instruction": "Choose the required roles and Save roles only where your role allows it."
+      },
+      {
+        "title": "Update state and verify",
+        "instruction": "Use Activate, Suspend or Disable deliberately, providing the requested reason. Refresh the user and confirm the result."
+      }
+    ],
+    "expectedResult": "Account access can be inspected and explicitly updated.",
+    "warnings": [
+      "Some role or status actions require SuperAdmin. Read access alone does not grant mutation rights."
+    ],
+    "troubleshooting": [
+      "A missing or disabled action can indicate insufficient permission, unavailable configuration or an incompatible record status. Check the current account and selected record; do not bypass the restriction.",
+      "Correct the field errors shown. After an uncertain submission, refresh the record before trying again to avoid duplicate operations."
+    ]
+  },
+  {
+    "slug": "create-internal-user",
+    "portal": "admin",
+    "title": "Create an internal administrative user",
+    "summary": "Use the internal-user workflow for staff accounts.",
+    "category": "Administration",
+    "pageRoute": "/admin/users",
+    "keywords": [],
+    "adminRoles": [
+      "SuperAdmin"
+    ],
+    "permissions": [],
+    "businessRoles": [],
+    "allowNoBusiness": false,
+    "isPage": false,
+    "reviewedOn": "2026-10-13",
+    "prerequisites": [
+      "Sign in to the admin portal with permission to open User management.",
+      "Use your assigned operational role; documentation does not grant additional authority."
+    ],
+    "steps": [
+      {
+        "title": "Confirm your role",
+        "instruction": "Open User management using SuperAdmin."
+      },
+      {
+        "title": "Open creation",
+        "instruction": "Choose Create internal user and complete the identity fields in Create administrator."
+      },
+      {
+        "title": "Choose minimum access",
+        "instruction": "Select only the internal role needed and complete required security fields."
+      },
+      {
+        "title": "Create and inspect",
+        "instruction": "Choose Create internal user, correct validation feedback and find the created account in the list."
+      }
+    ],
+    "expectedResult": "The staff account has its explicitly assigned role and onboarding requirements.",
+    "warnings": [
+      "Do not use shared administrator identities or put initial passwords into support/search."
+    ],
+    "troubleshooting": [
+      "A missing or disabled action can indicate insufficient permission, unavailable configuration or an incompatible record status. Check the current account and selected record; do not bypass the restriction.",
+      "Correct the field errors shown. After an uncertain submission, refresh the record before trying again to avoid duplicate operations."
+    ]
+  },
+  {
+    "slug": "configure-countries-and-assets",
+    "portal": "admin",
+    "title": "Configure countries, fiat currencies and crypto assets",
+    "summary": "Maintain the master-data selections used in application forms.",
+    "category": "Master data",
+    "pageRoute": "/admin/master-data",
+    "keywords": [],
+    "adminRoles": [
+      "Admin",
+      "SuperAdmin"
+    ],
+    "permissions": [],
+    "businessRoles": [],
+    "allowNoBusiness": false,
+    "isPage": false,
+    "reviewedOn": "2026-10-13",
+    "prerequisites": [
+      "Sign in to the admin portal with permission to open Master data.",
+      "Use your assigned operational role; documentation does not grant additional authority."
+    ],
+    "steps": [
+      {
+        "title": "Check existing definitions",
+        "instruction": "In Master data choose Countries, Fiat currencies or Crypto assets and inspect existing records first."
+      },
+      {
+        "title": "Maintain a country",
+        "instruction": "Complete its actual code, name and supported/send/receive settings, then Add country or Update country."
+      },
+      {
+        "title": "Maintain an asset",
+        "instruction": "Choose the correct fiat/crypto tab; confirm code, name, symbol, precision and capabilities, then Add or Update."
+      },
+      {
+        "title": "Review dependencies",
+        "instruction": "Reopen the saved definition. Configure country mappings and required crypto network/provider support separately."
+      }
+    ],
+    "expectedResult": "The definition is available according to its configured support state.",
+    "warnings": [
+      "Verify classification and decimal precision using authoritative information. Asset definition is not wallet creation or network activation."
+    ],
+    "troubleshooting": [
+      "A missing or disabled action can indicate insufficient permission, unavailable configuration or an incompatible record status. Check the current account and selected record; do not bypass the restriction.",
+      "Correct the field errors shown. After an uncertain submission, refresh the record before trying again to avoid duplicate operations."
+    ]
+  },
+  {
+    "slug": "configure-country-asset-mappings",
+    "portal": "admin",
+    "title": "Maintain country/asset mappings and business types",
+    "summary": "Configure combinations used by supported workflows.",
+    "category": "Master data",
+    "pageRoute": "/admin/master-data",
+    "keywords": [],
+    "adminRoles": [
+      "Admin",
+      "SuperAdmin"
+    ],
+    "permissions": [],
+    "businessRoles": [],
+    "allowNoBusiness": false,
+    "isPage": false,
+    "reviewedOn": "2026-10-13",
+    "prerequisites": [
+      "Sign in to the admin portal with permission to open Master data.",
+      "Use your assigned operational role; documentation does not grant additional authority."
+    ],
+    "steps": [
+      {
+        "title": "Inspect mappings",
+        "instruction": "Open Country & asset mappings in Master data; Edit an existing combination rather than duplicating it."
+      },
+      {
+        "title": "Save the combination",
+        "instruction": "Select configured Country and Asset plus appropriate availability flags, then Add mapping or Update mapping."
+      },
+      {
+        "title": "Maintain business types",
+        "instruction": "Open Business types; choose Configure or Add business type, complete the fields and Save business type."
+      },
+      {
+        "title": "Verify selections",
+        "instruction": "Read the saved list; refresh a form to load updated supported selections."
+      }
+    ],
+    "expectedResult": "Mappings and business types are saved without introducing free-text codes.",
+    "warnings": [
+      "Changed supported combinations can affect future requests; review dependent configurations first."
+    ],
+    "troubleshooting": [
+      "A missing or disabled action can indicate insufficient permission, unavailable configuration or an incompatible record status. Check the current account and selected record; do not bypass the restriction.",
+      "Correct the field errors shown. After an uncertain submission, refresh the record before trying again to avoid duplicate operations."
+    ]
+  },
+  {
+    "slug": "discover-and-register-provider-wallet",
+    "portal": "admin",
+    "title": "Discover and register a provider wallet",
+    "summary": "Create explicit local configuration for an eligible discovered wallet.",
+    "category": "Provider wallets",
+    "pageRoute": "/admin/provider-wallets",
+    "keywords": [],
+    "adminRoles": [
+      "SuperAdmin"
+    ],
+    "permissions": [],
+    "businessRoles": [],
+    "allowNoBusiness": false,
+    "isPage": false,
+    "reviewedOn": "2026-10-13",
+    "prerequisites": [
+      "Sign in to the admin portal with permission to open Provider wallets.",
+      "Use your assigned operational role; documentation does not grant additional authority."
+    ],
+    "steps": [
+      {
+        "title": "Confirm environment",
+        "instruction": "Open Provider wallets as SuperAdmin, select the intended provider environment and enter the audit reason."
+      },
+      {
+        "title": "Discover and review",
+        "instruction": "Choose Discover fiat wallets or Discover crypto wallets. Inspect identifiers, assets and requirements."
+      },
+      {
+        "title": "Resolve missing configuration",
+        "instruction": "Use Add currency or Add crypto asset when needed. Address network/provider requirements separately."
+      },
+      {
+        "title": "Prepare the wallet",
+        "instruction": "Choose Use wallet on an eligible row; review identifier, asset, network, display name and capabilities."
+      },
+      {
+        "title": "Register and verify",
+        "instruction": "Choose Register draft, then Verify / refresh balance on the registered record. Review state before enabling intended operational use."
+      }
+    ],
+    "expectedResult": "The wallet has a local registration and verification state.",
+    "warnings": [
+      "Registration does not authorize a money movement. Import existing environment mappings is a separate controlled action."
+    ],
+    "troubleshooting": [
+      "A missing or disabled action can indicate insufficient permission, unavailable configuration or an incompatible record status. Check the current account and selected record; do not bypass the restriction.",
+      "Correct the field errors shown. After an uncertain submission, refresh the record before trying again to avoid duplicate operations."
+    ]
+  },
+  {
+    "slug": "add-missing-discovered-asset",
+    "portal": "admin",
+    "title": "Add a missing currency or crypto asset from a discovered wallet",
+    "summary": "Complete asset setup in a popup without discarding the wallet draft.",
+    "category": "Provider wallets",
+    "pageRoute": "/admin/provider-wallets",
+    "keywords": [
+      "blaaiz missing currency crypto popup wallet"
+    ],
+    "adminRoles": [
+      "SuperAdmin"
+    ],
+    "permissions": [],
+    "businessRoles": [],
+    "allowNoBusiness": false,
+    "isPage": false,
+    "reviewedOn": "2026-10-13",
+    "prerequisites": [
+      "Sign in to the admin portal with permission to open Provider wallets.",
+      "Use your assigned operational role; documentation does not grant additional authority."
+    ],
+    "steps": [
+      {
+        "title": "Discover the wallet",
+        "instruction": "Select the correct environment and discover fiat or crypto wallets."
+      },
+      {
+        "title": "Open setup only when missing",
+        "instruction": "Choose Add currency or Add crypto asset on an unconfigured asset row. Existing or disabled assets do not require duplicate creation."
+      },
+      {
+        "title": "Check fixed identity",
+        "instruction": "Verify the discovered code and classification; these are fixed to the row."
+      },
+      {
+        "title": "Complete the definition",
+        "instruction": "Confirm Name, Symbol and Decimal precision. Discovery does not guarantee an authoritative name or precision."
+      },
+      {
+        "title": "Save and refresh",
+        "instruction": "Choose Save asset. When saving succeeded but refreshing failed, use Retry refresh instead of posting the asset again."
+      },
+      {
+        "title": "Continue existing wallet setup",
+        "instruction": "Confirm your wallet draft and audit reason remain intact. Resolve outstanding network/provider requirements before Use wallet."
+      }
+    ],
+    "expectedResult": "Only the master-data asset is created; wallet registration remains separate.",
+    "warnings": [
+      "Saving does not create/activate a wallet, select a default or automatically enable deposits, withdrawals or trading."
+    ],
+    "troubleshooting": [
+      "A missing or disabled action can indicate insufficient permission, unavailable configuration or an incompatible record status. Check the current account and selected record; do not bypass the restriction.",
+      "Correct the field errors shown. After an uncertain submission, refresh the record before trying again to avoid duplicate operations."
+    ]
+  },
+  {
+    "slug": "configure-provider-wallet-use",
+    "portal": "admin",
+    "title": "Configure, verify or suspend a provider wallet",
+    "summary": "Manage an already registered wallet deliberately.",
+    "category": "Provider wallets",
+    "pageRoute": "/admin/provider-wallets",
+    "keywords": [],
+    "adminRoles": [
+      "SuperAdmin"
+    ],
+    "permissions": [],
+    "businessRoles": [],
+    "allowNoBusiness": false,
+    "isPage": false,
+    "reviewedOn": "2026-10-13",
+    "prerequisites": [
+      "Sign in to the admin portal with permission to open Provider wallets.",
+      "Use your assigned operational role; documentation does not grant additional authority."
+    ],
+    "steps": [
+      {
+        "title": "Choose the record",
+        "instruction": "In Registered wallets select Configure for the exact wallet and environment."
+      },
+      {
+        "title": "Review capabilities",
+        "instruction": "Inspect collection/payout flags, defaults and active state; supply the required audit reason."
+      },
+      {
+        "title": "Save and verify",
+        "instruction": "Choose Save configuration, then Verify / refresh balance when appropriate and inspect mismatch or connection feedback."
+      },
+      {
+        "title": "Suspend only when intended",
+        "instruction": "Choose Suspend for the correct wallet and review its dependent operational queues."
+      }
+    ],
+    "expectedResult": "Configuration and verification reflect the saved decision.",
+    "warnings": [
+      "Suspension/default changes can affect new operations but do not automatically cancel, refund or complete existing ones."
+    ],
+    "troubleshooting": [
+      "A missing or disabled action can indicate insufficient permission, unavailable configuration or an incompatible record status. Check the current account and selected record; do not bypass the restriction.",
+      "Correct the field errors shown. After an uncertain submission, refresh the record before trying again to avoid duplicate operations."
+    ]
+  },
+  {
+    "slug": "manage-fx-rates-and-markup",
+    "portal": "admin",
+    "title": "Create managed FX rates and markup rules",
+    "summary": "Maintain customer pricing for a configured corridor.",
+    "category": "Finance",
+    "pageRoute": "/admin/fx",
+    "keywords": [],
+    "adminRoles": [
+      "Operations",
+      "Admin",
+      "SuperAdmin"
+    ],
+    "permissions": [],
+    "businessRoles": [],
+    "allowNoBusiness": false,
+    "isPage": false,
+    "reviewedOn": "2026-10-13",
+    "prerequisites": [
+      "Sign in to the admin portal with permission to open FX rates and pricing.",
+      "Use your assigned operational role; documentation does not grant additional authority."
+    ],
+    "steps": [
+      {
+        "title": "Find the corridor",
+        "instruction": "In Rates & customer pricing use Filter to inspect current rates and currencies."
+      },
+      {
+        "title": "Create a managed rate",
+        "instruction": "Complete Create FX rate with approved corridor, rate, validity and settings, then Create managed rate."
+      },
+      {
+        "title": "Maintain markup",
+        "instruction": "Use Markup rule or Edit on an existing rule. Review bounds and amounts/percentages before Save markup rule."
+      },
+      {
+        "title": "Verify or deactivate",
+        "instruction": "Refresh the saved configuration. Deactivate only the intended rate when it should no longer be selected."
+      }
+    ],
+    "expectedResult": "Pricing is recorded for future quotes; existing quotes retain their own snapshots and expiry.",
+    "warnings": [
+      "Do not use a guessed market rate or markup; these values affect quoted payments."
+    ],
+    "troubleshooting": [
+      "A missing or disabled action can indicate insufficient permission, unavailable configuration or an incompatible record status. Check the current account and selected record; do not bypass the restriction.",
+      "Correct the field errors shown. After an uncertain submission, refresh the record before trying again to avoid duplicate operations."
+    ]
+  },
+  {
+    "slug": "finance-overview",
+    "portal": "admin",
+    "title": "Review finance overview and corridor economics",
+    "summary": "Follow the review finance overview and corridor economics workflow in Finance & close.",
+    "category": "Finance",
+    "pageRoute": "/admin/finance",
+    "keywords": [],
+    "adminRoles": [
+      "Operations",
+      "Admin",
+      "SuperAdmin"
+    ],
+    "permissions": [],
+    "businessRoles": [],
+    "allowNoBusiness": false,
+    "isPage": false,
+    "reviewedOn": "2026-10-13",
+    "prerequisites": [
+      "Sign in to the admin portal with permission to open Finance and close.",
+      "Use your assigned operational role; documentation does not grant additional authority."
+    ],
+    "steps": [
+      {
+        "title": "Open Overview",
+        "instruction": "Choose Finance & close, then Overview."
+      },
+      {
+        "title": "Select scope",
+        "instruction": "Set the available dates and filters, then Refresh."
+      },
+      {
+        "title": "Inspect results",
+        "instruction": "Review Realized revenue, Provider costs, Net contribution and Corridor economics by currency."
+      },
+      {
+        "title": "Export evidence",
+        "instruction": "Use Export corridors CSV for the displayed reporting scope."
+      }
+    ],
+    "expectedResult": "The chosen period and corridor economics can be reviewed and exported.",
+    "warnings": [
+      "Posting, reversal, rate and close decisions affect authoritative finance records. Follow your approved process; this is a software guide, not accounting or tax advice.",
+      "Do not use production postings or period closes to test the interface."
+    ],
+    "troubleshooting": [
+      "A missing or disabled action can indicate insufficient permission, unavailable configuration or an incompatible record status. Check the current account and selected record; do not bypass the restriction.",
+      "Correct the field errors shown. After an uncertain submission, refresh the record before trying again to avoid duplicate operations."
+    ]
+  },
+  {
+    "slug": "accounting-accounts-periods",
+    "portal": "admin",
+    "title": "Create accounting accounts and periods",
+    "summary": "Follow the create accounting accounts and periods workflow in Finance & close.",
+    "category": "Finance",
+    "pageRoute": "/admin/finance",
+    "keywords": [],
+    "adminRoles": [
+      "Operations",
+      "Admin",
+      "SuperAdmin"
+    ],
+    "permissions": [],
+    "businessRoles": [],
+    "allowNoBusiness": false,
+    "isPage": false,
+    "reviewedOn": "2026-10-13",
+    "prerequisites": [
+      "Sign in to the admin portal with permission to open Finance and close.",
+      "Use your assigned operational role; documentation does not grant additional authority."
+    ],
+    "steps": [
+      {
+        "title": "Open Accounting",
+        "instruction": "Choose the Accounting tab in Finance & close."
+      },
+      {
+        "title": "Create an account",
+        "instruction": "Complete code, name, classification and currency settings in Create account, then submit."
+      },
+      {
+        "title": "Create a period",
+        "instruction": "Complete the intended boundaries in Create accounting period, then Create period."
+      },
+      {
+        "title": "Review state",
+        "instruction": "Inspect Chart of accounts and Accounting periods. Normally use Financial close rather than direct SuperAdmin close/reopen controls."
+      }
+    ],
+    "expectedResult": "The account or period is listed with its saved state.",
+    "warnings": [
+      "Posting, reversal, rate and close decisions affect authoritative finance records. Follow your approved process; this is a software guide, not accounting or tax advice.",
+      "Do not use production postings or period closes to test the interface."
+    ],
+    "troubleshooting": [
+      "A missing or disabled action can indicate insufficient permission, unavailable configuration or an incompatible record status. Check the current account and selected record; do not bypass the restriction.",
+      "Correct the field errors shown. After an uncertain submission, refresh the record before trying again to avoid duplicate operations."
+    ]
+  },
+  {
+    "slug": "post-balanced-journal",
+    "portal": "admin",
+    "title": "Post, inspect or reverse an accounting journal",
+    "summary": "Follow the post, inspect or reverse an accounting journal workflow in Finance & close.",
+    "category": "Finance",
+    "pageRoute": "/admin/finance",
+    "keywords": [],
+    "adminRoles": [
+      "Operations",
+      "Admin",
+      "SuperAdmin"
+    ],
+    "permissions": [],
+    "businessRoles": [],
+    "allowNoBusiness": false,
+    "isPage": false,
+    "reviewedOn": "2026-10-13",
+    "prerequisites": [
+      "Sign in to the admin portal with permission to open Finance and close.",
+      "Use your assigned operational role; documentation does not grant additional authority."
+    ],
+    "steps": [
+      {
+        "title": "Open Journals",
+        "instruction": "Confirm the intended accounting period and currency."
+      },
+      {
+        "title": "Prepare balanced lines",
+        "instruction": "In Create journal select accounts and debit/credit amounts. Add line or Remove only the intended lines; review description and balance."
+      },
+      {
+        "title": "Post deliberately",
+        "instruction": "Choose Post balanced journal and resolve any validation or period-state errors."
+      },
+      {
+        "title": "Inspect or reverse",
+        "instruction": "Use Lines to inspect the saved postings. Reverse only an eligible journal with the required reason."
+      }
+    ],
+    "expectedResult": "The balanced journal or authorized reversal is recorded.",
+    "warnings": [
+      "Posting, reversal, rate and close decisions affect authoritative finance records. Follow your approved process; this is a software guide, not accounting or tax advice.",
+      "Do not use production postings or period closes to test the interface."
+    ],
+    "troubleshooting": [
+      "A missing or disabled action can indicate insufficient permission, unavailable configuration or an incompatible record status. Check the current account and selected record; do not bypass the restriction.",
+      "Correct the field errors shown. After an uncertain submission, refresh the record before trying again to avoid duplicate operations."
+    ]
+  },
+  {
+    "slug": "sync-accounting-trial-balance",
+    "portal": "admin",
+    "title": "Synchronize accounting activity and export a trial balance",
+    "summary": "Follow the synchronize accounting activity and export a trial balance workflow in Finance & close.",
+    "category": "Finance",
+    "pageRoute": "/admin/finance",
+    "keywords": [],
+    "adminRoles": [
+      "Operations",
+      "Admin",
+      "SuperAdmin"
+    ],
+    "permissions": [],
+    "businessRoles": [],
+    "allowNoBusiness": false,
+    "isPage": false,
+    "reviewedOn": "2026-10-13",
+    "prerequisites": [
+      "Sign in to the admin portal with permission to open Finance and close.",
+      "Use your assigned operational role; documentation does not grant additional authority."
+    ],
+    "steps": [
+      {
+        "title": "Open Accounting sync",
+        "instruction": "Locate this section under Journals."
+      },
+      {
+        "title": "Review the scope",
+        "instruction": "Choose the approved source window and inspect existing source-linked entries."
+      },
+      {
+        "title": "Synchronize",
+        "instruction": "Choose Sync source activity, then Refresh ledger and inspect the outcome."
+      },
+      {
+        "title": "Review trial balance",
+        "instruction": "Select the period/currency in Trial balance and use Export CSV where offered."
+      }
+    ],
+    "expectedResult": "Source-linked journals and trial-balance results can be inspected without manual duplicate posting.",
+    "warnings": [
+      "Posting, reversal, rate and close decisions affect authoritative finance records. Follow your approved process; this is a software guide, not accounting or tax advice.",
+      "Do not use production postings or period closes to test the interface."
+    ],
+    "troubleshooting": [
+      "A missing or disabled action can indicate insufficient permission, unavailable configuration or an incompatible record status. Check the current account and selected record; do not bypass the restriction.",
+      "Correct the field errors shown. After an uncertain submission, refresh the record before trying again to avoid duplicate operations."
+    ]
+  },
+  {
+    "slug": "finance-statements",
+    "portal": "admin",
+    "title": "Read financial statements and manage reporting rates",
+    "summary": "Follow the read financial statements and manage reporting rates workflow in Finance & close.",
+    "category": "Finance",
+    "pageRoute": "/admin/finance",
+    "keywords": [],
+    "adminRoles": [
+      "Operations",
+      "Admin",
+      "SuperAdmin"
+    ],
+    "permissions": [],
+    "businessRoles": [],
+    "allowNoBusiness": false,
+    "isPage": false,
+    "reviewedOn": "2026-10-13",
+    "prerequisites": [
+      "Sign in to the admin portal with permission to open Finance and close.",
+      "Use your assigned operational role; documentation does not grant additional authority."
+    ],
+    "steps": [
+      {
+        "title": "Open Statements",
+        "instruction": "Set the period, dates and reporting currency, then Refresh statements."
+      },
+      {
+        "title": "Read statements separately",
+        "instruction": "Inspect Income statement and Balance sheet, distinguishing revenue/expenses from assets/liabilities/equity."
+      },
+      {
+        "title": "Save an approved rate",
+        "instruction": "Complete Add reporting rate for the intended currency/date, then Save translation rate."
+      },
+      {
+        "title": "Verify calculations",
+        "instruction": "Refresh statements and compare against your approved reporting methodology."
+      }
+    ],
+    "expectedResult": "Statements and translation configuration are available for the selected context.",
+    "warnings": [
+      "Posting, reversal, rate and close decisions affect authoritative finance records. Follow your approved process; this is a software guide, not accounting or tax advice.",
+      "Do not use production postings or period closes to test the interface."
+    ],
+    "troubleshooting": [
+      "A missing or disabled action can indicate insufficient permission, unavailable configuration or an incompatible record status. Check the current account and selected record; do not bypass the restriction.",
+      "Correct the field errors shown. After an uncertain submission, refresh the record before trying again to avoid duplicate operations."
+    ]
+  },
+  {
+    "slug": "provider-invoice-review",
+    "portal": "admin",
+    "title": "Import, match and decide a provider invoice",
+    "summary": "Follow the import, match and decide a provider invoice workflow in Finance & close.",
+    "category": "Finance",
+    "pageRoute": "/admin/finance",
+    "keywords": [],
+    "adminRoles": [
+      "Operations",
+      "Admin",
+      "SuperAdmin"
+    ],
+    "permissions": [],
+    "businessRoles": [],
+    "allowNoBusiness": false,
+    "isPage": false,
+    "reviewedOn": "2026-10-13",
+    "prerequisites": [
+      "Sign in to the admin portal with permission to open Finance and close.",
+      "Use your assigned operational role; documentation does not grant additional authority."
+    ],
+    "steps": [
+      {
+        "title": "Import evidence",
+        "instruction": "In Provider invoices select the approved file in Import provider invoice, then Import & match invoice."
+      },
+      {
+        "title": "Inspect matching",
+        "instruction": "Filter and Review the resulting invoice; compare totals, matched fees and variance."
+      },
+      {
+        "title": "Record the decision",
+        "instruction": "Reject invalid evidence with the required explanation or Approve & post only after approved review."
+      },
+      {
+        "title": "Verify the result",
+        "instruction": "Reopen the invoice and inspect status and related accounting entry."
+      }
+    ],
+    "expectedResult": "The invoice has an explicit review/posting state; import alone does not approve payment.",
+    "warnings": [
+      "Posting, reversal, rate and close decisions affect authoritative finance records. Follow your approved process; this is a software guide, not accounting or tax advice.",
+      "Do not use production postings or period closes to test the interface."
+    ],
+    "troubleshooting": [
+      "A missing or disabled action can indicate insufficient permission, unavailable configuration or an incompatible record status. Check the current account and selected record; do not bypass the restriction.",
+      "Correct the field errors shown. After an uncertain submission, refresh the record before trying again to avoid duplicate operations."
+    ]
+  },
+  {
+    "slug": "tax-and-accruals",
+    "portal": "admin",
+    "title": "Maintain tax rules and post an authorized accrual",
+    "summary": "Follow the maintain tax rules and post an authorized accrual workflow in Finance & close.",
+    "category": "Finance",
+    "pageRoute": "/admin/finance",
+    "keywords": [],
+    "adminRoles": [
+      "Operations",
+      "Admin",
+      "SuperAdmin"
+    ],
+    "permissions": [],
+    "businessRoles": [],
+    "allowNoBusiness": false,
+    "isPage": false,
+    "reviewedOn": "2026-10-13",
+    "prerequisites": [
+      "Sign in to the admin portal with permission to open Finance and close.",
+      "Use your assigned operational role; documentation does not grant additional authority."
+    ],
+    "steps": [
+      {
+        "title": "Open Tax & accruals",
+        "instruction": "Inspect existing rules and relevant accounting context."
+      },
+      {
+        "title": "Maintain and preview",
+        "instruction": "Create tax rule or Edit, then Save tax rule. Use Calculate tax with approved input and inspect the returned basis and amount."
+      },
+      {
+        "title": "Prepare an accrual",
+        "instruction": "Complete Create accrual with approved accounts, dates and source data."
+      },
+      {
+        "title": "Post and verify",
+        "instruction": "Choose Post accrual only after review and inspect the journal/period result."
+      }
+    ],
+    "expectedResult": "Rules, calculations and accruals have separate explicit outcomes.",
+    "warnings": [
+      "Posting, reversal, rate and close decisions affect authoritative finance records. Follow your approved process; this is a software guide, not accounting or tax advice.",
+      "Do not use production postings or period closes to test the interface."
+    ],
+    "troubleshooting": [
+      "A missing or disabled action can indicate insufficient permission, unavailable configuration or an incompatible record status. Check the current account and selected record; do not bypass the restriction.",
+      "Correct the field errors shown. After an uncertain submission, refresh the record before trying again to avoid duplicate operations."
+    ]
+  },
+  {
+    "slug": "financial-period-close",
+    "portal": "admin",
+    "title": "Complete the financial-close checklist and approval",
+    "summary": "Follow the complete the financial-close checklist and approval workflow in Finance & close.",
+    "category": "Finance",
+    "pageRoute": "/admin/finance",
+    "keywords": [],
+    "adminRoles": [
+      "Operations",
+      "Admin",
+      "SuperAdmin"
+    ],
+    "permissions": [],
+    "businessRoles": [],
+    "allowNoBusiness": false,
+    "isPage": false,
+    "reviewedOn": "2026-10-13",
+    "prerequisites": [
+      "Sign in to the admin portal with permission to open Finance and close.",
+      "Use your assigned operational role; documentation does not grant additional authority."
+    ],
+    "steps": [
+      {
+        "title": "Load the period",
+        "instruction": "In Financial close select the period and Load close pack."
+      },
+      {
+        "title": "Inspect checks",
+        "instruction": "Review system checks and complete only manual checks actually verified."
+      },
+      {
+        "title": "Resolve blockers",
+        "instruction": "Correct reconciliations, missing rates and accounting exceptions in their source modules."
+      },
+      {
+        "title": "Request approval",
+        "instruction": "Complete Request period close and Submit close request. An authorized reviewer inspects evidence before Approve close."
+      },
+      {
+        "title": "Confirm closure",
+        "instruction": "Reload the period/close pack and preserve approved evidence."
+      }
+    ],
+    "expectedResult": "The period follows its explicit close-request and approval workflow.",
+    "warnings": [
+      "Posting, reversal, rate and close decisions affect authoritative finance records. Follow your approved process; this is a software guide, not accounting or tax advice.",
+      "Do not use production postings or period closes to test the interface."
+    ],
+    "troubleshooting": [
+      "A missing or disabled action can indicate insufficient permission, unavailable configuration or an incompatible record status. Check the current account and selected record; do not bypass the restriction.",
+      "Correct the field errors shown. After an uncertain submission, refresh the record before trying again to avoid duplicate operations."
+    ]
+  },
+  {
+    "slug": "admin-trading-pairs",
+    "portal": "admin",
+    "title": "Configure marketplace and instant trading pairs",
+    "summary": "Maintain pair configuration, limits and operating state.",
+    "category": "Trading",
+    "pageRoute": "/admin/trading-wallets",
+    "keywords": [],
+    "adminRoles": [
+      "Admin",
+      "SuperAdmin"
+    ],
+    "permissions": [],
+    "businessRoles": [],
+    "allowNoBusiness": false,
+    "isPage": false,
+    "reviewedOn": "2026-10-13",
+    "prerequisites": [
+      "Sign in to the admin portal with permission to open Trading and business wallets.",
+      "Use your assigned operational role; documentation does not grant additional authority."
+    ],
+    "steps": [
+      {
+        "title": "Select the market",
+        "instruction": "Open Trading & business wallets and choose Marketplace or Instant trading."
+      },
+      {
+        "title": "Inspect existing configuration",
+        "instruction": "Find the intended pair and Edit rather than creating a duplicate."
+      },
+      {
+        "title": "Save approved settings",
+        "instruction": "Select configured assets and applicable account/house-account references; review limits, increments and state, then Save pair."
+      },
+      {
+        "title": "Inspect operations",
+        "instruction": "Confirm liquidity and current state before Activate or Pause. Review recent trades and Settlement exceptions; expiry/recovery actions require separate review."
+      }
+    ],
+    "expectedResult": "The pair has explicit saved configuration and operational state.",
+    "warnings": [
+      "A configured pair does not guarantee liquidity. Changes affect future quotes/orders."
+    ],
+    "troubleshooting": [
+      "A missing or disabled action can indicate insufficient permission, unavailable configuration or an incompatible record status. Check the current account and selected record; do not bypass the restriction.",
+      "Correct the field errors shown. After an uncertain submission, refresh the record before trying again to avoid duplicate operations."
+    ]
+  },
+  {
+    "slug": "admin-business-wallet-adjustment",
+    "portal": "admin",
+    "title": "Inspect or adjust a business wallet",
+    "summary": "Read the ledger before authorized balance or state changes.",
+    "category": "Trading",
+    "pageRoute": "/admin/trading-wallets",
+    "keywords": [],
+    "adminRoles": [
+      "Admin",
+      "SuperAdmin"
+    ],
+    "permissions": [],
+    "businessRoles": [],
+    "allowNoBusiness": false,
+    "isPage": false,
+    "reviewedOn": "2026-10-13",
+    "prerequisites": [
+      "Sign in to the admin portal with permission to open Trading and business wallets.",
+      "Use your assigned operational role; documentation does not grant additional authority."
+    ],
+    "steps": [
+      {
+        "title": "Locate the wallet",
+        "instruction": "Choose Business wallets, search and Open the intended result."
+      },
+      {
+        "title": "Inspect ownership and activity",
+        "instruction": "Confirm business, asset, status and existing Wallet ledger."
+      },
+      {
+        "title": "Prepare an approved change",
+        "instruction": "Use Credit business wallet or the adjustment form only with an approved amount, reference and reason."
+      },
+      {
+        "title": "Submit and confirm",
+        "instruction": "Choose Credit wallet or Post adjustment, then inspect the returned result and ledger before retrying. Freeze, Unfreeze or Reverse only the intended eligible record."
+      }
+    ],
+    "expectedResult": "The explicit adjustment or state decision appears in the wallet/ledger.",
+    "warnings": [
+      "Manual credits change balances. Do not use them to compensate for a display issue without reconciliation and approval."
+    ],
+    "troubleshooting": [
+      "A missing or disabled action can indicate insufficient permission, unavailable configuration or an incompatible record status. Check the current account and selected record; do not bypass the restriction.",
+      "Correct the field errors shown. After an uncertain submission, refresh the record before trying again to avoid duplicate operations."
+    ]
+  },
+  {
+    "slug": "provider-reconciliation",
+    "portal": "admin",
+    "title": "Inspect provider transactions and run reconciliation",
+    "summary": "Trace stored provider records and explicit reconciliation outcomes.",
+    "category": "Providers",
+    "pageRoute": "/admin/providers",
+    "keywords": [],
+    "adminRoles": [
+      "Operations",
+      "Admin",
+      "SuperAdmin"
+    ],
+    "permissions": [],
+    "businessRoles": [],
+    "allowNoBusiness": false,
+    "isPage": false,
+    "reviewedOn": "2026-10-13",
+    "prerequisites": [
+      "Sign in to the admin portal with permission to open Provider operations and reconciliation.",
+      "Use your assigned operational role; documentation does not grant additional authority."
+    ],
+    "steps": [
+      {
+        "title": "Open provider operations",
+        "instruction": "Read Overview and Operational status."
+      },
+      {
+        "title": "Find the transaction",
+        "instruction": "Use Transactions filters to locate the exact reference and local relationship."
+      },
+      {
+        "title": "Review evidence",
+        "instruction": "Inspect related request/webhook information through permitted detail views. Raw payloads are excluded from search."
+      },
+      {
+        "title": "Reconcile and verify",
+        "instruction": "Use Reconcile for one item or Run reconciliation for an approved scope; supply audit reason and inspect updated state or remaining exception."
+      }
+    ],
+    "expectedResult": "A reconciliation attempt and its resulting local state can be reviewed.",
+    "warnings": [
+      "A missing row or failed search does not prove the provider never processed a transaction."
+    ],
+    "troubleshooting": [
+      "A missing or disabled action can indicate insufficient permission, unavailable configuration or an incompatible record status. Check the current account and selected record; do not bypass the restriction.",
+      "Correct the field errors shown. After an uncertain submission, refresh the record before trying again to avoid duplicate operations."
+    ]
+  },
+  {
+    "slug": "provider-payout-refund-recovery",
+    "portal": "admin",
+    "title": "Recover eligible payout and refund operations",
+    "summary": "Inspect the existing operation before dispatch, retry or refund.",
+    "category": "Providers",
+    "pageRoute": "/admin/providers",
+    "keywords": [],
+    "adminRoles": [
+      "Operations",
+      "Admin",
+      "SuperAdmin"
+    ],
+    "permissions": [],
+    "businessRoles": [],
+    "allowNoBusiness": false,
+    "isPage": false,
+    "reviewedOn": "2026-10-13",
+    "prerequisites": [
+      "Sign in to the admin portal with permission to open Provider operations and reconciliation.",
+      "Use your assigned operational role; documentation does not grant additional authority."
+    ],
+    "steps": [
+      {
+        "title": "Select the queue",
+        "instruction": "Open Payout dispatch, Failed payouts or Refunds."
+      },
+      {
+        "title": "Inspect the exact operation",
+        "instruction": "Confirm reference, status, amount and prior attempts."
+      },
+      {
+        "title": "Use an eligible action",
+        "instruction": "Choose Dispatch payout, Retry payout, Initiate refund or Refresh status only for the intended operation."
+      },
+      {
+        "title": "Confirm and verify",
+        "instruction": "Read the popup target and reason, choose Confirm action, then refresh. Accepted dispatch or initiated refund may still be pending."
+      }
+    ],
+    "expectedResult": "Recovery proceeds through the existing controlled operation.",
+    "warnings": [
+      "Recovery can move funds. After an uncertain response reconcile the original outcome before submitting again."
+    ],
+    "troubleshooting": [
+      "A missing or disabled action can indicate insufficient permission, unavailable configuration or an incompatible record status. Check the current account and selected record; do not bypass the restriction.",
+      "Correct the field errors shown. After an uncertain submission, refresh the record before trying again to avoid duplicate operations."
+    ]
+  },
+  {
+    "slug": "provider-webhooks-banks",
+    "portal": "admin",
+    "title": "Inspect provider webhooks and synchronize the bank directory",
+    "summary": "Use replay and synchronization controls deliberately.",
+    "category": "Providers",
+    "pageRoute": "/admin/providers",
+    "keywords": [],
+    "adminRoles": [
+      "Operations",
+      "Admin",
+      "SuperAdmin"
+    ],
+    "permissions": [],
+    "businessRoles": [],
+    "allowNoBusiness": false,
+    "isPage": false,
+    "reviewedOn": "2026-10-13",
+    "prerequisites": [
+      "Sign in to the admin portal with permission to open Provider operations and reconciliation.",
+      "Use your assigned operational role; documentation does not grant additional authority."
+    ],
+    "steps": [
+      {
+        "title": "Find the webhook",
+        "instruction": "In Webhooks apply filters and Inspect the event."
+      },
+      {
+        "title": "Review processing history",
+        "instruction": "Check state and prior attempts before Replay webhook; provide the required reason."
+      },
+      {
+        "title": "Inspect related logs safely",
+        "instruction": "Use Request logs / Inspect where permitted; treat payloads and headers as sensitive."
+      },
+      {
+        "title": "Refresh bank data",
+        "instruction": "In Bank directory choose Synchronize only when an approved refresh is needed, then verify the event/directory result."
+      }
+    ],
+    "expectedResult": "Webhook processing and bank-directory synchronization outcomes are explicit.",
+    "warnings": [
+      "Replay may re-run processing. Never put raw provider headers or payloads into search or broadly visible documentation."
+    ],
+    "troubleshooting": [
+      "A missing or disabled action can indicate insufficient permission, unavailable configuration or an incompatible record status. Check the current account and selected record; do not bypass the restriction.",
+      "Correct the field errors shown. After an uncertain submission, refresh the record before trying again to avoid duplicate operations."
+    ]
+  },
+  {
+    "slug": "review-kyc-kyb",
+    "portal": "admin",
+    "title": "Review KYC and KYB applications",
+    "summary": "Inspect permitted evidence before a verification decision.",
+    "category": "Compliance",
+    "pageRoute": "/admin/compliance",
+    "keywords": [],
+    "adminRoles": [
+      "Compliance",
+      "Admin",
+      "SuperAdmin"
+    ],
+    "permissions": [],
+    "businessRoles": [],
+    "allowNoBusiness": false,
+    "isPage": false,
+    "reviewedOn": "2026-10-13",
+    "prerequisites": [
+      "Sign in to the admin portal with permission to open Compliance, KYC and AML.",
+      "Use your assigned operational role; documentation does not grant additional authority."
+    ],
+    "steps": [
+      {
+        "title": "Choose the queue",
+        "instruction": "In Compliance, KYC & AML select KYC or KYB and apply status/date filters."
+      },
+      {
+        "title": "Open the application",
+        "instruction": "Choose Review and confirm the intended customer/business and current status."
+      },
+      {
+        "title": "Inspect evidence",
+        "instruction": "Read profile, owners, documents and prior feedback in permitted detail views."
+      },
+      {
+        "title": "Record and verify",
+        "instruction": "Use the appropriate decision/action controls with the required reason. Refresh the application and linked business/case state."
+      }
+    ],
+    "expectedResult": "The review outcome or outstanding evidence requirement is visible.",
+    "warnings": [
+      "Follow current approved compliance policy. This guide does not decide whether an applicant passes."
+    ],
+    "troubleshooting": [
+      "A missing or disabled action can indicate insufficient permission, unavailable configuration or an incompatible record status. Check the current account and selected record; do not bypass the restriction.",
+      "Correct the field errors shown. After an uncertain submission, refresh the record before trying again to avoid duplicate operations."
+    ]
+  },
+  {
+    "slug": "compliance-cases-screenings",
+    "portal": "admin",
+    "title": "Work a compliance case, screening or AML flag",
+    "summary": "Record justified investigation decisions with linked evidence.",
+    "category": "Compliance",
+    "pageRoute": "/admin/compliance",
+    "keywords": [],
+    "adminRoles": [
+      "Compliance",
+      "Admin",
+      "SuperAdmin"
+    ],
+    "permissions": [],
+    "businessRoles": [],
+    "allowNoBusiness": false,
+    "isPage": false,
+    "reviewedOn": "2026-10-13",
+    "prerequisites": [
+      "Sign in to the admin portal with permission to open Compliance, KYC and AML.",
+      "Use your assigned operational role; documentation does not grant additional authority."
+    ],
+    "steps": [
+      {
+        "title": "Find the item",
+        "instruction": "Choose Cases, Screenings or AML / risk and Apply filters."
+      },
+      {
+        "title": "Inspect context",
+        "instruction": "Choose Inspect and review matches, blocking state, linked records and previous notes."
+      },
+      {
+        "title": "Record investigation",
+        "instruction": "Use available case-note/evidence or assignment controls; retain the underlying facts."
+      },
+      {
+        "title": "Decide and confirm",
+        "instruction": "Use the permitted decision controls with required reasons, refresh, and inspect any linked payment hold separately."
+      }
+    ],
+    "expectedResult": "Investigation and outcome are traceable to the case or screening.",
+    "warnings": [
+      "Resolving a case does not necessarily complete a held transfer."
+    ],
+    "troubleshooting": [
+      "A missing or disabled action can indicate insufficient permission, unavailable configuration or an incompatible record status. Check the current account and selected record; do not bypass the restriction.",
+      "Correct the field errors shown. After an uncertain submission, refresh the record before trying again to avoid duplicate operations."
+    ]
+  },
+  {
+    "slug": "regulatory-report-workflow",
+    "portal": "admin",
+    "title": "Prepare and track a regulatory report",
+    "summary": "Keep preparation, review and filing evidence distinct.",
+    "category": "Compliance",
+    "pageRoute": "/admin/compliance",
+    "keywords": [],
+    "adminRoles": [
+      "Compliance",
+      "Admin",
+      "SuperAdmin"
+    ],
+    "permissions": [],
+    "businessRoles": [],
+    "allowNoBusiness": false,
+    "isPage": false,
+    "reviewedOn": "2026-10-13",
+    "prerequisites": [
+      "Sign in to the admin portal with permission to open Compliance, KYC and AML.",
+      "Use your assigned operational role; documentation does not grant additional authority."
+    ],
+    "steps": [
+      {
+        "title": "Find the report",
+        "instruction": "Open Regulatory reports, Apply filters and Inspect the exact reference."
+      },
+      {
+        "title": "Review content",
+        "instruction": "Confirm jurisdiction, case, Suspicion reason and Narrative against approved evidence."
+      },
+      {
+        "title": "Use the permitted lifecycle",
+        "instruction": "Prepare/update, submit and approve through available actions; record actual filing references only after filing occurred."
+      },
+      {
+        "title": "Verify and export",
+        "instruction": "Inspect final status and use permitted exports under your approved reporting process."
+      }
+    ],
+    "expectedResult": "The report retains a traceable preparation/review/filing state.",
+    "warnings": [
+      "This is not legal filing advice or a deadline statement; follow applicable policy and requirements."
+    ],
+    "troubleshooting": [
+      "A missing or disabled action can indicate insufficient permission, unavailable configuration or an incompatible record status. Check the current account and selected record; do not bypass the restriction.",
+      "Correct the field errors shown. After an uncertain submission, refresh the record before trying again to avoid duplicate operations."
+    ]
+  },
+  {
+    "slug": "retention-policy-and-execution",
+    "portal": "admin",
+    "title": "Configure a retention policy and inspect a dry run",
+    "summary": "Review eligible records before an approved retention execution.",
+    "category": "Compliance",
+    "pageRoute": "/admin/retention",
+    "keywords": [],
+    "adminRoles": [
+      "Compliance",
+      "Admin",
+      "SuperAdmin"
+    ],
+    "permissions": [],
+    "businessRoles": [],
+    "allowNoBusiness": false,
+    "isPage": false,
+    "reviewedOn": "2026-10-13",
+    "prerequisites": [
+      "Sign in to the admin portal with permission to open Data retention and legal holds.",
+      "Use your assigned operational role; documentation does not grant additional authority."
+    ],
+    "steps": [
+      {
+        "title": "Inspect existing policy",
+        "instruction": "In Data retention & legal holds find the relevant Retention policy."
+      },
+      {
+        "title": "Save configuration",
+        "instruction": "Complete record type, age/window and action settings, then Create policy or Update policy."
+      },
+      {
+        "title": "Dry-run and review holds",
+        "instruction": "Choose Dry run and inspect eligible/protected counts. Confirm applicable legal holds and approved scope."
+      },
+      {
+        "title": "Execute only when authorized",
+        "instruction": "Choose Execute for the intended policy/scope and preserve the returned evidence."
+      }
+    ],
+    "expectedResult": "Policy, dry-run and execution outcomes remain explicit.",
+    "warnings": [
+      "Execution can irreversibly delete or anonymize data. A dry run is not authorization to execute or release a legal hold."
+    ],
+    "troubleshooting": [
+      "A missing or disabled action can indicate insufficient permission, unavailable configuration or an incompatible record status. Check the current account and selected record; do not bypass the restriction.",
+      "Correct the field errors shown. After an uncertain submission, refresh the record before trying again to avoid duplicate operations."
+    ]
+  },
+  {
+    "slug": "manage-legal-holds",
+    "portal": "admin",
+    "title": "Create or release a legal hold",
+    "summary": "Protect the intended records through explicit controls.",
+    "category": "Compliance",
+    "pageRoute": "/admin/retention",
+    "keywords": [],
+    "adminRoles": [
+      "Compliance",
+      "Admin",
+      "SuperAdmin"
+    ],
+    "permissions": [],
+    "businessRoles": [],
+    "allowNoBusiness": false,
+    "isPage": false,
+    "reviewedOn": "2026-10-13",
+    "prerequisites": [
+      "Sign in to the admin portal with permission to open Data retention and legal holds.",
+      "Use your assigned operational role; documentation does not grant additional authority."
+    ],
+    "steps": [
+      {
+        "title": "Inspect existing holds",
+        "instruction": "Open Legal holds and check the intended subject/scope."
+      },
+      {
+        "title": "Create deliberately",
+        "instruction": "In Create legal hold select scope, supply the approved reason and choose Create legal hold."
+      },
+      {
+        "title": "Verify coverage",
+        "instruction": "Inspect the saved hold’s target and status."
+      },
+      {
+        "title": "Release only with approval",
+        "instruction": "Choose Release hold for the exact record, enter justification and Confirm release."
+      }
+    ],
+    "expectedResult": "The hold or release is recorded for its intended scope.",
+    "warnings": [
+      "A visible action is not authorization to destroy evidence. Follow the approved legal-hold process."
+    ],
+    "troubleshooting": [
+      "A missing or disabled action can indicate insufficient permission, unavailable configuration or an incompatible record status. Check the current account and selected record; do not bypass the restriction.",
+      "Correct the field errors shown. After an uncertain submission, refresh the record before trying again to avoid duplicate operations."
+    ]
+  },
+  {
+    "slug": "review-outbound-restrictions",
+    "portal": "admin",
+    "title": "Inspect outbound funds restrictions",
+    "summary": "Identify affected subjects and current restriction state.",
+    "category": "Compliance",
+    "pageRoute": "/admin/outbound-restrictions",
+    "keywords": [],
+    "adminRoles": [
+      "Compliance",
+      "InternalAudit",
+      "Operations",
+      "Admin",
+      "SuperAdmin"
+    ],
+    "permissions": [],
+    "businessRoles": [],
+    "allowNoBusiness": false,
+    "isPage": false,
+    "reviewedOn": "2026-10-13",
+    "prerequisites": [
+      "Sign in to the admin portal with permission to open Outbound funds restrictions.",
+      "Use your assigned operational role; documentation does not grant additional authority."
+    ],
+    "steps": [
+      {
+        "title": "Filter records",
+        "instruction": "Open Outbound funds restrictions and Apply appropriate filters."
+      },
+      {
+        "title": "Review the restriction",
+        "instruction": "Choose Review and confirm subject, source, timing and status."
+      },
+      {
+        "title": "Inspect affected activity",
+        "instruction": "Use related payment/account modules to understand the effect; read permission is not apply/release permission."
+      },
+      {
+        "title": "Refresh before decisions",
+        "instruction": "Recheck the current state before any authorized operational action."
+      }
+    ],
+    "expectedResult": "The restriction is identifiable without internal reasons in search previews.",
+    "warnings": [
+      "Internal reasons and evidence are deliberately not searched."
+    ],
+    "troubleshooting": [
+      "A missing or disabled action can indicate insufficient permission, unavailable configuration or an incompatible record status. Check the current account and selected record; do not bypass the restriction.",
+      "Correct the field errors shown. After an uncertain submission, refresh the record before trying again to avoid duplicate operations."
+    ]
+  },
+  {
+    "slug": "apply-release-outbound-restriction",
+    "portal": "admin",
+    "title": "Apply or release an outbound funds restriction",
+    "summary": "Use the subject picker and an approved reason.",
+    "category": "Compliance",
+    "pageRoute": "/admin/outbound-restrictions",
+    "keywords": [],
+    "adminRoles": [
+      "Compliance",
+      "InternalAudit",
+      "Admin",
+      "SuperAdmin"
+    ],
+    "permissions": [],
+    "businessRoles": [],
+    "allowNoBusiness": false,
+    "isPage": false,
+    "reviewedOn": "2026-10-13",
+    "prerequisites": [
+      "Sign in to the admin portal with permission to open Outbound funds restrictions.",
+      "Use your assigned operational role; documentation does not grant additional authority."
+    ],
+    "steps": [
+      {
+        "title": "Find the subject",
+        "instruction": "Use New restriction Search in Outbound funds restrictions."
+      },
+      {
+        "title": "Confirm identity",
+        "instruction": "Choose the correct subject and inspect Already restricted state."
+      },
+      {
+        "title": "Apply deliberately",
+        "instruction": "Complete required source/reason fields and choose Apply outbound restriction."
+      },
+      {
+        "title": "Release and verify when approved",
+        "instruction": "Review the active record, enter the release reason and choose Release restriction; refresh to confirm."
+      }
+    ],
+    "expectedResult": "The explicit decision is recorded for the chosen subject.",
+    "warnings": [
+      "Restriction changes do not automatically reverse, refund or complete earlier transfers."
+    ],
+    "troubleshooting": [
+      "A missing or disabled action can indicate insufficient permission, unavailable configuration or an incompatible record status. Check the current account and selected record; do not bypass the restriction.",
+      "Correct the field errors shown. After an uncertain submission, refresh the record before trying again to avoid duplicate operations."
+    ]
+  },
+  {
+    "slug": "admin-support-ticket",
+    "portal": "admin",
+    "title": "Assign, reply to and update a support ticket",
+    "summary": "Separate customer replies from internal notes.",
+    "category": "Support",
+    "pageRoute": "/admin/support",
+    "keywords": [],
+    "adminRoles": [
+      "Support",
+      "Operations",
+      "Admin",
+      "SuperAdmin"
+    ],
+    "permissions": [],
+    "businessRoles": [],
+    "allowNoBusiness": false,
+    "isPage": false,
+    "reviewedOn": "2026-10-13",
+    "prerequisites": [
+      "Sign in to the admin portal with permission to open Support, disputes and investigations.",
+      "Use your assigned operational role; documentation does not grant additional authority."
+    ],
+    "steps": [
+      {
+        "title": "Find and open",
+        "instruction": "In Tickets Apply filters and Open the exact reference."
+      },
+      {
+        "title": "Read context",
+        "instruction": "Review customer messages, transfer links, SLA state and existing evidence."
+      },
+      {
+        "title": "Assign and communicate",
+        "instruction": "Use Assign to me or the assignment control and Save assignment where required. In Reply / note choose visibility carefully and Add message."
+      },
+      {
+        "title": "Update and verify",
+        "instruction": "Use Update with intended status/reason, choose Update ticket and inspect the saved conversation/state."
+      }
+    ],
+    "expectedResult": "The ticket has an explicit owner, conversation and status.",
+    "warnings": [
+      "Internal notes and customer replies have different visibility. Never add credentials or recovery codes to either."
+    ],
+    "troubleshooting": [
+      "A missing or disabled action can indicate insufficient permission, unavailable configuration or an incompatible record status. Check the current account and selected record; do not bypass the restriction.",
+      "Correct the field errors shown. After an uncertain submission, refresh the record before trying again to avoid duplicate operations."
+    ]
+  },
+  {
+    "slug": "admin-dispute-investigation",
+    "portal": "admin",
+    "title": "Review a dispute, investigation and SLA breach",
+    "summary": "Coordinate evidence and decisions across linked support records.",
+    "category": "Support",
+    "pageRoute": "/admin/support",
+    "keywords": [],
+    "adminRoles": [
+      "Support",
+      "Operations",
+      "Admin",
+      "SuperAdmin"
+    ],
+    "permissions": [],
+    "businessRoles": [],
+    "allowNoBusiness": false,
+    "isPage": false,
+    "reviewedOn": "2026-10-13",
+    "prerequisites": [
+      "Sign in to the admin portal with permission to open Support, disputes and investigations.",
+      "Use your assigned operational role; documentation does not grant additional authority."
+    ],
+    "steps": [
+      {
+        "title": "Select the queue",
+        "instruction": "Open Disputes or Investigations and Inspect/Open the intended reference."
+      },
+      {
+        "title": "Read linked context",
+        "instruction": "Inspect transfer, ticket, existing investigations and evidence."
+      },
+      {
+        "title": "Investigate and decide",
+        "instruction": "Use Open investigation, assignment or Add evidence as needed; then Resolve / update, Save dispute decision or Update investigation only after review."
+      },
+      {
+        "title": "Review SLA separately",
+        "instruction": "Overview identifies attention items; Process SLA breaches is a separate action whose outcome must be inspected."
+      }
+    ],
+    "expectedResult": "The linked records contain traceable investigation and decisions.",
+    "warnings": [
+      "Resolving a dispute record is not proof a refund was executed. Check the actual financial operation."
+    ],
+    "troubleshooting": [
+      "A missing or disabled action can indicate insufficient permission, unavailable configuration or an incompatible record status. Check the current account and selected record; do not bypass the restriction.",
+      "Correct the field errors shown. After an uncertain submission, refresh the record before trying again to avoid duplicate operations."
+    ]
+  },
+  {
+    "slug": "configure-digital-networks",
+    "portal": "admin",
+    "title": "Configure digital assets and blockchain networks",
+    "summary": "Keep asset, network and provider support distinct.",
+    "category": "Digital assets",
+    "pageRoute": "/admin/digital-assets",
+    "keywords": [],
+    "adminRoles": [
+      "Operations",
+      "Admin",
+      "SuperAdmin"
+    ],
+    "permissions": [],
+    "businessRoles": [],
+    "allowNoBusiness": false,
+    "isPage": false,
+    "reviewedOn": "2026-10-13",
+    "prerequisites": [
+      "Sign in to the admin portal with permission to open Digital asset operations.",
+      "Use your assigned operational role; documentation does not grant additional authority."
+    ],
+    "steps": [
+      {
+        "title": "Inspect current support",
+        "instruction": "Open Assets & networks in Digital asset operations."
+      },
+      {
+        "title": "Review the asset",
+        "instruction": "Use Edit asset only for an approved asset-level capability change."
+      },
+      {
+        "title": "Configure its network",
+        "instruction": "Choose Add network or Configure; verify network code, precision/limits, memo requirements and capabilities, then save."
+      },
+      {
+        "title": "Verify dependencies",
+        "instruction": "Confirm provider support and wallet configuration separately before enabling intended use."
+      }
+    ],
+    "expectedResult": "Asset and network configuration have explicit saved states.",
+    "warnings": [
+      "The same token symbol can exist on different networks. Asset creation alone enables neither deposits nor withdrawals."
+    ],
+    "troubleshooting": [
+      "A missing or disabled action can indicate insufficient permission, unavailable configuration or an incompatible record status. Check the current account and selected record; do not bypass the restriction.",
+      "Correct the field errors shown. After an uncertain submission, refresh the record before trying again to avoid duplicate operations."
+    ]
+  },
+  {
+    "slug": "manage-digital-providers",
+    "portal": "admin",
+    "title": "Configure digital providers and inspect health or balances",
+    "summary": "Use explicit connection and observation controls.",
+    "category": "Digital assets",
+    "pageRoute": "/admin/digital-assets",
+    "keywords": [],
+    "adminRoles": [
+      "Operations",
+      "Admin",
+      "SuperAdmin"
+    ],
+    "permissions": [],
+    "businessRoles": [],
+    "allowNoBusiness": false,
+    "isPage": false,
+    "reviewedOn": "2026-10-13",
+    "prerequisites": [
+      "Sign in to the admin portal with permission to open Digital asset operations.",
+      "Use your assigned operational role; documentation does not grant additional authority."
+    ],
+    "steps": [
+      {
+        "title": "Open Providers",
+        "instruction": "Review existing provider records before Add provider or Configure."
+      },
+      {
+        "title": "Save approved settings",
+        "instruction": "Complete the protected configuration fields and reason, then Save provider."
+      },
+      {
+        "title": "Check health or balances",
+        "instruction": "Choose Health check or Sync balances and review the target and confirmation before running."
+      },
+      {
+        "title": "Inspect observations",
+        "instruction": "Read the latest health result and Provider wallet balances with their timestamps."
+      }
+    ],
+    "expectedResult": "Provider configuration and latest observations are available.",
+    "warnings": [
+      "A failed sync does not prove the balance is zero. Secrets belong in protected configuration, not this library."
+    ],
+    "troubleshooting": [
+      "A missing or disabled action can indicate insufficient permission, unavailable configuration or an incompatible record status. Check the current account and selected record; do not bypass the restriction.",
+      "Correct the field errors shown. After an uncertain submission, refresh the record before trying again to avoid duplicate operations."
+    ]
+  },
+  {
+    "slug": "digital-reconciliation-exceptions",
+    "portal": "admin",
+    "title": "Inspect network transactions, webhooks and fee exceptions",
+    "summary": "Trace a digital-asset issue through related records.",
+    "category": "Digital assets",
+    "pageRoute": "/admin/digital-assets",
+    "keywords": [],
+    "adminRoles": [
+      "Compliance",
+      "Operations",
+      "Admin",
+      "SuperAdmin"
+    ],
+    "permissions": [],
+    "businessRoles": [],
+    "allowNoBusiness": false,
+    "isPage": false,
+    "reviewedOn": "2026-10-13",
+    "prerequisites": [
+      "Sign in to the admin portal with permission to open Digital asset operations.",
+      "Use your assigned operational role; documentation does not grant additional authority."
+    ],
+    "steps": [
+      {
+        "title": "Choose the record view",
+        "instruction": "Open Transactions, Webhooks or Exceptions."
+      },
+      {
+        "title": "Apply filters",
+        "instruction": "Select asset, network, provider, state or dates to find the exact record."
+      },
+      {
+        "title": "Inspect evidence",
+        "instruction": "Choose Inspect and review confirmations, processing and related local references."
+      },
+      {
+        "title": "Resolve through existing controls",
+        "instruction": "Review transaction/fee exceptions and approved reconciliation actions; refresh source and wallet records before retrying."
+      }
+    ],
+    "expectedResult": "The issue is understood through provider/network and local evidence.",
+    "warnings": [
+      "Do not create a replacement withdrawal while the original network/provider outcome is uncertain."
+    ],
+    "troubleshooting": [
+      "A missing or disabled action can indicate insufficient permission, unavailable configuration or an incompatible record status. Check the current account and selected record; do not bypass the restriction.",
+      "Correct the field errors shown. After an uncertain submission, refresh the record before trying again to avoid duplicate operations."
+    ]
+  },
+  {
+    "slug": "embedded-assurance-and-records",
+    "portal": "admin",
+    "title": "Review Embedded Finance assurance and related records",
+    "summary": "Connect a business with customers, accounts and applications.",
+    "category": "Integrations",
+    "pageRoute": "/admin/embedded-finance",
+    "keywords": [],
+    "adminRoles": [
+      "Compliance",
+      "InternalAudit",
+      "Operations",
+      "Admin",
+      "SuperAdmin"
+    ],
+    "permissions": [],
+    "businessRoles": [],
+    "allowNoBusiness": false,
+    "isPage": false,
+    "reviewedOn": "2026-10-13",
+    "prerequisites": [
+      "Sign in to the admin portal with permission to open Embedded Finance operations.",
+      "Use your assigned operational role; documentation does not grant additional authority."
+    ],
+    "steps": [
+      {
+        "title": "Read Overview",
+        "instruction": "Inspect the operational attention queues in Embedded Finance operations."
+      },
+      {
+        "title": "Review Assurance",
+        "instruction": "Choose the business and inspect KYB, screenings/restrictions, pricing and provisioning/webhook health."
+      },
+      {
+        "title": "Find related records",
+        "instruction": "Use Businesses, API applications, Customers or Accounts and their filters."
+      },
+      {
+        "title": "Inspect or export safe evidence",
+        "instruction": "Use permitted provider-mapping/credential metadata views and Export safe snapshot or available CSV; search never exposes credential secrets."
+      }
+    ],
+    "expectedResult": "Business relationships and assurance state can be inspected.",
+    "warnings": [
+      "Metadata access does not grant authority to reveal, create or rotate credentials."
+    ],
+    "troubleshooting": [
+      "A missing or disabled action can indicate insufficient permission, unavailable configuration or an incompatible record status. Check the current account and selected record; do not bypass the restriction.",
+      "Correct the field errors shown. After an uncertain submission, refresh the record before trying again to avoid duplicate operations."
+    ]
+  },
+  {
+    "slug": "embedded-operational-recovery",
+    "portal": "admin",
+    "title": "Recover eligible Embedded Finance operations",
+    "summary": "Act on the exact application, account or delivery.",
+    "category": "Integrations",
+    "pageRoute": "/admin/embedded-finance",
+    "keywords": [],
+    "adminRoles": [
+      "Operations",
+      "Admin",
+      "SuperAdmin"
+    ],
+    "permissions": [],
+    "businessRoles": [],
+    "allowNoBusiness": false,
+    "isPage": false,
+    "reviewedOn": "2026-10-13",
+    "prerequisites": [
+      "Sign in to the admin portal with permission to open Embedded Finance operations.",
+      "Use your assigned operational role; documentation does not grant additional authority."
+    ],
+    "steps": [
+      {
+        "title": "Find the existing record",
+        "instruction": "Locate the application, customer, account, exception, activity or webhook."
+      },
+      {
+        "title": "Review scope and attempts",
+        "instruction": "Confirm relationships, current state, restrictions and prior attempts."
+      },
+      {
+        "title": "Choose an approved action",
+        "instruction": "Use Suspend/Reactivate, Revoke credential, Retry provisioning, Reconcile, endpoint Enable/Disable or Retry delivery only when eligible."
+      },
+      {
+        "title": "Confirm and inspect",
+        "instruction": "Read the exact target, supply reason and confirm. Refresh related activity/exception/delivery queues before another attempt."
+      }
+    ],
+    "expectedResult": "Recovery and state changes follow existing controls with explicit outcomes.",
+    "warnings": [
+      "Revocation and suspension can interrupt live integrations. Reconciliation or delivery retry can reprocess events."
+    ],
+    "troubleshooting": [
+      "A missing or disabled action can indicate insufficient permission, unavailable configuration or an incompatible record status. Check the current account and selected record; do not bypass the restriction.",
+      "Correct the field errors shown. After an uncertain submission, refresh the record before trying again to avoid duplicate operations."
+    ]
+  },
+  {
+    "slug": "review-audit-trail",
+    "portal": "admin",
+    "title": "Inspect the administrative audit trail",
+    "summary": "Correlate a change with its source record.",
+    "category": "Monitoring",
+    "pageRoute": "/admin/monitoring",
+    "keywords": [],
+    "adminRoles": [
+      "Compliance",
+      "InternalAudit",
+      "Operations",
+      "Admin",
+      "SuperAdmin"
+    ],
+    "permissions": [],
+    "businessRoles": [],
+    "allowNoBusiness": false,
+    "isPage": false,
+    "reviewedOn": "2026-10-13",
+    "prerequisites": [
+      "Sign in to the admin portal with permission to open Monitoring, notifications and audit.",
+      "Use your assigned operational role; documentation does not grant additional authority."
+    ],
+    "steps": [
+      {
+        "title": "Open Audit trail",
+        "instruction": "Choose Monitoring & audit."
+      },
+      {
+        "title": "Filter the investigation",
+        "instruction": "Set actor, action, entity and date filters."
+      },
+      {
+        "title": "Inspect the event",
+        "instruction": "Review actor, timestamp, target and permitted old/new values or metadata."
+      },
+      {
+        "title": "Correlate and preserve",
+        "instruction": "Open related source records and retain evidence under the approved process."
+      }
+    ],
+    "expectedResult": "An administrative action can be correlated with its operational entity.",
+    "warnings": [
+      "Audit payloads and historical values are excluded from unified search; do not paste them into broad guides."
+    ],
+    "troubleshooting": [
+      "A missing or disabled action can indicate insufficient permission, unavailable configuration or an incompatible record status. Check the current account and selected record; do not bypass the restriction.",
+      "Correct the field errors shown. After an uncertain submission, refresh the record before trying again to avoid duplicate operations."
+    ]
+  },
+  {
+    "slug": "monitor-health-notifications",
+    "portal": "admin",
+    "title": "Review operational health and retry a notification",
+    "summary": "Inspect failure history before queuing another attempt.",
+    "category": "Monitoring",
+    "pageRoute": "/admin/monitoring",
+    "keywords": [],
+    "adminRoles": [
+      "Operations",
+      "Admin",
+      "SuperAdmin"
+    ],
+    "permissions": [],
+    "businessRoles": [],
+    "allowNoBusiness": false,
+    "isPage": false,
+    "reviewedOn": "2026-10-13",
+    "prerequisites": [
+      "Sign in to the admin portal with permission to open Monitoring, notifications and audit.",
+      "Use your assigned operational role; documentation does not grant additional authority."
+    ],
+    "steps": [
+      {
+        "title": "Refresh health",
+        "instruction": "In Monitoring / Overview choose Refresh health."
+      },
+      {
+        "title": "Inspect attention items",
+        "instruction": "Review notifications, provider operations, wallets/payments, controls, support and treasury health."
+      },
+      {
+        "title": "Find a message",
+        "instruction": "In Notifications apply queue/state filters and Inspect the intended message and prior attempts."
+      },
+      {
+        "title": "Retry and verify",
+        "instruction": "Use Queue retry with the required reason only when appropriate, then inspect the next attempt."
+      }
+    ],
+    "expectedResult": "Health observations and notification retry state are visible.",
+    "warnings": [
+      "A queued retry is not confirmed delivery. Notification bodies are excluded from search."
+    ],
+    "troubleshooting": [
+      "A missing or disabled action can indicate insufficient permission, unavailable configuration or an incompatible record status. Check the current account and selected record; do not bypass the restriction.",
+      "Correct the field errors shown. After an uncertain submission, refresh the record before trying again to avoid duplicate operations."
+    ]
+  },
+  {
+    "slug": "treasury-liquidity-review",
+    "portal": "admin",
+    "title": "Review liquidity positions and provider wallets",
+    "summary": "Use timestamped observations to identify attention items.",
+    "category": "Treasury",
+    "pageRoute": "/admin/treasury",
+    "keywords": [],
+    "adminRoles": [
+      "Operations",
+      "Admin",
+      "SuperAdmin"
+    ],
+    "permissions": [],
+    "businessRoles": [],
+    "allowNoBusiness": false,
+    "isPage": false,
+    "reviewedOn": "2026-10-13",
+    "prerequisites": [
+      "Sign in to the admin portal with permission to open Treasury and liquidity.",
+      "Use your assigned operational role; documentation does not grant additional authority."
+    ],
+    "steps": [
+      {
+        "title": "Read Treasury & liquidity",
+        "instruction": "Inspect Liquidity positions, Liquidity alerts and Provider wallets."
+      },
+      {
+        "title": "Set scope",
+        "instruction": "Filter the intended provider/currency and check observation timestamps."
+      },
+      {
+        "title": "Refresh deliberately",
+        "instruction": "Choose Refresh, or Sync provider wallets when an approved provider refresh is needed."
+      },
+      {
+        "title": "Choose the correct follow-up",
+        "instruction": "Use threshold, internal transfer, rebalancing or settlement modules for their separate reviewed actions."
+      }
+    ],
+    "expectedResult": "Liquidity positions and alerts can be reviewed with their observation state.",
+    "warnings": [
+      "A stale provider observation is not guaranteed current spendable liquidity."
+    ],
+    "troubleshooting": [
+      "A missing or disabled action can indicate insufficient permission, unavailable configuration or an incompatible record status. Check the current account and selected record; do not bypass the restriction.",
+      "Correct the field errors shown. After an uncertain submission, refresh the record before trying again to avoid duplicate operations."
+    ]
+  },
+  {
+    "slug": "configure-liquidity-threshold",
+    "portal": "admin",
+    "title": "Create or edit a liquidity threshold",
+    "summary": "Save monitoring limits for an explicit scope.",
+    "category": "Treasury",
+    "pageRoute": "/admin/treasury/thresholds",
+    "keywords": [],
+    "adminRoles": [
+      "Operations",
+      "Admin",
+      "SuperAdmin"
+    ],
+    "permissions": [],
+    "businessRoles": [],
+    "allowNoBusiness": false,
+    "isPage": false,
+    "reviewedOn": "2026-10-13",
+    "prerequisites": [
+      "Sign in to the admin portal with permission to open Liquidity thresholds.",
+      "Use your assigned operational role; documentation does not grant additional authority."
+    ],
+    "steps": [
+      {
+        "title": "Inspect thresholds",
+        "instruction": "Open Liquidity thresholds and review existing rows."
+      },
+      {
+        "title": "Create or edit",
+        "instruction": "Choose Edit for an existing threshold or complete Add threshold."
+      },
+      {
+        "title": "Confirm values",
+        "instruction": "Review provider, account/currency, target/limits and active settings."
+      },
+      {
+        "title": "Save and verify",
+        "instruction": "Choose Save threshold and reread the row; Clear abandons an unsaved draft."
+      }
+    ],
+    "expectedResult": "The intended scope has saved monitoring thresholds.",
+    "warnings": [
+      "Saving a threshold does not itself replenish funds."
+    ],
+    "troubleshooting": [
+      "A missing or disabled action can indicate insufficient permission, unavailable configuration or an incompatible record status. Check the current account and selected record; do not bypass the restriction.",
+      "Correct the field errors shown. After an uncertain submission, refresh the record before trying again to avoid duplicate operations."
+    ]
+  },
+  {
+    "slug": "post-internal-liquidity-transfer",
+    "portal": "admin",
+    "title": "Post an authorized internal liquidity transfer",
+    "summary": "Use the internal-ledger workflow rather than a provider swap.",
+    "category": "Treasury",
+    "pageRoute": "/admin/treasury/internal-transfers",
+    "keywords": [],
+    "adminRoles": [
+      "Operations",
+      "Admin",
+      "SuperAdmin"
+    ],
+    "permissions": [],
+    "businessRoles": [],
+    "allowNoBusiness": false,
+    "isPage": false,
+    "reviewedOn": "2026-10-13",
+    "prerequisites": [
+      "Sign in to the admin portal with permission to open Internal liquidity transfers.",
+      "Use your assigned operational role; documentation does not grant additional authority."
+    ],
+    "steps": [
+      {
+        "title": "Open Internal liquidity transfers",
+        "instruction": "Confirm the workflow and intended source/destination."
+      },
+      {
+        "title": "Prepare compatible accounts",
+        "instruction": "Select accounts and amount; inspect currency compatibility and available balances."
+      },
+      {
+        "title": "Review references and reason",
+        "instruction": "Use the required approved reference and reason. Regenerate only before submission when offered."
+      },
+      {
+        "title": "Post and inspect",
+        "instruction": "Choose Post internal transfer and inspect resulting movements. Use this transfer on a suggestion only fills a draft that still needs review."
+      }
+    ],
+    "expectedResult": "The internal ledger movement has an explicit reference and result.",
+    "warnings": [
+      "This moves balances. It is not a substitute for reconciling a provider discrepancy."
+    ],
+    "troubleshooting": [
+      "A missing or disabled action can indicate insufficient permission, unavailable configuration or an incompatible record status. Check the current account and selected record; do not bypass the restriction.",
+      "Correct the field errors shown. After an uncertain submission, refresh the record before trying again to avoid duplicate operations."
+    ]
+  },
+  {
+    "slug": "provider-rebalance-workflow",
+    "portal": "admin",
+    "title": "Create, approve and execute a provider rebalance",
+    "summary": "Keep request, approval and execution stages distinct.",
+    "category": "Treasury",
+    "pageRoute": "/admin/treasury/rebalancing",
+    "keywords": [],
+    "adminRoles": [
+      "Operations",
+      "Admin",
+      "SuperAdmin"
+    ],
+    "permissions": [],
+    "businessRoles": [],
+    "allowNoBusiness": false,
+    "isPage": false,
+    "reviewedOn": "2026-10-13",
+    "prerequisites": [
+      "Sign in to the admin portal with permission to open Provider rebalancing.",
+      "Use your assigned operational role; documentation does not grant additional authority."
+    ],
+    "steps": [
+      {
+        "title": "Review provider wallets",
+        "instruction": "Open Provider rebalancing and inspect current observations and suggestions."
+      },
+      {
+        "title": "Create the request",
+        "instruction": "Set source/destination wallets, currencies, amount type, amount and reason. Review a suggested draft before Create rebalance request."
+      },
+      {
+        "title": "Record approval",
+        "instruction": "An authorized reviewer checks the request and chooses Approve or Reject with reason."
+      },
+      {
+        "title": "Execute and verify",
+        "instruction": "Use Execute only when eligible. Refresh request/provider observations; Retry execution only after confirming the original outcome."
+      }
+    ],
+    "expectedResult": "The rebalance retains request, approval and provider execution states.",
+    "warnings": [
+      "Provider swaps can move real funds and incur fees. Never retry uncertain execution blindly."
+    ],
+    "troubleshooting": [
+      "A missing or disabled action can indicate insufficient permission, unavailable configuration or an incompatible record status. Check the current account and selected record; do not bypass the restriction.",
+      "Correct the field errors shown. After an uncertain submission, refresh the record before trying again to avoid duplicate operations."
+    ]
+  },
+  {
+    "slug": "settlement-batch-reconciliation",
+    "portal": "admin",
+    "title": "Create and reconcile a settlement batch",
+    "summary": "Compare an intended settlement window with actual statement evidence.",
+    "category": "Treasury",
+    "pageRoute": "/admin/treasury/settlements",
+    "keywords": [],
+    "adminRoles": [
+      "Operations",
+      "Admin",
+      "SuperAdmin"
+    ],
+    "permissions": [],
+    "businessRoles": [],
+    "allowNoBusiness": false,
+    "isPage": false,
+    "reviewedOn": "2026-10-13",
+    "prerequisites": [
+      "Sign in to the admin portal with permission to open Settlement management.",
+      "Use your assigned operational role; documentation does not grant additional authority."
+    ],
+    "steps": [
+      {
+        "title": "Check the window",
+        "instruction": "Open Settlement management and inspect existing batches to avoid a duplicate window."
+      },
+      {
+        "title": "Create the batch",
+        "instruction": "Complete provider, currency and window, then Create settlement batch."
+      },
+      {
+        "title": "Inspect expected activity",
+        "instruction": "Choose View items and review included items and expected net amount."
+      },
+      {
+        "title": "Reconcile actual evidence",
+        "instruction": "Use Reconcile with approved actual values/notes and Reconcile batch, or Import CSV in the supported format and Import and reconcile."
+      },
+      {
+        "title": "Review variance",
+        "instruction": "Inspect final reconciliation state, unmatched items and variance; retain approved evidence."
+      }
+    ],
+    "expectedResult": "Expected and actual amounts have a traceable reconciliation outcome.",
+    "warnings": [
+      "Do not change statement values to force zero variance. Reconciliation does not itself move funds."
+    ],
+    "troubleshooting": [
+      "A missing or disabled action can indicate insufficient permission, unavailable configuration or an incompatible record status. Check the current account and selected record; do not bypass the restriction.",
+      "Correct the field errors shown. After an uncertain submission, refresh the record before trying again to avoid duplicate operations."
+    ]
+  }
+]

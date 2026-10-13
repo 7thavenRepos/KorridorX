@@ -61,6 +61,7 @@ Activity.DefaultIdFormat = ActivityIdFormat.W3C;
 Activity.ForceDefaultIdFormat = true;
 
 var builder = WebApplication.CreateBuilder(args);
+KorridorX.Services.SearchHelp.SearchHelpRegistration.AddWorkspaceSearchHelp(builder.Services);
 
 var hostingOptions = builder.Configuration
     .GetSection(HostingOptions.SectionName)
