@@ -516,6 +516,17 @@ public sealed class InstantTradingService : IInstantTradingService
         if (quote.InstantPair.Status != InstantPairStatus.Active)
             throw new InvalidOperationException("Instant trading is currently paused for this pair.");
 
+        if (ownerType == FinancialAccountOwnerType.User)
+        {
+            var activeAssets = await _db.Assets.AsNoTracking().CountAsync(x =>
+                x.IsSupported && x.IndividualEnabled && x.InstantEnabled &&
+                (x.Code == quote.InstantPair.SourceAssetCode ||
+                 x.Code == quote.InstantPair.DestinationAssetCode), ct);
+            if (activeAssets != 2)
+                throw new InvalidOperationException(
+                    "An asset in this wallet exchange is no longer available to individuals.");
+        }
+
         var enabledAssets = await _db.Assets.AsNoTracking()
             .CountAsync(x => x.IsSupported &&
                 (ownerType == FinancialAccountOwnerType.Business ? x.BusinessEnabled : x.IndividualEnabled) &&

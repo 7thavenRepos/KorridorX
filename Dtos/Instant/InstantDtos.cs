@@ -77,7 +77,7 @@ public record InstantQuoteDto(
     decimal? BaseDestinationAmount = null,
     decimal? BusinessRevenueAmount = null);
 
-public record ExecuteInstantQuoteRequestDto(Guid QuoteId);
+public record ExecuteInstantQuoteRequestDto(string TransactionPin);
 
 public record InstantTradeDto(
     Guid Id,

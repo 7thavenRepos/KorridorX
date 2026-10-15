@@ -22,6 +22,11 @@ public class RecipientsController : ControllerBase
         _recipientService = recipientService;
     }
 
+    [HttpGet("delivery-methods")]
+    public IActionResult DeliveryMethods() =>
+        Ok(ApiResponses.Ok(RecipientDeliveryPolicy.Available,
+            "Available recipient delivery methods retrieved successfully."));
+
     [HttpGet]
     public async Task<IActionResult> GetRecipients(
         [FromQuery] string? search,

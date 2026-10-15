@@ -8,6 +8,7 @@ using KorridorX.Models.Transfers;
 using KorridorX.Services.References;
 using KorridorX.Services.Compliance;
 using KorridorX.Services.Payments;
+using KorridorX.Services.Recipients;
 using KorridorX.Services.Security;
 using KorridorX.Services.Wallets;
 using Microsoft.EntityFrameworkCore;
@@ -56,11 +57,6 @@ public class TransferService : ITransferService
         CreateTransferRequestDto request,
         CancellationToken ct = default)
     {
-        if (request.RecipientBankAccountId is null && request.RecipientMobileWalletId is null)
-        {
-            throw new InvalidOperationException("Either a recipient bank account or mobile wallet is required.");
-        }
-
         if (request.RecipientBankAccountId is not null && request.RecipientMobileWalletId is not null)
         {
             throw new InvalidOperationException("Select either a recipient bank account or mobile wallet, not both.");
@@ -117,11 +113,26 @@ public class TransferService : ITransferService
         if (assetsStillEnabled != (quote.SourceCurrencyCode == quote.DestinationCurrencyCode ? 1 : 2))
             throw new InvalidOperationException("One or more quoted assets are no longer available to individual users.");
 
-        PayoutDestinationCapabilityPolicy.EnsureSupported(
-            quote.ProviderCode,
-            request.RecipientMobileWalletId.HasValue
-                ? PayoutDestinationType.RecipientMobileWallet
-                : PayoutDestinationType.RecipientBankAccount);
+        var deliveryMode = RecipientDeliveryPolicy.Resolve(
+            quote.DestinationCountryCode, quote.DestinationCurrencyCode);
+        if (deliveryMode is null)
+            throw new InvalidOperationException(
+                "No supported recipient delivery method is configured for this destination.");
+
+        if (deliveryMode == RecipientDeliveryPolicy.EmailTransfer)
+        {
+            if (!string.Equals(quote.ProviderCode, "Blaaiz", StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException("The selected payout provider does not support CAD email delivery.");
+            if (request.RecipientBankAccountId.HasValue || request.RecipientMobileWalletId.HasValue)
+                throw new InvalidOperationException("CAD Interac delivery uses the recipient email, not bank or mobile wallet details.");
+        }
+        else
+        {
+            if (!request.RecipientBankAccountId.HasValue)
+                throw new InvalidOperationException("A verified recipient bank account is required for this payout.");
+            PayoutDestinationCapabilityPolicy.EnsureSupported(
+                quote.ProviderCode, PayoutDestinationType.RecipientBankAccount);
+        }
 
         if (!string.Equals(quote.SourceCountryCode, customerProfile.CountryCode, StringComparison.OrdinalIgnoreCase))
         {
@@ -144,6 +155,13 @@ public class TransferService : ITransferService
         if (!string.Equals(recipient.CountryCode, quote.DestinationCountryCode, StringComparison.OrdinalIgnoreCase))
         {
             throw new InvalidOperationException("The recipient country does not match the quote destination country.");
+        }
+
+        if (deliveryMode == RecipientDeliveryPolicy.EmailTransfer &&
+            (string.IsNullOrWhiteSpace(recipient.Email) ||
+             !System.Net.Mail.MailAddress.TryCreate(recipient.Email, out _)))
+        {
+            throw new InvalidOperationException("A valid recipient email is required for CAD Interac delivery.");
         }
 
         if (request.RecipientBankAccountId is not null)

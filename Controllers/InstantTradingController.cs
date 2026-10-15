@@ -2,6 +2,10 @@ using System.Security.Claims;
 using KorridorX.Dtos.Instant;
 using KorridorX.Infrastructure;
 using KorridorX.Services.Instant;
+using KorridorX.Services.Security;
+using KorridorX.Services.Compliance;
+using KorridorX.Configuration;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -13,10 +17,17 @@ namespace KorridorX.Controllers;
 public sealed class InstantTradingController : ControllerBase
 {
     private readonly IInstantTradingService _service;
+    private readonly ITransactionPinService _pin;
+    private readonly IOutboundFundsRestrictionService _restrictions;
 
-    public InstantTradingController(IInstantTradingService service)
+    public InstantTradingController(
+        IInstantTradingService service,
+        ITransactionPinService pin,
+        IOutboundFundsRestrictionService restrictions)
     {
         _service = service;
+        _pin = pin;
+        _restrictions = restrictions;
     }
 
     [HttpGet("pairs")]
@@ -33,10 +44,21 @@ public sealed class InstantTradingController : ControllerBase
             "Instant quote created successfully."));
 
     [HttpPost("quotes/{quoteId:guid}/execute")]
-    public async Task<IActionResult> ExecuteQuote(Guid quoteId, CancellationToken ct) =>
-        Ok(ApiResponses.Ok(
-            await _service.ExecuteQuoteAsync(GetUserId(), quoteId, ct),
-            "Instant trade completed successfully."));
+    [EnableRateLimiting(SecurityRateLimitPolicies.Sensitive)]
+    public async Task<IActionResult> ExecuteQuote(
+        Guid quoteId,
+        [FromBody] ExecuteInstantQuoteRequestDto request,
+        CancellationToken ct)
+    {
+        var userId = GetUserId();
+        await _restrictions.EnsureUserOutboundAllowedAsync(userId, "consumer_instant_trade", ct);
+        if (request is null || string.IsNullOrWhiteSpace(request.TransactionPin))
+            throw new InvalidOperationException("Transaction PIN is required to exchange wallet balances.");
+        await _pin.VerifyForTransactionAsync(userId, request.TransactionPin, ct);
+        return Ok(ApiResponses.Ok(
+            await _service.ExecuteQuoteAsync(userId, quoteId, ct),
+            "Wallet exchange completed successfully."));
+    }
 
     [HttpGet("trades")]
     public async Task<IActionResult> Trades(
