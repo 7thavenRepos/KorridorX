@@ -157,7 +157,8 @@ public class TransferQuoteService : ITransferQuoteService
                 x.CanSend &&
                 x.Country.IsSupported &&
                 x.Country.IsSendCountry &&
-                x.Asset.IsSupported,
+                x.Asset.IsSupported &&
+                x.Asset.IndividualEnabled,
                 ct);
 
         if (!exists)
@@ -179,7 +180,8 @@ public class TransferQuoteService : ITransferQuoteService
                 x.CanReceive &&
                 x.Country.IsSupported &&
                 x.Country.IsReceiveCountry &&
-                x.Asset.IsSupported,
+                x.Asset.IsSupported &&
+                x.Asset.IndividualEnabled,
                 ct);
 
         if (!exists)

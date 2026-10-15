@@ -187,6 +187,12 @@ public class BusinessTransferService : IBusinessTransferService
 
         ValidateQuote(quote);
 
+        var enabledAssetCount = await _db.Assets.AsNoTracking()
+            .CountAsync(x => x.IsSupported && x.BusinessEnabled &&
+                (x.Code == quote.SourceCurrencyCode || x.Code == quote.DestinationCurrencyCode), ct);
+        if (enabledAssetCount != (quote.SourceCurrencyCode == quote.DestinationCurrencyCode ? 1 : 2))
+            throw new InvalidOperationException("One or more quoted assets are no longer available to business users.");
+
         PayoutDestinationCapabilityPolicy.EnsureSupported(
             quote.ProviderCode,
             request.BusinessBeneficiaryMobileWalletId.HasValue
@@ -708,6 +714,7 @@ public class BusinessTransferService : IBusinessTransferService
             x.AssetCode == currencyCode &&
             x.Country.IsSupported &&
             x.Asset.IsSupported &&
+            x.Asset.BusinessEnabled &&
             (sending
                 ? x.CanSend && x.Country.IsSendCountry
                 : x.CanReceive && x.Country.IsReceiveCountry),

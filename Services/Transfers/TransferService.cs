@@ -111,6 +111,12 @@ public class TransferService : ITransferService
             throw new InvalidOperationException("The selected quote is not a consumer transfer quote.");
         }
 
+        var assetsStillEnabled = await _db.Assets.AsNoTracking()
+            .CountAsync(x => x.IsSupported && x.IndividualEnabled &&
+                (x.Code == quote.SourceCurrencyCode || x.Code == quote.DestinationCurrencyCode), ct);
+        if (assetsStillEnabled != (quote.SourceCurrencyCode == quote.DestinationCurrencyCode ? 1 : 2))
+            throw new InvalidOperationException("One or more quoted assets are no longer available to individual users.");
+
         PayoutDestinationCapabilityPolicy.EnsureSupported(
             quote.ProviderCode,
             request.RecipientMobileWalletId.HasValue

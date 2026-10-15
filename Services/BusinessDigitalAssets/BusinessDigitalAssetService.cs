@@ -85,6 +85,7 @@ public sealed class BusinessDigitalAssetService : IBusinessDigitalAssetService
                 x.CountryCode == countryCode &&
                 x.Asset.Type == AssetType.Crypto &&
                 x.Asset.IsSupported &&
+                x.Asset.BusinessEnabled &&
                 (x.CanDeposit || x.CanWithdraw))
             .ToListAsync(ct);
 

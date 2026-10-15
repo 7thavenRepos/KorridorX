@@ -1,6 +1,7 @@
 using KorridorX.Data;
 using KorridorX.Infrastructure;
 using KorridorX.Models.Enums;
+using KorridorX.Services.Lookups;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -44,11 +45,12 @@ public class LookupsController : ControllerBase
     }
 
     [HttpGet("assets")]
-    public async Task<IActionResult> GetAssets(CancellationToken ct)
+    public async Task<IActionResult> GetAssets([FromQuery] string? channel, CancellationToken ct)
     {
+        var lookupChannel = AssetChannelAccessPolicy.ResolveChannel(channel, User);
         var assets = await _db.Assets
             .AsNoTracking()
-            .Where(x => x.IsSupported)
+            .Where(x => x.IsSupported && (lookupChannel == AssetLookupChannel.AdminAll || (lookupChannel == AssetLookupChannel.Business ? x.BusinessEnabled : x.IndividualEnabled)))
             .OrderBy(x => x.Code)
             .Select(x => new
             {
@@ -71,8 +73,10 @@ public class LookupsController : ControllerBase
     [HttpGet("asset-networks")]
     public async Task<IActionResult> GetAssetNetworks(
         [FromQuery] string? assetCode,
+        [FromQuery] string? channel,
         CancellationToken ct)
     {
+        var lookupChannel = AssetChannelAccessPolicy.ResolveChannel(channel, User);
         var normalizedAssetCode = string.IsNullOrWhiteSpace(assetCode)
             ? null
             : assetCode.Trim().ToUpperInvariant();
@@ -82,7 +86,8 @@ public class LookupsController : ControllerBase
             .Include(x => x.Asset)
             .Where(x =>
                 x.Asset.Type == AssetType.Crypto &&
-                x.Asset.IsSupported);
+                x.Asset.IsSupported &&
+                (lookupChannel == AssetLookupChannel.AdminAll || (lookupChannel == AssetLookupChannel.Business ? x.Asset.BusinessEnabled : x.Asset.IndividualEnabled)));
 
         if (normalizedAssetCode is not null)
         {
@@ -110,41 +115,32 @@ public class LookupsController : ControllerBase
     }
 
     [HttpGet("corridors")]
-    public async Task<IActionResult> GetCorridors(CancellationToken ct)
+    public async Task<IActionResult> GetCorridors([FromQuery] string? channel, CancellationToken ct)
     {
-        var corridors = await _db.CountryAssets
-            .AsNoTracking()
-            .Include(x => x.Country)
-            .Include(x => x.Asset)
-            .Where(x =>
-                x.Country.IsSupported &&
-                x.Asset.IsSupported &&
-                (x.CanSend ||
-                 x.CanReceive ||
-                 x.CanDeposit ||
-                 x.CanWithdraw ||
-                 x.CanTrade ||
-                 x.CanUseInstant))
-            .OrderBy(x => x.Country.Name)
-            .ThenBy(x => x.Asset.Type)
-            .ThenBy(x => x.Asset.Code)
-            .Select(x => new
-            {
-                CountryCode = x.Country.Code,
-                CountryName = x.Country.Name,
-                AssetCode = x.Asset.Code,
-                AssetName = x.Asset.Name,
-                x.Asset.Type,
-                x.CanSend,
-                x.CanReceive,
-                x.CanDeposit,
-                x.CanWithdraw,
-                x.CanTrade,
-                x.CanUseInstant,
-                x.IsDefault
-            })
+        var lookupChannel = AssetChannelAccessPolicy.ResolveChannel(channel, User);
+        // Consumer selector compatibility: every available channel asset is visible
+        // in both dropdowns for each supported country. REAL corridor execution
+        // remains gated by CountryAssets in quote and transfer services.
+        var countries = await _db.Countries.AsNoTracking()
+            .Where(x => x.IsSupported)
+            .Select(x => new LookupCountry(x.Code, x.Name))
+            .ToListAsync(ct);
+        var assets = await _db.Assets.AsNoTracking()
+            .Where(x => x.IsSupported && (lookupChannel == AssetLookupChannel.AdminAll || (lookupChannel == AssetLookupChannel.Business ? x.BusinessEnabled : x.IndividualEnabled)))
+            .Select(x => new LookupAsset(x.Code, x.Name, x.Type))
+            .ToListAsync(ct);
+        var codes = assets.Select(x => x.Code).ToArray();
+        var countryCodes = countries.Select(x => x.Code).ToArray();
+        var mappings = await _db.CountryAssets.AsNoTracking()
+            .Where(x => countryCodes.Contains(x.CountryCode) && codes.Contains(x.AssetCode))
+            .Select(x => new LookupMapping(
+                x.CountryCode, x.AssetCode, x.CanSend, x.CanReceive,
+                x.CanDeposit, x.CanWithdraw, x.CanTrade, x.CanUseInstant, x.IsDefault))
             .ToListAsync(ct);
 
-        return Ok(ApiResponses.Ok(corridors, "Corridors retrieved successfully."));
+        var options = AssetSelectionCatalog.Build(countries, assets, mappings);
+        return Ok(ApiResponses.Ok(options,
+            "Channel asset selections retrieved. Transfer availability is validated when quoting."));
     }
+
 }

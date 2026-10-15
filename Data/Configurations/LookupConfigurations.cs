@@ -1,4 +1,4 @@
-﻿using KorridorX.Models.Lookups;
+using KorridorX.Models.Lookups;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -30,6 +30,8 @@ public class AssetConfiguration : IEntityTypeConfiguration<Asset>
         builder.Property(x => x.Symbol).HasMaxLength(20);
         builder.Property(x => x.Type).HasConversion<int>();
 
+        builder.Property(x => x.IndividualEnabled).HasDefaultValue(true);
+        builder.Property(x => x.BusinessEnabled).HasDefaultValue(true);
         builder.HasIndex(x => x.IsSupported);
         builder.HasIndex(x => new { x.Type, x.IsSupported });
     }

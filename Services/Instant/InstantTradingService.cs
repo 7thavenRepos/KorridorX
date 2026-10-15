@@ -124,7 +124,9 @@ public sealed class InstantTradingService : IInstantTradingService
         ValidateSourceAmount(pair, request.SourceAmount);
 
         if (!pair.SourceAsset.IsSupported || !pair.SourceAsset.InstantEnabled ||
-            !pair.DestinationAsset.IsSupported || !pair.DestinationAsset.InstantEnabled)
+            !pair.SourceAsset.IndividualEnabled ||
+            !pair.DestinationAsset.IsSupported || !pair.DestinationAsset.InstantEnabled ||
+            !pair.DestinationAsset.IndividualEnabled)
             throw new InvalidOperationException("One or more assets are not enabled for instant trading.");
 
         ValidateHouseAccount(pair.HouseSourceFinancialAccount, pair.SourceAssetCode, "source");
@@ -255,7 +257,9 @@ public sealed class InstantTradingService : IInstantTradingService
         ValidateSourceAmount(pair, request.SourceAmount);
 
         if (!pair.SourceAsset.IsSupported || !pair.SourceAsset.InstantEnabled ||
-            !pair.DestinationAsset.IsSupported || !pair.DestinationAsset.InstantEnabled)
+            !pair.SourceAsset.BusinessEnabled ||
+            !pair.DestinationAsset.IsSupported || !pair.DestinationAsset.InstantEnabled ||
+            !pair.DestinationAsset.BusinessEnabled)
             throw new InvalidOperationException("One or more assets are not enabled for instant trading.");
 
         ValidateHouseAccount(pair.HouseSourceFinancialAccount, pair.SourceAssetCode, "source");
@@ -511,6 +515,13 @@ public sealed class InstantTradingService : IInstantTradingService
 
         if (quote.InstantPair.Status != InstantPairStatus.Active)
             throw new InvalidOperationException("Instant trading is currently paused for this pair.");
+
+        var enabledAssets = await _db.Assets.AsNoTracking()
+            .CountAsync(x => x.IsSupported &&
+                (ownerType == FinancialAccountOwnerType.Business ? x.BusinessEnabled : x.IndividualEnabled) &&
+                (x.Code == quote.InstantPair.SourceAssetCode || x.Code == quote.InstantPair.DestinationAssetCode), ct);
+        if (enabledAssets != (quote.InstantPair.SourceAssetCode == quote.InstantPair.DestinationAssetCode ? 1 : 2))
+            throw new InvalidOperationException("Instant trading assets are no longer available for this channel.");
 
         ValidateOwnerAccount(
             quote.UserSourceFinancialAccount,

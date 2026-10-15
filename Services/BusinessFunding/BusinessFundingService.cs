@@ -79,49 +79,8 @@ public class BusinessFundingService : IBusinessFundingService
         int pageSize,
         CancellationToken ct = default)
     {
-        var query =
-            from account in _db.FinancialAccounts.AsNoTracking()
-            join business in _db.BusinessProfiles.AsNoTracking()
-                on account.OwnerId equals business.Id
-            where account.OwnerType == FinancialAccountOwnerType.Business &&
-                  !account.IsDeleted &&
-                  !business.IsDeleted
-            select new AdminBusinessWalletDto(
-                account.Id,
-                business.Id,
-                business.BusinessName,
-                business.TradingName,
-                business.ContactEmail,
-                business.CountryCode,
-                account.AssetCode,
-                account.Status,
-                account.SettledBalance,
-                account.AvailableBalance,
-                account.HeldBalance,
-                account.CreatedAt,
-                account.LastUpdatedAt);
-
-        if (businessProfileId.HasValue)
-            query = query.Where(x => x.BusinessProfileId == businessProfileId.Value);
-        if (!string.IsNullOrWhiteSpace(currencyCode))
-        {
-            var normalizedCurrency = NormalizeCode(currencyCode);
-            query = query.Where(x => x.CurrencyCode == normalizedCurrency);
-        }
-        if (status.HasValue)
-            query = query.Where(x => x.Status == status.Value);
-        if (!string.IsNullOrWhiteSpace(search))
-        {
-            var normalizedSearch = search.Trim().ToLower();
-            query = query.Where(x =>
-                x.BusinessName.ToLower().Contains(normalizedSearch) ||
-                (x.TradingName != null && x.TradingName.ToLower().Contains(normalizedSearch)) ||
-                (x.ContactEmail != null && x.ContactEmail.ToLower().Contains(normalizedSearch)));
-        }
-
-        return await query
-            .OrderBy(x => x.BusinessName)
-            .ThenBy(x => x.CurrencyCode)
+        return await AdminBusinessWalletQuery
+            .Build(_db, businessProfileId, search, currencyCode, status)
             .PaginateAsync(page, pageSize, ct);
     }
 

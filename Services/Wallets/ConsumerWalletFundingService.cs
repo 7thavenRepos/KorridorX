@@ -372,6 +372,7 @@ public sealed class ConsumerWalletFundingService : IConsumerWalletFundingService
                 x.AssetCode == wallet.AssetCode &&
                 x.Country.IsSupported &&
                 x.Asset.IsSupported &&
+                x.Asset.IndividualEnabled &&
                 x.Asset.Type == AssetType.Fiat &&
                 x.CanDeposit,
                 ct);

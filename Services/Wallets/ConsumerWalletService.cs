@@ -154,6 +154,7 @@ public sealed class ConsumerWalletService : IConsumerWalletService
                 x.CountryCode == countryCode &&
                 x.Country.IsSupported &&
                 x.Asset.IsSupported &&
+                x.Asset.IndividualEnabled &&
                 x.Asset.Type == AssetType.Fiat &&
                 (x.CanDeposit ||
                  x.CanWithdraw ||

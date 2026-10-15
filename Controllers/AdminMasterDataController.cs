@@ -164,7 +164,11 @@ public sealed class AdminMasterDataController : ControllerBase
                 x.TradingEnabled,
                 x.InstantEnabled,
                 x.CreatedAt,
-                x.LastUpdatedAt))
+                x.LastUpdatedAt)
+            {
+                IndividualEnabled = x.IndividualEnabled,
+                BusinessEnabled = x.BusinessEnabled
+            })
             .ToListAsync(ct);
 
         return Ok(ApiResponses.Ok(
@@ -205,6 +209,8 @@ public sealed class AdminMasterDataController : ControllerBase
             DecimalPlaces = decimalPlaces,
             IsStablecoin = request.Type == AssetType.Crypto && request.IsStablecoin,
             IsSupported = request.IsSupported,
+            IndividualEnabled = request.IndividualEnabled ?? true,
+            BusinessEnabled = request.BusinessEnabled ?? true,
             DepositEnabled = request.DepositEnabled,
             WithdrawalEnabled = request.WithdrawalEnabled,
             TradingEnabled = request.TradingEnabled,
@@ -250,7 +256,15 @@ public sealed class AdminMasterDataController : ControllerBase
         asset.Symbol = RequiredText(request.Symbol, 20, "Asset symbol");
         asset.DecimalPlaces = ValidateDecimalPlaces(request.DecimalPlaces);
         asset.IsStablecoin = asset.Type == AssetType.Crypto && request.IsStablecoin;
+        var previousChannels = new
+        {
+            asset.IsSupported,
+            asset.IndividualEnabled,
+            asset.BusinessEnabled
+        };
         asset.IsSupported = request.IsSupported;
+        asset.IndividualEnabled = request.IndividualEnabled ?? asset.IndividualEnabled;
+        asset.BusinessEnabled = request.BusinessEnabled ?? asset.BusinessEnabled;
         asset.DepositEnabled = request.DepositEnabled;
         asset.WithdrawalEnabled = request.WithdrawalEnabled;
         asset.TradingEnabled = request.TradingEnabled;
@@ -273,6 +287,21 @@ public sealed class AdminMasterDataController : ControllerBase
             if (!asset.WithdrawalEnabled) mapping.CanWithdraw = false;
             if (!asset.TradingEnabled) mapping.CanTrade = false;
             if (!asset.InstantEnabled) mapping.CanUseInstant = false;
+        }
+
+        if (previousChannels.IsSupported != asset.IsSupported ||
+            previousChannels.IndividualEnabled != asset.IndividualEnabled ||
+            previousChannels.BusinessEnabled != asset.BusinessEnabled)
+        {
+            _audit?.Stage(new AuditRecordRequest(
+                Action: "ASSET_CHANNEL_AVAILABILITY_UPDATED",
+                Category: "MasterData",
+                EntityName: nameof(Asset),
+                EntityId: asset.Code,
+                OldValues: previousChannels,
+                NewValues: new { asset.IsSupported, asset.IndividualEnabled, asset.BusinessEnabled },
+                Metadata: null,
+                UserId: GetUserId()));
         }
 
         await _db.SaveChangesAsync(ct);
@@ -480,7 +509,11 @@ public sealed class AdminMasterDataController : ControllerBase
             asset.TradingEnabled,
             asset.InstantEnabled,
             asset.CreatedAt,
-            asset.LastUpdatedAt);
+            asset.LastUpdatedAt)
+        {
+            IndividualEnabled = asset.IndividualEnabled,
+            BusinessEnabled = asset.BusinessEnabled
+        };
 
     private static AdminCountryAssetDto ToDto(
         CountryAsset mapping,

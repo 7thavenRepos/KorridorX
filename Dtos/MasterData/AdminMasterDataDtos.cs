@@ -39,7 +39,11 @@ public sealed record AdminAssetDto(
     bool TradingEnabled,
     bool InstantEnabled,
     DateTime CreatedAt,
-    DateTime? LastUpdatedAt);
+    DateTime? LastUpdatedAt)
+{
+    public bool IndividualEnabled { get; init; }
+    public bool BusinessEnabled { get; init; }
+}
 
 public sealed record CreateAssetRequestDto(
     string Code,
@@ -52,7 +56,12 @@ public sealed record CreateAssetRequestDto(
     bool DepositEnabled,
     bool WithdrawalEnabled,
     bool TradingEnabled,
-    bool InstantEnabled);
+    bool InstantEnabled)
+{
+    // Nullable for backwards compatibility with older Admin clients.
+    public bool? IndividualEnabled { get; init; }
+    public bool? BusinessEnabled { get; init; }
+}
 
 public sealed record UpdateAssetRequestDto(
     string Name,
@@ -63,7 +72,12 @@ public sealed record UpdateAssetRequestDto(
     bool DepositEnabled,
     bool WithdrawalEnabled,
     bool TradingEnabled,
-    bool InstantEnabled);
+    bool InstantEnabled)
+{
+    // Nullable for backwards compatibility with older Admin clients.
+    public bool? IndividualEnabled { get; init; }
+    public bool? BusinessEnabled { get; init; }
+}
 
 public sealed record AdminCountryAssetDto(
     Guid Id,

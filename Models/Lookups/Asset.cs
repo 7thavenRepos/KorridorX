@@ -11,6 +11,8 @@ public class Asset
     public int DecimalPlaces { get; set; } = 2;
     public bool IsStablecoin { get; set; }
     public bool IsSupported { get; set; } = true;
+    public bool IndividualEnabled { get; set; } = true;
+    public bool BusinessEnabled { get; set; } = true;
     public bool DepositEnabled { get; set; } = true;
     public bool WithdrawalEnabled { get; set; } = true;
     public bool TradingEnabled { get; set; } = true;
