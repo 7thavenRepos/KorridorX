@@ -28,7 +28,14 @@ public sealed class ExternalAuthChallengeService
         return value;
     }
 
-    public ConsumerExternalChallengeDto Create(string provider, Guid? userId)
+    public ConsumerExternalChallengeDto Create(string provider, Guid? userId) =>
+        CreateCore(provider, userId, userId.HasValue ? "link" : "signin");
+
+    // PIN step-up proofs can never be substituted for sign-in/link challenges.
+    public ConsumerExternalChallengeDto CreatePinChallenge(Guid userId) =>
+        CreateCore("google", userId, "transaction-pin");
+
+    private ConsumerExternalChallengeDto CreateCore(string provider, Guid? userId, string purpose)
     {
         provider = ExternalIdentityPolicy.Provider(provider);
         Enabled(provider);
@@ -37,11 +44,17 @@ public sealed class ExternalAuthChallengeService
         // Native Apple receives the SHA-256 nonce directly; the client must not hash it again.
         var nonce = provider == "apple" ? Convert.ToHexString(SHA256.HashData(random)).ToLowerInvariant() : WebEncoders.Base64UrlEncode(random);
         var challenge = new ExternalAuthChallenge(Guid.NewGuid(), provider,
-            userId.HasValue ? "link" : "signin", userId, nonce, now, now.AddMinutes(5));
+            purpose, userId, nonce, now, now.AddMinutes(5));
         return new(provider, _protector.Protect(JsonSerializer.Serialize(challenge)), nonce, challenge.ExpiresAt);
     }
 
-    public ExternalAuthChallenge Read(string token, string provider, Guid? userId)
+    public ExternalAuthChallenge Read(string token, string provider, Guid? userId) =>
+        ReadCore(token, provider, userId, userId.HasValue ? "link" : "signin");
+
+    public ExternalAuthChallenge ReadPinChallenge(string token, Guid userId) =>
+        ReadCore(token, "google", userId, "transaction-pin");
+
+    private ExternalAuthChallenge ReadCore(string token, string provider, Guid? userId, string purpose)
     {
         provider = ExternalIdentityPolicy.Provider(provider);
         Enabled(provider);
@@ -51,7 +64,7 @@ public sealed class ExternalAuthChallengeService
             var value = JsonSerializer.Deserialize<ExternalAuthChallenge>(_protector.Unprotect(token));
             var now = DateTimeOffset.UtcNow;
             if (value is null || value.Id == Guid.Empty || value.Provider != provider || value.UserId != userId ||
-                value.Purpose != (userId.HasValue ? "link" : "signin") || value.ExpiresAt <= now ||
+                value.Purpose != purpose || value.ExpiresAt <= now ||
                 value.IssuedAt > now.AddSeconds(30) || value.ExpiresAt > value.IssuedAt.AddMinutes(5) ||
                 value.IssuedAt < now.AddMinutes(-5) || value.Nonce.Length is < 32 or > 128) throw ExternalIdentityPolicy.InvalidToken();
             return value;

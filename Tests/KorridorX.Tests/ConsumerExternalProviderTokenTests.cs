@@ -94,6 +94,13 @@ public sealed class ConsumerExternalProviderTokenTests
         Assert.Throws<UnauthorizedApiException>(() => service.Read(link.ChallengeToken, "apple", Guid.NewGuid()));
         Assert.Throws<UnauthorizedApiException>(() => service.Read(link.ChallengeToken, "apple", null));
         Assert.Throws<UnauthorizedApiException>(() => service.Read(link.ChallengeToken + "tampered", "apple", owner));
+        // PIN step-up is a separate purpose, never usable for linking or sign-in.
+        var pin = service.CreatePinChallenge(owner);
+        Assert.Equal("transaction-pin", service.ReadPinChallenge(pin.ChallengeToken, owner).Purpose);
+        Assert.Throws<UnauthorizedApiException>(() => service.ReadPinChallenge(pin.ChallengeToken, Guid.NewGuid()));
+        Assert.Throws<UnauthorizedApiException>(() => service.Read(pin.ChallengeToken, "google", owner));
+        Assert.Throws<UnauthorizedApiException>(() => service.ReadPinChallenge(signIn.ChallengeToken, owner));
+        Assert.Throws<UnauthorizedApiException>(() => service.ReadPinChallenge(link.ChallengeToken, owner));
     }
 
     private sealed class TestKeys(SecurityKey key) : IExternalSigningKeySource

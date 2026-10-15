@@ -10,6 +10,7 @@ using Microsoft.AspNetCore.RateLimiting;
 namespace KorridorX.Controllers;
 
 [Authorize]
+[ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
 [EnableRateLimiting(SecurityRateLimitPolicies.Sensitive)]
 [ApiController]
 [Route("api/auth/transaction-pin")]
@@ -39,6 +40,23 @@ public sealed class TransactionPinController : ControllerBase
             request.CurrentPassword,
             request.Pin,
             ct);
+        return Ok(ApiResponses.Ok(result, "Transaction PIN saved securely."));
+    }
+
+    [HttpPost("google/challenge")]
+    public async Task<IActionResult> GoogleChallenge(CancellationToken ct)
+    {
+        var challenge = await _service.CreateGoogleChallengeAsync(GetUserId(), ct);
+        return Ok(ApiResponses.Ok(challenge, "Fresh Google verification requested."));
+    }
+
+    [HttpPut("google")]
+    [RequestSizeLimit(24576)]
+    public async Task<IActionResult> SetWithGoogle(
+        [FromBody] SetGoogleTransactionPinRequestDto request,
+        CancellationToken ct)
+    {
+        var result = await _service.SetWithGoogleAsync(GetUserId(), request, ct);
         return Ok(ApiResponses.Ok(result, "Transaction PIN saved securely."));
     }
 
