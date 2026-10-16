@@ -20,7 +20,8 @@ public record CreateTradeOrderRequestDto(
     decimal Quantity,
     decimal? LimitPrice,
     TradeOrderTimeInForce TimeInForce = TradeOrderTimeInForce.GoodTillCancelled,
-    DateTime? ExpiresAt = null);
+    DateTime? ExpiresAt = null,
+    string? TransactionPin = null);
 
 public record TradeOrderDto(
     Guid Id,

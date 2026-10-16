@@ -3,6 +3,7 @@ using KorridorX.Configuration;
 using KorridorX.Dtos.Marketplace;
 using KorridorX.Infrastructure;
 using KorridorX.Services.Marketplace;
+using KorridorX.Services.Security;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
@@ -17,13 +18,16 @@ public class MarketplaceController : ControllerBase
 {
     private readonly IMarketplaceOrderService _orders;
     private readonly IMarketplaceOperationsService _operations;
+    private readonly ITransactionPinService _transactionPin;
 
     public MarketplaceController(
         IMarketplaceOrderService orders,
-        IMarketplaceOperationsService operations)
+        IMarketplaceOperationsService operations,
+        ITransactionPinService transactionPin)
     {
         _orders = orders;
         _operations = operations;
+        _transactionPin = transactionPin;
     }
 
     [HttpGet("pairs")]
@@ -48,7 +52,11 @@ public class MarketplaceController : ControllerBase
         [FromBody] CreateTradeOrderRequestDto request,
         CancellationToken ct)
     {
-        var result = await _orders.CreateOrderAsync(GetUserId(), request, ct);
+        // Consumer orders reserve real wallet funds; require the same PIN
+        // verification used by consumer transfers and instant exchanges.
+        var userId = GetUserId();
+        await _transactionPin.VerifyForTransactionAsync(userId, request.TransactionPin, ct);
+        var result = await _orders.CreateOrderAsync(userId, request, ct);
         return Ok(ApiResponses.Ok(result, "Marketplace order created successfully."));
     }
 

@@ -29,7 +29,10 @@ public class MarketplaceOrderService : IMarketplaceOrderService
     {
         return await _db.MarketplacePairs
             .AsNoTracking()
-            .Where(x => !x.IsDeleted && x.Status == MarketplacePairStatus.Active)
+            .Where(x => !x.IsDeleted && x.Status == MarketplacePairStatus.Active &&
+                x.BaseAsset.IsSupported && x.QuoteAsset.IsSupported &&
+                x.BaseAsset.IndividualEnabled && x.QuoteAsset.IndividualEnabled &&
+                x.BaseAsset.TradingEnabled && x.QuoteAsset.TradingEnabled)
             .OrderBy(x => x.Code)
             .Select(x => new MarketplacePairDto(
                 x.Id,
@@ -124,6 +127,10 @@ public class MarketplaceOrderService : IMarketplaceOrderService
             .Include(x => x.QuoteAsset)
             .FirstOrDefaultAsync(x => x.Id == request.MarketplacePairId && !x.IsDeleted, ct)
             ?? throw new InvalidOperationException("Marketplace pair not found.");
+
+        if (!pair.BaseAsset.IsSupported || !pair.QuoteAsset.IsSupported ||
+            !pair.BaseAsset.IndividualEnabled || !pair.QuoteAsset.IndividualEnabled)
+            throw new InvalidOperationException("One or more assets in this pair are unavailable for Individual trading.");
 
         ValidatePairAndOrder(pair, request);
 
