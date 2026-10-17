@@ -19,7 +19,7 @@ namespace KorridorX.Controllers;
 [Route("api/admin/master-data")]
 [Authorize(Roles = "Admin,SuperAdmin")]
 [EnableRateLimiting(SecurityRateLimitPolicies.Sensitive)]
-public sealed class AdminMasterDataController : ControllerBase
+public sealed partial class AdminMasterDataController : ControllerBase
 {
     private static readonly Regex CountryCodePattern =
         new("^[A-Z]{2}$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
@@ -625,57 +625,8 @@ public sealed class AdminMasterDataController : ControllerBase
     }
 
     private static void ValidateCountryAssetRequest(
-        Country country,
-        Asset asset,
-        UpsertCountryAssetRequestDto request)
-    {
-        var anyCapability = request.CanSend ||
-            request.CanReceive ||
-            request.CanDeposit ||
-            request.CanWithdraw ||
-            request.CanTrade ||
-            request.CanUseInstant;
-
-        if (anyCapability && !country.IsSupported)
-            throw new InvalidOperationException(
-                "Capabilities cannot be enabled for an unsupported country.");
-
-        if (anyCapability && !asset.IsSupported)
-            throw new InvalidOperationException(
-                "Capabilities cannot be enabled for an unsupported asset.");
-
-        if (request.CanSend && !country.IsSendCountry)
-            throw new InvalidOperationException(
-                "Sending cannot be enabled because the country is not a send country.");
-
-        if (request.CanReceive && !country.IsReceiveCountry)
-            throw new InvalidOperationException(
-                "Receiving cannot be enabled because the country is not a receive country.");
-
-        if (request.CanDeposit && !asset.DepositEnabled)
-            throw new InvalidOperationException(
-                "Deposits cannot be enabled because the asset has deposits disabled.");
-
-        if (request.CanWithdraw && !asset.WithdrawalEnabled)
-            throw new InvalidOperationException(
-                "Withdrawals cannot be enabled because the asset has withdrawals disabled.");
-
-        if (request.CanTrade && !asset.TradingEnabled)
-            throw new InvalidOperationException(
-                "Trading cannot be enabled because the asset has trading disabled.");
-
-        if (request.CanUseInstant && !asset.InstantEnabled)
-            throw new InvalidOperationException(
-                "Instant use cannot be enabled because the asset has instant operations disabled.");
-
-        if (request.IsDefault && (!country.IsSupported || !asset.IsSupported))
-            throw new InvalidOperationException(
-                "The default mapping must use a supported country and asset.");
-
-        if (request.IsDefault && !anyCapability)
-            throw new InvalidOperationException(
-                "The default mapping must have at least one active capability.");
-    }
+        Country country, Asset asset, UpsertCountryAssetRequestDto request) =>
+        KorridorX.Services.Lookups.CountryAssetBatchRules.ValidateCountryAssetRequest(country, asset, request);
 
     private static void DisableAll(CountryAsset mapping)
     {

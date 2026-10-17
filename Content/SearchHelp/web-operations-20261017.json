@@ -595,7 +595,11 @@
       "house",
       "validation",
       "page length",
-      "new features"
+      "new features",
+      "country asset mapping",
+      "KX-010",
+      "unmapped assets",
+      "batch mapping"
     ],
     "adminRoles": [
       "Support",
@@ -642,7 +646,8 @@
       "Use staging test records for acceptance. Do not perform a financial or compliance action merely to test navigation."
     ],
     "troubleshooting": [
-      "Confirm your role, selected business and current filters. Record the reference and any correlation ID, but never send passwords, bearer tokens or API secrets to support."
+      "Confirm your role, selected business and current filters. Record the reference and any correlation ID, but never send passwords, bearer tokens or API secrets to support.",
+      "KX-010 country/asset bulk mapping: record the country, selected codes, created/already-mapped counts and asset-specific error. Empty options can mean all assets are mapped, including disabled mappings. Refresh before retrying a lost response. Support must not change master-data permissions, parent capabilities or defaults to bypass a rejection."
     ]
   },
   {
