@@ -65,6 +65,12 @@ public interface IEmbeddedFinanceAdminQueryService
         CancellationToken ct = default,
         Guid? activityId = null);
 
+    Task<EmbeddedFinanceAdminPagedActivityDetailDto> GetActivityDetailPageAsync(
+        string activityType,
+        Guid activityId,
+        EmbeddedFinanceTracePageQuery query,
+        CancellationToken ct = default);
+
     Task<EmbeddedFinanceAdminActivityDetailDto> GetActivityDetailAsync(
         string activityType,
         Guid activityId,

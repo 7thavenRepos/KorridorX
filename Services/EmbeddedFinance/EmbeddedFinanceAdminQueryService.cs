@@ -906,10 +906,31 @@ public sealed class EmbeddedFinanceAdminQueryService : IEmbeddedFinanceAdminQuer
 
 
     public async Task<EmbeddedFinanceAdminActivityDetailDto> GetActivityDetailAsync(
-        string activityType,
-        Guid activityId,
-        CancellationToken ct = default)
+        string activityType, Guid activityId, CancellationToken ct = default) =>
+        (await ReadActivityDetailAsync(activityType, activityId, null, ct)).Detail;
+
+    public Task<EmbeddedFinanceAdminPagedActivityDetailDto> GetActivityDetailPageAsync(
+        string activityType, Guid activityId, EmbeddedFinanceTracePageQuery query, CancellationToken ct = default)
     {
+        ArgumentNullException.ThrowIfNull(query);
+        query.Validate(); // Reject invalid paging before any database access, including for non-HTTP callers.
+        return ReadActivityDetailAsync(activityType, activityId, query, ct);
+    }
+
+    private async Task<EmbeddedFinanceAdminPagedActivityDetailDto> ReadActivityDetailAsync(
+        string activityType, Guid activityId, EmbeddedFinanceTracePageQuery? paging, CancellationToken ct)
+    {
+        var pages = new Dictionary<string, PageMeta>();
+        async Task<List<T>> ReadTraceAsync<T>(IQueryable<T> scope, string section)
+        {
+            // Preserve the legacy endpoint's 50-row response; the new endpoint counts the complete scope.
+            if (paging is null) return await scope.Take(50).ToListAsync(ct);
+            var total = await scope.CountAsync(ct);
+            var meta = paging.ToMeta(section, total);
+            pages[section] = meta;
+            return await scope.Skip(checked((meta.Page - 1) * meta.PageSize)).Take(meta.PageSize).ToListAsync(ct);
+        }
+
         var normalizedType = Clean(activityType)
             ?? throw new InvalidOperationException(
                 "Embedded Finance activity type is required.");
@@ -960,15 +981,9 @@ public sealed class EmbeddedFinanceAdminQueryService : IEmbeddedFinanceAdminQuer
                 x.CreatedAt))
             .FirstOrDefaultAsync(ct);
 
-        var providerTransactions = await _db.ProviderTransactions
-            .AsNoTracking()
-            .Where(x =>
-                !x.IsDeleted &&
-                ((x.TransferId.HasValue && traceIds.Contains(x.TransferId.Value)) ||
-                 (x.CollectionId.HasValue && traceIds.Contains(x.CollectionId.Value)) ||
-                 (x.PayoutId.HasValue && traceIds.Contains(x.PayoutId.Value))))
-            .OrderByDescending(x => x.CreatedAt)
-            .Take(50)
+        var providerTransactionRows = await ReadTraceAsync(
+            EmbeddedFinanceTraceQueries.ProviderTransactions(_db, traceIds), "providerTransactions");
+        var providerTransactions = providerTransactionRows
             .Select(x => new EmbeddedFinanceAdminProviderTransactionTraceDto(
                 x.Id,
                 x.ProviderTransactionId,
@@ -979,18 +994,10 @@ public sealed class EmbeddedFinanceAdminQueryService : IEmbeddedFinanceAdminQuer
                 x.Amount,
                 x.LastSyncedAt,
                 x.CreatedAt))
-            .ToListAsync(ct);
+            .ToList();
 
-        var providerRows = await _db.ProviderRequestLogs
-            .AsNoTracking()
-            .Where(x =>
-                !x.IsDeleted &&
-                ((x.RelatedTransferId.HasValue && traceIds.Contains(x.RelatedTransferId.Value)) ||
-                 (x.RelatedCollectionId.HasValue && traceIds.Contains(x.RelatedCollectionId.Value)) ||
-                 (x.RelatedPayoutId.HasValue && traceIds.Contains(x.RelatedPayoutId.Value))))
-            .OrderByDescending(x => x.RequestedAt)
-            .Take(50)
-            .ToListAsync(ct);
+        var providerRows = await ReadTraceAsync(
+            EmbeddedFinanceTraceQueries.ProviderRequests(_db, traceIds), "providerRequests");
 
         var providerRequests = providerRows
             .Select(x => new EmbeddedFinanceAdminProviderRequestTraceDto(
@@ -1004,14 +1011,8 @@ public sealed class EmbeddedFinanceAdminQueryService : IEmbeddedFinanceAdminQuer
                 x.DurationMs))
             .ToList();
 
-        var reservationRows = await _db.FinancialReservations
-            .AsNoTracking()
-            .Where(x =>
-                !x.IsDeleted &&
-                (x.Id == activity.Id || traceIds.Contains(x.RelatedEntityId)))
-            .OrderByDescending(x => x.ReservedAt)
-            .Take(50)
-            .ToListAsync(ct);
+        var reservationRows = await ReadTraceAsync(
+            EmbeddedFinanceTraceQueries.Reservations(_db, activity.Id, traceIds), "reservations");
 
         var reservations = reservationRows
             .Select(x => new EmbeddedFinanceAdminReservationTraceDto(
@@ -1033,16 +1034,8 @@ public sealed class EmbeddedFinanceAdminQueryService : IEmbeddedFinanceAdminQuer
                 x.ReleaseReason))
             .ToList();
 
-        var ledgerRows = await _db.LedgerTransactions
-            .AsNoTracking()
-            .Include(x => x.Postings)
-            .Where(x =>
-                !x.IsDeleted &&
-                x.RelatedEntityId.HasValue &&
-                traceIds.Contains(x.RelatedEntityId.Value))
-            .OrderByDescending(x => x.PostedAt)
-            .Take(50)
-            .ToListAsync(ct);
+        var ledgerRows = await ReadTraceAsync(
+            EmbeddedFinanceTraceQueries.Ledgers(_db, traceIds).Include(x => x.Postings), "ledgerTransactions");
 
         var ledgers = ledgerRows
             .Select(x => new EmbeddedFinanceAdminLedgerTransactionTraceDto(
@@ -1060,7 +1053,7 @@ public sealed class EmbeddedFinanceAdminQueryService : IEmbeddedFinanceAdminQuer
                 x.ReversedAt,
                 x.ReversalReason,
                 x.Postings
-                    .OrderBy(p => p.CreatedAt)
+                    .OrderBy(p => p.CreatedAt).ThenBy(p => p.Id)
                     .Select(p => new EmbeddedFinanceAdminLedgerPostingTraceDto(
                         p.Id,
                         p.FinancialAccountId,
@@ -1071,22 +1064,8 @@ public sealed class EmbeddedFinanceAdminQueryService : IEmbeddedFinanceAdminQuer
                     .ToList()))
             .ToList();
 
-        var accountingSourceIds = new HashSet<Guid>(traceIds);
-        foreach (var reservation in reservationRows)
-            accountingSourceIds.Add(reservation.Id);
-        foreach (var ledger in ledgerRows)
-            accountingSourceIds.Add(ledger.Id);
-
-        var journalRows = await _db.JournalEntries
-            .AsNoTracking()
-            .Include(x => x.Lines)
-            .Where(x =>
-                !x.IsDeleted &&
-                x.SourceId.HasValue &&
-                accountingSourceIds.Contains(x.SourceId.Value))
-            .OrderByDescending(x => x.PostedAt)
-            .Take(50)
-            .ToListAsync(ct);
+        var journalRows = await ReadTraceAsync(
+            EmbeddedFinanceTraceQueries.Journals(_db, activity.Id, traceIds).Include(x => x.Lines), "journalEntries");
 
         var journals = journalRows
             .Select(x => new EmbeddedFinanceAdminJournalEntryTraceDto(
@@ -1101,7 +1080,7 @@ public sealed class EmbeddedFinanceAdminQueryService : IEmbeddedFinanceAdminQuer
                 x.ReversedAt,
                 x.ReversalReason,
                 x.Lines
-                    .OrderBy(line => line.CreatedAt)
+                    .OrderBy(line => line.CreatedAt).ThenBy(line => line.Id)
                     .Select(line => new EmbeddedFinanceAdminJournalLineTraceDto(
                         line.Id,
                         line.AccountingAccountId,
@@ -1110,7 +1089,7 @@ public sealed class EmbeddedFinanceAdminQueryService : IEmbeddedFinanceAdminQuer
                     .ToList()))
             .ToList();
 
-        var activityEntityName = normalizedType switch
+        var activityEntityName = activity.ActivityType switch
         {
             "Collection" => "Collection",
             "Payout" => "Payout",
@@ -1121,35 +1100,9 @@ public sealed class EmbeddedFinanceAdminQueryService : IEmbeddedFinanceAdminQuer
             _ => normalizedType
         };
 
-        var activityIdText = activity.Id.ToString();
-        var customerIdText = activity.BusinessCustomerId.ToString();
-        var accountIdText = activity.CollectionAccountId?.ToString();
-        var applicationIdText = apiContext?.ApiApplicationId.ToString();
-
-        var mappingIds = activity.CollectionAccountId.HasValue
-            ? (await _db.ProviderAccountMappings
-                .AsNoTracking()
-                .Where(x =>
-                    x.CollectionAccountId == activity.CollectionAccountId.Value &&
-                    !x.IsDeleted)
-                .Select(x => x.Id)
-                .ToListAsync(ct))
-                .Select(x => x.ToString())
-                .ToHashSet(StringComparer.OrdinalIgnoreCase)
-            : new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-        var auditRows = await _db.AuditLogs
-            .AsNoTracking()
-            .Where(x =>
-                !x.IsDeleted &&
-                x.Category == "EmbeddedFinance" &&
-                ((x.EntityName == activityEntityName && x.EntityId == activityIdText) ||
-                 (x.EntityName == "BusinessCustomer" && x.EntityId == customerIdText) ||
-                 (accountIdText != null && x.EntityName == "CollectionAccount" && x.EntityId == accountIdText) ||
-                 (applicationIdText != null && x.EntityName == "ApiApplication" && x.EntityId == applicationIdText) ||
-                 (x.EntityName == "ProviderAccountMapping" && x.EntityId != null && mappingIds.Contains(x.EntityId))))
-            .OrderByDescending(x => x.OccurredAt)
-            .Take(50)
+        var auditRows = await ReadTraceAsync(
+            EmbeddedFinanceTraceQueries.AuditTimeline(_db, activityEntityName,
+                activity.Id, activity.BusinessCustomerId, activity.CollectionAccountId, apiContext?.ApiApplicationId)
             .Select(x => new
             {
                 x.Id,
@@ -1160,8 +1113,7 @@ public sealed class EmbeddedFinanceAdminQueryService : IEmbeddedFinanceAdminQuer
                 x.NewValuesJson,
                 x.CorrelationId,
                 x.OccurredAt
-            })
-            .ToListAsync(ct);
+            }), "auditTimeline");
 
         var timeline = auditRows
             .Select(x => new EmbeddedFinanceAdminAuditTimelineDto(
@@ -1175,7 +1127,7 @@ public sealed class EmbeddedFinanceAdminQueryService : IEmbeddedFinanceAdminQuer
                 x.OccurredAt))
             .ToList();
 
-        return new EmbeddedFinanceAdminActivityDetailDto(
+        return new EmbeddedFinanceAdminPagedActivityDetailDto(new EmbeddedFinanceAdminActivityDetailDto(
             activity,
             apiContext,
             providerTransactions,
@@ -1183,7 +1135,7 @@ public sealed class EmbeddedFinanceAdminQueryService : IEmbeddedFinanceAdminQuer
             reservations,
             ledgers,
             journals,
-            timeline);
+            timeline), pages);
     }
 
     public async Task<PagedResult<EmbeddedFinanceAdminExceptionDto>> GetExceptionsAsync(
@@ -1194,199 +1146,22 @@ public sealed class EmbeddedFinanceAdminQueryService : IEmbeddedFinanceAdminQuer
         int pageSize,
         CancellationToken ct = default)
     {
-        (page, pageSize) = NormalizePage(page, pageSize);
-
-        var sourceFilter = Clean(sourceType);
-        var value = Clean(search);
-        var candidates = new List<EmbeddedFinanceAdminExceptionDto>();
-        var now = DateTime.UtcNow;
-
-        const int activityScanPageSize = 100;
-        const int maxActivityPages = 5;
-
-        for (var scanPage = 1; scanPage <= maxActivityPages; scanPage++)
+        // Use one captured clock for stale detection, count and the requested page.
+        // Never scan recent activity pages or truncate any exception source.
+        var query = EmbeddedFinanceExceptionQueries.Build(_db, businessProfileId, sourceType, search, DateTime.UtcNow);
+        var total = await query.CountAsync(ct);
+        var meta = EmbeddedFinanceExceptionQueries.Page(page, pageSize, total);
+        var rows = await EmbeddedFinanceExceptionQueries.Order(query)
+            .Skip(checked((meta.Page - 1) * meta.PageSize))
+            .Take(meta.PageSize)
+            .ToListAsync(ct);
+        return new PagedResult<EmbeddedFinanceAdminExceptionDto>
         {
-            var activityPage = await GetActivityAsync(
-                businessProfileId,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                scanPage,
-                activityScanPageSize,
-                ct);
-
-            foreach (var item in activityPage.Items.Where(x => NeedsAttention(x, now)))
-            {
-                var stale = IsStaleActivity(item, now);
-
-                candidates.Add(new EmbeddedFinanceAdminExceptionDto(
-                    "Activity",
-                    ExceptionSeverity(item, stale),
-                    item.Id,
-                    item.BusinessProfileId,
-                    item.BusinessName,
-                    item.BusinessCustomerId,
-                    item.BusinessCustomerName,
-                    item.CollectionAccountId,
-                    item.Reference ?? item.ExternalReference,
-                    item.Status,
-                    item.ProviderCode,
-                    item.FailureReason ??
-                        (stale
-                            ? "Activity has remained unresolved beyond the review threshold."
-                            : null),
-                    item.ActivityType,
-                    item.Id,
-                    item.OccurredAt));
-            }
-
-            if (scanPage * activityScanPageSize >= activityPage.Meta.TotalItems)
-                break;
-        }
-
-        var webhookQuery =
-            from delivery in _db.BusinessWebhookDeliveries.AsNoTracking()
-            join endpoint in _db.BusinessWebhookEndpoints.AsNoTracking()
-                on delivery.BusinessWebhookEndpointId equals endpoint.Id
-            join business in _db.BusinessProfiles.AsNoTracking()
-                on endpoint.BusinessProfileId equals business.Id
-            join webhookEvent in _db.BusinessWebhookEvents.AsNoTracking()
-                on delivery.BusinessWebhookEventId equals webhookEvent.Id
-            where
-                !delivery.IsDeleted &&
-                !endpoint.IsDeleted &&
-                !business.IsDeleted &&
-                (delivery.Status == BusinessWebhookDeliveryStatus.Retry ||
-                 delivery.Status == BusinessWebhookDeliveryStatus.DeadLetter)
-            select new
-            {
-                Delivery = delivery,
-                Endpoint = endpoint,
-                BusinessName = business.BusinessName,
-                Event = webhookEvent
-            };
-
-        if (businessProfileId.HasValue)
-        {
-            webhookQuery = webhookQuery.Where(x =>
-                x.Endpoint.BusinessProfileId == businessProfileId.Value);
-        }
-
-        candidates.AddRange(await webhookQuery
-            .OrderByDescending(x => x.Delivery.CreatedAt)
-            .Take(250)
-            .Select(x => new EmbeddedFinanceAdminExceptionDto(
-                "WebhookDelivery",
-                x.Delivery.Status == BusinessWebhookDeliveryStatus.DeadLetter
-                    ? "Critical"
-                    : "High",
-                x.Delivery.Id,
-                x.Endpoint.BusinessProfileId,
-                x.BusinessName,
-                null,
-                null,
-                null,
-                x.Event.EventId,
-                x.Delivery.Status.ToString(),
-                null,
-                x.Delivery.ErrorMessage,
-                null,
-                null,
-                x.Delivery.DeadLetteredAt ??
-                    x.Delivery.LastAttemptAt ??
-                    x.Delivery.CreatedAt))
-            .ToListAsync(ct));
-
-        var mappingQuery =
-            from mapping in _db.ProviderAccountMappings.AsNoTracking()
-            join account in _db.CollectionAccounts.AsNoTracking()
-                on mapping.CollectionAccountId equals account.Id
-            join customer in _db.BusinessCustomers.AsNoTracking()
-                on account.BusinessCustomerId equals customer.Id
-            join business in _db.BusinessProfiles.AsNoTracking()
-                on account.BusinessProfileId equals business.Id
-            where
-                !mapping.IsDeleted &&
-                !account.IsDeleted &&
-                !customer.IsDeleted &&
-                !business.IsDeleted &&
-                mapping.Status == ProviderAccountMappingStatus.Failed
-            select new
-            {
-                Mapping = mapping,
-                Account = account,
-                Customer = customer,
-                Business = business
-            };
-
-        if (businessProfileId.HasValue)
-        {
-            mappingQuery = mappingQuery.Where(x =>
-                x.Account.BusinessProfileId == businessProfileId.Value);
-        }
-
-        candidates.AddRange(await mappingQuery
-            .OrderByDescending(x => x.Mapping.LastUpdatedAt ?? x.Mapping.CreatedAt)
-            .Take(250)
-            .Select(x => new EmbeddedFinanceAdminExceptionDto(
-                "ProviderProvisioning",
-                "High",
-                x.Mapping.Id,
-                x.Account.BusinessProfileId,
-                x.Business.BusinessName,
-                x.Account.BusinessCustomerId,
-                x.Customer.DisplayName,
-                x.Account.Id,
-                x.Account.ExternalReference,
-                x.Mapping.Status.ToString(),
-                x.Mapping.ProviderCode,
-                x.Mapping.FailureReason,
-                null,
-                null,
-                x.Mapping.LastUpdatedAt ?? x.Mapping.CreatedAt))
-            .ToListAsync(ct));
-
-        if (sourceFilter is not null)
-        {
-            candidates = candidates
-                .Where(x => x.SourceType.Equals(
-                    sourceFilter,
-                    StringComparison.OrdinalIgnoreCase))
-                .ToList();
-        }
-
-        if (value is not null)
-        {
-            candidates = candidates
-                .Where(x =>
-                    Contains(x.Reference, value) ||
-                    Contains(x.BusinessName, value) ||
-                    Contains(x.BusinessCustomerName, value) ||
-                    Contains(x.Status, value) ||
-                    Contains(x.ProviderCode, value) ||
-                    Contains(x.Reason, value) ||
-                    Contains(x.ActivityType, value))
-                .ToList();
-        }
-
-        var ordered = candidates
-            .OrderByDescending(x => SeverityRank(x.Severity))
-            .ThenByDescending(x => x.OccurredAt)
-            .ToList();
-
-        var total = ordered.Count;
-        var items = ordered
-            .Skip((page - 1) * pageSize)
-            .Take(pageSize)
-            .ToList();
-
-        return Page(items, total, page, pageSize);
+            Items = rows.Select(EmbeddedFinanceExceptionQueries.ToDto).ToList(),
+            Meta = meta
+        };
     }
+
 
     public async Task<byte[]> ExportActivityCsvAsync(
         Guid? businessProfileId,

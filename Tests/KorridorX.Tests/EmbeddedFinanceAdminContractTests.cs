@@ -89,6 +89,7 @@ public sealed class EmbeddedFinanceAdminContractTests
             "activity",
             "activity.csv",
             "activity/{activityType}/{activityId:guid}",
+            "activity/{activityType}/{activityId:guid}/paged",
             "applications",
             "applications/{apiApplicationId:guid}/credentials",
             "assurance",

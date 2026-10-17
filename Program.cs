@@ -366,6 +366,7 @@ builder.Services.AddScoped<IEmbeddedPayoutSettlementService, EmbeddedPayoutSettl
 builder.Services.AddScoped<ICollectionAccountProvisioner, BlaaizCollectionAccountProvisioner>();
 builder.Services.AddScoped<IEmbeddedWebhookUrlSecurityValidator, EmbeddedWebhookUrlSecurityValidator>();
 builder.Services.AddScoped<IEmbeddedWebhookManagementService, EmbeddedWebhookManagementService>();
+builder.Services.AddScoped<KorridorX.Services.Pagination.WebHistoryPaginationService>();
 builder.Services.AddScoped<IEmbeddedWebhookOutboxStager, EmbeddedWebhookOutboxStager>();
 builder.Services.AddScoped<IEmbeddedWebhookPublisher, EmbeddedWebhookPublisher>();
 builder.Services.AddScoped<IEmbeddedWebhookSender, EmbeddedWebhookSender>();

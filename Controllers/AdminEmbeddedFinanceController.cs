@@ -294,6 +294,17 @@ public sealed class AdminEmbeddedFinanceController : ControllerBase
             "Embedded Finance activity detail retrieved successfully."));
     }
 
+    [HttpGet("activity/{activityType}/{activityId:guid}/paged")]
+    public async Task<IActionResult> ActivityDetailPage(
+        string activityType,
+        Guid activityId,
+        [FromQuery] EmbeddedFinanceTracePageQuery query,
+        CancellationToken ct)
+    {
+        var result = await _service.GetActivityDetailPageAsync(activityType, activityId, query, ct);
+        return Ok(ApiResponses.Ok(result, "Embedded Finance activity trace pages retrieved successfully."));
+    }
+
     [HttpGet("webhook-endpoints")]
     public async Task<IActionResult> WebhookEndpoints(
         [FromQuery] Guid? businessProfileId,
