@@ -1,0 +1,763 @@
+[
+  {
+    "slug": "kx009-web-list-pagination",
+    "portal": "admin",
+    "title": "Page length, filters and later history pages",
+    "summary": "Open Display settings and select 10, 20, 50 or 100 rows. The preference is saved for your account on this browser, not across devices.",
+    "category": "Getting started",
+    "pageRoute": "/admin/settings",
+    "keywords": [
+      "pagination",
+      "page length",
+      "page size",
+      "settings",
+      "list",
+      "table",
+      "history",
+      "KX-001",
+      "KX-002"
+    ],
+    "adminRoles": [
+      "Compliance",
+      "InternalAudit",
+      "Support",
+      "Operations",
+      "Admin",
+      "SuperAdmin"
+    ],
+    "permissions": [],
+    "businessRoles": [],
+    "allowNoBusiness": false,
+    "isPage": false,
+    "reviewedOn": "2026-10-17",
+    "prerequisites": [
+      "Sign in to the correct workspace with permission to use this page."
+    ],
+    "steps": [
+      {
+        "title": "Set page length",
+        "instruction": "Open Display settings and select 10, 20, 50 or 100 rows. The preference is saved for your account on this browser, not across devices."
+      },
+      {
+        "title": "Navigate records",
+        "instruction": "Return to the list and use Previous and Next. The displayed range and total apply to its current filters. Some short complete lists page in the browser; growing histories request pages from the server."
+      },
+      {
+        "title": "Keep scope clear",
+        "instruction": "Search or change filters before browsing pages. Changing the selected business or parent record resets the relevant history and clears data from the old scope. Nested lists keep separate page positions."
+      },
+      {
+        "title": "Handle refresh failures",
+        "instruction": "Wait for loading to finish. Use the available Refresh or Retry control after an error. Do not treat stale rows or an empty error state as proof that no records exist."
+      }
+    ],
+    "expectedResult": "The described changes are visible after successful server confirmation; errors are shown without reporting success.",
+    "warnings": [
+      "Use staging test records for acceptance. Do not perform a financial or compliance action merely to test navigation."
+    ],
+    "troubleshooting": [
+      "Reopen the list after changing page length. The server enforces its own maximum.",
+      "If an expected record is absent, remove filters, check the selected workspace/business and then page further. Report the module, filter, page and record reference."
+    ]
+  },
+  {
+    "slug": "kx009-web-form-feedback",
+    "portal": "admin",
+    "title": "Visible validation and immediate save feedback",
+    "summary": "Complete required fields. Leave an invalid field or submit the form to see a red border and explanatory message; feedback is not based on colour alone.",
+    "category": "Getting started",
+    "pageRoute": "/admin/settings",
+    "keywords": [
+      "validation",
+      "email",
+      "red field",
+      "save",
+      "refresh",
+      "error",
+      "KX-005",
+      "KX-007"
+    ],
+    "adminRoles": [
+      "Compliance",
+      "InternalAudit",
+      "Support",
+      "Operations",
+      "Admin",
+      "SuperAdmin"
+    ],
+    "permissions": [],
+    "businessRoles": [],
+    "allowNoBusiness": false,
+    "isPage": false,
+    "reviewedOn": "2026-10-17",
+    "prerequisites": [
+      "Sign in to the correct workspace with permission to use this page."
+    ],
+    "steps": [
+      {
+        "title": "Find the invalid field",
+        "instruction": "Complete required fields. Leave an invalid field or submit the form to see a red border and explanatory message; feedback is not based on colour alone."
+      },
+      {
+        "title": "Correct and submit once",
+        "instruction": "Correct email formats, selected master-data assets and other errors. Check the summary and first invalid field. While a save is in progress, do not repeatedly submit."
+      },
+      {
+        "title": "Check confirmed results",
+        "instruction": "Successful operations refresh their affected lists or status. Failed operations must retain meaningful feedback rather than pretending the save succeeded."
+      },
+      {
+        "title": "Report a stuck save",
+        "instruction": "After a refresh, check whether the record already exists before retrying creation. Report the screen, action, redacted error and correlation ID through Support."
+      }
+    ],
+    "expectedResult": "The described changes are visible after successful server confirmation; errors are shown without reporting success.",
+    "warnings": [
+      "Use staging test records for acceptance. Do not perform a financial or compliance action merely to test navigation."
+    ],
+    "troubleshooting": [
+      "Confirm your role, selected business and current filters. Record the reference and any correlation ID, but never send passwords, bearer tokens or API secrets to support."
+    ]
+  },
+  {
+    "slug": "kx009-web-list-pagination",
+    "portal": "business",
+    "title": "Page length, filters and later history pages",
+    "summary": "Open Display settings and select 10, 20, 50 or 100 rows. The preference is saved for your account on this browser, not across devices.",
+    "category": "Getting started",
+    "pageRoute": "/business/settings",
+    "keywords": [
+      "pagination",
+      "page length",
+      "page size",
+      "settings",
+      "list",
+      "table",
+      "history",
+      "KX-001",
+      "KX-002"
+    ],
+    "adminRoles": [],
+    "permissions": [],
+    "businessRoles": [],
+    "allowNoBusiness": true,
+    "isPage": false,
+    "reviewedOn": "2026-10-17",
+    "prerequisites": [
+      "Sign in to the correct workspace with permission to use this page."
+    ],
+    "steps": [
+      {
+        "title": "Set page length",
+        "instruction": "Open Display settings and select 10, 20, 50 or 100 rows. The preference is saved for your account on this browser, not across devices."
+      },
+      {
+        "title": "Navigate records",
+        "instruction": "Return to the list and use Previous and Next. The displayed range and total apply to its current filters. Some short complete lists page in the browser; growing histories request pages from the server."
+      },
+      {
+        "title": "Keep scope clear",
+        "instruction": "Search or change filters before browsing pages. Changing the selected business or parent record resets the relevant history and clears data from the old scope. Nested lists keep separate page positions."
+      },
+      {
+        "title": "Handle refresh failures",
+        "instruction": "Wait for loading to finish. Use the available Refresh or Retry control after an error. Do not treat stale rows or an empty error state as proof that no records exist."
+      }
+    ],
+    "expectedResult": "The described changes are visible after successful server confirmation; errors are shown without reporting success.",
+    "warnings": [
+      "Use staging test records for acceptance. Do not perform a financial or compliance action merely to test navigation."
+    ],
+    "troubleshooting": [
+      "Reopen the list after changing page length. The server enforces its own maximum.",
+      "If an expected record is absent, remove filters, check the selected workspace/business and then page further. Report the module, filter, page and record reference."
+    ]
+  },
+  {
+    "slug": "kx009-web-form-feedback",
+    "portal": "business",
+    "title": "Visible validation and immediate save feedback",
+    "summary": "Complete required fields. Leave an invalid field or submit the form to see a red border and explanatory message; feedback is not based on colour alone.",
+    "category": "Getting started",
+    "pageRoute": "/business/settings",
+    "keywords": [
+      "validation",
+      "email",
+      "red field",
+      "save",
+      "refresh",
+      "error",
+      "KX-005",
+      "KX-007"
+    ],
+    "adminRoles": [],
+    "permissions": [],
+    "businessRoles": [],
+    "allowNoBusiness": true,
+    "isPage": false,
+    "reviewedOn": "2026-10-17",
+    "prerequisites": [
+      "Sign in to the correct workspace with permission to use this page."
+    ],
+    "steps": [
+      {
+        "title": "Find the invalid field",
+        "instruction": "Complete required fields. Leave an invalid field or submit the form to see a red border and explanatory message; feedback is not based on colour alone."
+      },
+      {
+        "title": "Correct and submit once",
+        "instruction": "Correct email formats, selected master-data assets and other errors. Check the summary and first invalid field. While a save is in progress, do not repeatedly submit."
+      },
+      {
+        "title": "Check confirmed results",
+        "instruction": "Successful operations refresh their affected lists or status. Failed operations must retain meaningful feedback rather than pretending the save succeeded."
+      },
+      {
+        "title": "Report a stuck save",
+        "instruction": "After a refresh, check whether the record already exists before retrying creation. Report the screen, action, redacted error and correlation ID through Support."
+      }
+    ],
+    "expectedResult": "The described changes are visible after successful server confirmation; errors are shown without reporting success.",
+    "warnings": [
+      "Use staging test records for acceptance. Do not perform a financial or compliance action merely to test navigation."
+    ],
+    "troubleshooting": [
+      "Confirm your role, selected business and current filters. Record the reference and any correlation ID, but never send passwords, bearer tokens or API secrets to support."
+    ]
+  },
+  {
+    "slug": "kx009-provision-house-accounts",
+    "portal": "admin",
+    "title": "Create Treasury house accounts in bulk",
+    "summary": "Open Treasury → House accounts. Alternatively, open Trading & Business Wallets → Instant and choose Create missing house accounts; the instant pair form is preserved.",
+    "category": "Treasury",
+    "pageRoute": "/admin/treasury/house-accounts",
+    "keywords": [
+      "house account",
+      "provision",
+      "treasury",
+      "liquidity",
+      "CAD",
+      "NGN",
+      "KX-009"
+    ],
+    "adminRoles": [
+      "Operations",
+      "Admin",
+      "SuperAdmin"
+    ],
+    "permissions": [],
+    "businessRoles": [],
+    "allowNoBusiness": false,
+    "isPage": false,
+    "reviewedOn": "2026-10-17",
+    "prerequisites": [
+      "Sign in to the correct workspace with permission to use this page."
+    ],
+    "steps": [
+      {
+        "title": "Open provisioning",
+        "instruction": "Open Treasury → House accounts. Alternatively, open Trading & Business Wallets → Instant and choose Create missing house accounts; the instant pair form is preserved."
+      },
+      {
+        "title": "Choose assets",
+        "instruction": "Select 1 to 50 supported assets from configured master data, such as CAD, NGN and USD. You cannot enter arbitrary codes, a personal owner or an opening balance."
+      },
+      {
+        "title": "Create safely",
+        "instruction": "Choose Create house accounts once. New accounts are Treasury-owned, House type, Active and have zero settled, available and held balances. Existing non-deleted Treasury/Platform house accounts are retained without changes."
+      },
+      {
+        "title": "Review outcome",
+        "instruction": "Read the created/existing counts and status. Repeating the same selection does not create duplicates. Frozen or closed accounts are not reactivated. A reserved/deleted identity requires Treasury review."
+      },
+      {
+        "title": "Use the accounts",
+        "instruction": "On the Instant form, the house-account options refresh after successful creation. Select the matching active account on each side. In Treasury, use the paginated directory and asset filter to review balances."
+      }
+    ],
+    "expectedResult": "The described changes are visible after successful server confirmation; errors are shown without reporting success.",
+    "warnings": [
+      "Provisioning does not fund an account, create an external bank/provider wallet, enable an asset, configure a rate, or activate a trading pair.",
+      "If any selected asset or reserved identity fails validation, the provisioning transaction does not create part of that batch. Existing accounts are never silently zeroed or re-owned."
+    ],
+    "troubleshooting": [
+      "No assets: ask a master-data administrator to configure supported assets. Operations users cannot bypass master-data permissions.",
+      "Dropdown still empty: ensure the account is Active, House type, Treasury/Platform-owned and in the selected asset; click Refresh house accounts.",
+      "No funds in Treasury: stop and ask Finance to arrange approved, recorded funding. Do not insert account balances into the database."
+    ]
+  },
+  {
+    "slug": "kx009-house-account-funding",
+    "portal": "admin",
+    "title": "Fund and troubleshoot instant house liquidity",
+    "summary": "An Active house account with a zero balance is valid but cannot supply destination currency for a conversion. Provisioning is not a deposit.",
+    "category": "Treasury",
+    "pageRoute": "/admin/treasury/house-accounts",
+    "keywords": [
+      "house funding",
+      "insufficient liquidity",
+      "settled",
+      "available",
+      "internal transfer"
+    ],
+    "adminRoles": [
+      "Operations",
+      "Admin",
+      "SuperAdmin"
+    ],
+    "permissions": [],
+    "businessRoles": [],
+    "allowNoBusiness": false,
+    "isPage": false,
+    "reviewedOn": "2026-10-17",
+    "prerequisites": [
+      "Sign in to the correct workspace with permission to use this page."
+    ],
+    "steps": [
+      {
+        "title": "Separate creation from funding",
+        "instruction": "An Active house account with a zero balance is valid but cannot supply destination currency for a conversion. Provisioning is not a deposit."
+      },
+      {
+        "title": "Review recorded funds",
+        "instruction": "Use Treasury liquidity positions to identify an eligible, active internal treasury account holding the same asset with sufficient settled and available funds. A provider balance alone is not an internal posting."
+      },
+      {
+        "title": "Move existing liquidity",
+        "instruction": "Use Treasury → Internal transfers. Select the funded source and matching house destination, enter the amount and reason, and retain the generated idempotency key for that operation."
+      },
+      {
+        "title": "Verify the result",
+        "instruction": "Check the transfer reference, source/destination balances and ledger before retrying. CAD → NGN needs NGN destination liquidity; NGN → CAD needs CAD destination liquidity."
+      },
+      {
+        "title": "Stop when no source exists",
+        "instruction": "If there is no eligible funded internal source, there is no supported shortcut in this provisioning screen. Arrange approved Finance funding/reconciliation before enabling conversion."
+      }
+    ],
+    "expectedResult": "The described changes are visible after successful server confirmation; errors are shown without reporting success.",
+    "warnings": [
+      "Internal transfers move an existing balance in the same asset. They do not mint money or exchange currencies.",
+      "Use approved test balances in staging. Do not alter database balances or move customer money to demonstrate setup."
+    ],
+    "troubleshooting": [
+      "Confirm your role, selected business and current filters. Record the reference and any correlation ID, but never send passwords, bearer tokens or API secrets to support."
+    ]
+  },
+  {
+    "slug": "kx009-instant-pair-end-to-end",
+    "portal": "admin",
+    "title": "Configure an instant conversion from house account to quote",
+    "summary": "Open the Instant workspace and Create missing house accounts. Provision the source and destination assets or use existing eligible accounts. New accounts start at zero.",
+    "category": "Trading",
+    "pageRoute": "/admin/trading-wallets",
+    "keywords": [
+      "instant trading",
+      "conversion",
+      "house",
+      "rate",
+      "quote",
+      "stale rate",
+      "setup"
+    ],
+    "adminRoles": [
+      "Operations",
+      "Admin",
+      "SuperAdmin"
+    ],
+    "permissions": [],
+    "businessRoles": [],
+    "allowNoBusiness": false,
+    "isPage": false,
+    "reviewedOn": "2026-10-17",
+    "prerequisites": [
+      "Sign in to the correct workspace with permission to use this page."
+    ],
+    "steps": [
+      {
+        "title": "Create the required accounts",
+        "instruction": "Open the Instant workspace and Create missing house accounts. Provision the source and destination assets or use existing eligible accounts. New accounts start at zero."
+      },
+      {
+        "title": "Assign the correct sides",
+        "instruction": "For CAD → NGN, choose CAD as source and the CAD house account to receive CAD. Choose NGN as destination and the NGN house account to supply NGN."
+      },
+      {
+        "title": "Configure limits",
+        "instruction": "Set minimum and maximum source amounts and the source increment. Limits must align with the increment. Quote validity is 5–300 seconds. Limits are denominated in the source asset."
+      },
+      {
+        "title": "Configure pricing and funding",
+        "instruction": "In FX rates & pricing, configure an active, effective, fresh rate for that direction. Confirm the destination house account has sufficient settled and available funds. Creation of a pair does neither of these."
+      },
+      {
+        "title": "Activate and verify",
+        "instruction": "Review asset/channel and country enablement, customer compliance and eligible wallets, then Activate the pair. A status change does not bypass these checks or fund the pair."
+      }
+    ],
+    "expectedResult": "The described changes are visible after successful server confirmation; errors are shown without reporting success.",
+    "warnings": [
+      "Use staging test records for acceptance. Do not perform a financial or compliance action merely to test navigation."
+    ],
+    "troubleshooting": [
+      "No rate: check the exact direction, effective dates, active flag and freshness policy.",
+      "Insufficient liquidity: check both settled and available destination balances, not just source liquidity.",
+      "Ineligible user: check approved KYC/KYB, channel/country permissions and active wallets; do not disable safeguards."
+    ]
+  },
+  {
+    "slug": "kx009-bulk-reverse-pair-controls",
+    "portal": "admin",
+    "title": "Bulk pairs, reverse directions and status controls",
+    "summary": "Enable Create multiple pairs at once. Choose one source/base asset and several distinct destination/quote assets. Instant destinations each need a matching active house account.",
+    "category": "Trading",
+    "pageRoute": "/admin/trading-wallets",
+    "keywords": [
+      "bulk pairs",
+      "reverse",
+      "activate",
+      "pause",
+      "marketplace",
+      "KX-003",
+      "KX-004",
+      "KX-008"
+    ],
+    "adminRoles": [
+      "Operations",
+      "Admin",
+      "SuperAdmin"
+    ],
+    "permissions": [],
+    "businessRoles": [],
+    "allowNoBusiness": false,
+    "isPage": false,
+    "reviewedOn": "2026-10-17",
+    "prerequisites": [
+      "Sign in to the correct workspace with permission to use this page."
+    ],
+    "steps": [
+      {
+        "title": "Choose a batch",
+        "instruction": "Enable Create multiple pairs at once. Choose one source/base asset and several distinct destination/quote assets. Instant destinations each need a matching active house account."
+      },
+      {
+        "title": "Review reverse pairs",
+        "instruction": "Also create reverse pairs swaps directions. Reverse pairs are created Paused so direction-specific limits, increments, pricing and liquidity can be reviewed before activation."
+      },
+      {
+        "title": "Read per-pair outcomes",
+        "instruction": "Pair creation uses separate requests and may partially succeed. Read created, existing-skipped and failed counts; correct failures and retry without deleting successful pairs. This differs from atomic house-account provisioning."
+      },
+      {
+        "title": "Use the visible status",
+        "instruction": "An Active pair offers Pause; a Paused pair offers Activate. Read the current badge instead of inferring status from a button. Changes refresh after success."
+      },
+      {
+        "title": "Check each direction",
+        "instruction": "Do not blindly copy source limits or rates to the reverse direction. Its source asset and destination liquidity requirement are different."
+      }
+    ],
+    "expectedResult": "The described changes are visible after successful server confirmation; errors are shown without reporting success.",
+    "warnings": [
+      "Use staging test records for acceptance. Do not perform a financial or compliance action merely to test navigation."
+    ],
+    "troubleshooting": [
+      "Confirm your role, selected business and current filters. Record the reference and any correlation ID, but never send passwords, bearer tokens or API secrets to support."
+    ]
+  },
+  {
+    "slug": "kx009-admin-user-creation-feedback",
+    "portal": "admin",
+    "title": "Create administrators consecutively and resolve validation errors",
+    "summary": "Open Create administrator. Enter a valid email and the required identity fields, choose the configured country and supply a strong temporary password.",
+    "category": "Administration",
+    "pageRoute": "/admin/users",
+    "keywords": [
+      "administrator",
+      "internal user",
+      "temporary password",
+      "email",
+      "roles",
+      "KX-006",
+      "KX-007"
+    ],
+    "adminRoles": [
+      "Admin",
+      "SuperAdmin"
+    ],
+    "permissions": [],
+    "businessRoles": [],
+    "allowNoBusiness": false,
+    "isPage": false,
+    "reviewedOn": "2026-10-17",
+    "prerequisites": [
+      "Sign in to the correct workspace with permission to use this page."
+    ],
+    "steps": [
+      {
+        "title": "Complete identity",
+        "instruction": "Open Create administrator. Enter a valid email and the required identity fields, choose the configured country and supply a strong temporary password."
+      },
+      {
+        "title": "Assign intentional roles",
+        "instruction": "Select only the roles the colleague needs. Do not give every role simply to remove a validation or access error. Check displayed requirements before submission."
+      },
+      {
+        "title": "Submit and review",
+        "instruction": "Choose Create internal user once. Correct field-level and server-side errors, including an existing email, instead of repeatedly resubmitting."
+      },
+      {
+        "title": "Create another colleague",
+        "instruction": "After success the dialog closes and the user list refreshes. Reopen the dialog and use a different email. Verify the fields and loading state have reset."
+      }
+    ],
+    "expectedResult": "The described changes are visible after successful server confirmation; errors are shown without reporting success.",
+    "warnings": [
+      "Use staging test records for acceptance. Do not perform a financial or compliance action merely to test navigation."
+    ],
+    "troubleshooting": [
+      "Confirm your role, selected business and current filters. Record the reference and any correlation ID, but never send passwords, bearer tokens or API secrets to support."
+    ]
+  },
+  {
+    "slug": "kx009-history-and-trace-pages",
+    "portal": "admin",
+    "title": "Investigate paginated histories, traces and exception queues",
+    "summary": "Choose the correct business, activity, exception source and search filters. Totals refer to the matching scope rather than a limited recent-record scan.",
+    "category": "Embedded Finance",
+    "pageRoute": "/admin/embedded-finance",
+    "keywords": [
+      "history",
+      "trace",
+      "exceptions",
+      "webhook",
+      "ledger",
+      "journal",
+      "provider",
+      "pagination"
+    ],
+    "adminRoles": [
+      "Compliance",
+      "InternalAudit",
+      "Operations",
+      "Admin",
+      "SuperAdmin"
+    ],
+    "permissions": [],
+    "businessRoles": [],
+    "allowNoBusiness": false,
+    "isPage": false,
+    "reviewedOn": "2026-10-17",
+    "prerequisites": [
+      "Sign in to the correct workspace with permission to use this page."
+    ],
+    "steps": [
+      {
+        "title": "Set the investigation scope",
+        "instruction": "Choose the correct business, activity, exception source and search filters. Totals refer to the matching scope rather than a limited recent-record scan."
+      },
+      {
+        "title": "Browse full histories",
+        "instruction": "Use each section’s own controls for financial activity, webhook exceptions and provisioning exceptions. Trading settlement exceptions and digital-asset histories also retrieve server-side pages."
+      },
+      {
+        "title": "Inspect trace sections independently",
+        "instruction": "Open an activity and page provider transactions/requests, reservations, ledger transactions, journal entries and the audit timeline independently. Opening another activity resets those pages."
+      },
+      {
+        "title": "Read nested detail safely",
+        "instruction": "Compliance documents, owners, notes, evidence and matches and other complete detail lists use their own visible pagination. Expanded ledger postings, settlement details, credentials and support evidence retain separate page state."
+      },
+      {
+        "title": "Preserve evidence",
+        "instruction": "After a request failure, retry the relevant section. Record the activity ID, scope, section and page; pagination is not proof of settlement or reconciliation."
+      }
+    ],
+    "expectedResult": "The described changes are visible after successful server confirmation; errors are shown without reporting success.",
+    "warnings": [
+      "Use staging test records for acceptance. Do not perform a financial or compliance action merely to test navigation."
+    ],
+    "troubleshooting": [
+      "Confirm your role, selected business and current filters. Record the reference and any correlation ID, but never send passwords, bearer tokens or API secrets to support."
+    ]
+  },
+  {
+    "slug": "kx009-web-operations-support-triage",
+    "portal": "admin",
+    "title": "Support checklist for web updates and house-account setup",
+    "summary": "Record workspace, role, selected business, page, exact action, expected result and time. Ask for a redacted screenshot or correlation ID, not credentials or raw authenticated requests.",
+    "category": "Support",
+    "pageRoute": "/admin/support",
+    "keywords": [
+      "support",
+      "troubleshooting",
+      "house",
+      "validation",
+      "page length",
+      "new features"
+    ],
+    "adminRoles": [
+      "Support",
+      "Operations",
+      "Admin",
+      "SuperAdmin"
+    ],
+    "permissions": [],
+    "businessRoles": [],
+    "allowNoBusiness": false,
+    "isPage": false,
+    "reviewedOn": "2026-10-17",
+    "prerequisites": [
+      "Sign in to the correct workspace with permission to use this page."
+    ],
+    "steps": [
+      {
+        "title": "Identify the symptom",
+        "instruction": "Record workspace, role, selected business, page, exact action, expected result and time. Ask for a redacted screenshot or correlation ID, not credentials or raw authenticated requests."
+      },
+      {
+        "title": "Check rendering and forms",
+        "instruction": "For stale rows use the page refresh after confirmed success. For a stuck administrator form, check field errors, duplicate emails and whether the record already exists. Escalate reproducible errors rather than asking users to keep clicking."
+      },
+      {
+        "title": "Check pagination and pair state",
+        "instruction": "Verify saved browser page length, active filters, later pages and current pair status. Bulk pair operations may partially succeed; house provisioning is atomic and retry-safe."
+      },
+      {
+        "title": "Route house issues correctly",
+        "instruction": "An empty house-account dropdown needs an eligible same-asset Active House account. Treasury/Operations/Admin/SuperAdmin can provision through House accounts; support roles cannot provision through this guide."
+      },
+      {
+        "title": "Separate funding and activation",
+        "instruction": "Zero balance after creation is expected. Insufficient settled destination funds go to Treasury/Finance; missing/stale rates go to FX operations; eligibility failures go to the responsible compliance team."
+      },
+      {
+        "title": "Close with evidence",
+        "instruction": "Confirm the relevant screen works after the approved change. Never prescribe database balance edits, broad role grants or bypassing funding/compliance checks."
+      }
+    ],
+    "expectedResult": "The described changes are visible after successful server confirmation; errors are shown without reporting success.",
+    "warnings": [
+      "Use staging test records for acceptance. Do not perform a financial or compliance action merely to test navigation."
+    ],
+    "troubleshooting": [
+      "Confirm your role, selected business and current filters. Record the reference and any correlation ID, but never send passwords, bearer tokens or API secrets to support."
+    ]
+  },
+  {
+    "slug": "kx009-business-trading-pages",
+    "portal": "business",
+    "title": "Use instant conversion, marketplace orders and paginated order books",
+    "summary": "Instant conversion accepts an eligible current quote against platform liquidity. Marketplace trading uses compatible orders; availability and permissions still apply.",
+    "category": "Trading",
+    "pageRoute": "/business/trading",
+    "keywords": [
+      "order book",
+      "bid",
+      "ask",
+      "instant",
+      "marketplace",
+      "RFQ",
+      "history"
+    ],
+    "adminRoles": [],
+    "permissions": [
+      "ViewTrading"
+    ],
+    "businessRoles": [],
+    "allowNoBusiness": false,
+    "isPage": false,
+    "reviewedOn": "2026-10-17",
+    "prerequisites": [
+      "Sign in to the correct workspace with permission to use this page."
+    ],
+    "steps": [
+      {
+        "title": "Choose the trading mode",
+        "instruction": "Instant conversion accepts an eligible current quote against platform liquidity. Marketplace trading uses compatible orders; availability and permissions still apply."
+      },
+      {
+        "title": "Review the pair and wallet",
+        "instruction": "Choose an available configured pair and eligible wallets. Paused pairs are unavailable for new trading. Insufficient wallet funds or expired quotes must be resolved before another attempt."
+      },
+      {
+        "title": "Inspect order-book depth",
+        "instruction": "Bid and ask sides have separate server-side pages. Loading and retry states apply per side; switch pairs before comparing prices and wait for current data."
+      },
+      {
+        "title": "Review history and RFQ quotes",
+        "instruction": "Use the history and per-RFQ quote pagination to reach later rows. A visible historical quote or match is not a new executable quote or proof of external payout."
+      }
+    ],
+    "expectedResult": "The described changes are visible after successful server confirmation; errors are shown without reporting success.",
+    "warnings": [
+      "Use staging test records for acceptance. Do not perform a financial or compliance action merely to test navigation."
+    ],
+    "troubleshooting": [
+      "Confirm your role, selected business and current filters. Record the reference and any correlation ID, but never send passwords, bearer tokens or API secrets to support."
+    ]
+  },
+  {
+    "slug": "page-house-accounts-kx009",
+    "portal": "admin",
+    "title": "House accounts",
+    "summary": "Open House accounts in the admin workspace.",
+    "category": "Treasury",
+    "pageRoute": "/admin/treasury/house-accounts",
+    "keywords": [
+      "House accounts"
+    ],
+    "adminRoles": [
+      "Operations",
+      "Admin",
+      "SuperAdmin"
+    ],
+    "permissions": [],
+    "businessRoles": [],
+    "allowNoBusiness": false,
+    "isPage": true,
+    "reviewedOn": "2026-10-17"
+  },
+  {
+    "slug": "page-display-settings-kx009",
+    "portal": "admin",
+    "title": "Display settings",
+    "summary": "Open Display settings in the admin workspace.",
+    "category": "Getting started",
+    "pageRoute": "/admin/settings",
+    "keywords": [
+      "Display settings"
+    ],
+    "adminRoles": [
+      "Compliance",
+      "InternalAudit",
+      "Support",
+      "Operations",
+      "Admin",
+      "SuperAdmin"
+    ],
+    "permissions": [],
+    "businessRoles": [],
+    "allowNoBusiness": false,
+    "isPage": true,
+    "reviewedOn": "2026-10-17"
+  },
+  {
+    "slug": "page-display-settings-kx009",
+    "portal": "business",
+    "title": "Display settings",
+    "summary": "Open Display settings in the business workspace.",
+    "category": "Getting started",
+    "pageRoute": "/business/settings",
+    "keywords": [
+      "Display settings"
+    ],
+    "adminRoles": [],
+    "permissions": [],
+    "businessRoles": [],
+    "allowNoBusiness": true,
+    "isPage": true,
+    "reviewedOn": "2026-10-17"
+  }
+]

@@ -6,7 +6,7 @@ public sealed class HelpCatalogTests
     private readonly HelpCatalog catalog = new();
     [Fact] public void CompleteManifestHasNoDuplicateEntries()
     {
-        Assert.Equal(103,catalog.Entries.Count);Assert.Equal(68,catalog.Entries.Count(x=>!x.IsPage));Assert.Equal(35,catalog.Entries.Count(x=>x.IsPage));
+        Assert.Equal(118,catalog.Entries.Count);Assert.Equal(80,catalog.Entries.Count(x=>!x.IsPage));Assert.Equal(38,catalog.Entries.Count(x=>x.IsPage));
         Assert.Equal(catalog.Entries.Count,catalog.Entries.Select(x=>x.Portal+":"+x.Slug).Distinct().Count());
     }
     [Fact] public void EveryExistingDestinationHasAnActionableGuide()

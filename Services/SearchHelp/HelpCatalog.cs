@@ -44,6 +44,7 @@ public sealed class HelpCatalog
             ?? throw new InvalidOperationException("The embedded help catalog is missing.");
         Entries = JsonSerializer.Deserialize<HelpEntry[]>(stream,new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
             ?? throw new InvalidOperationException("The help catalog is empty.");
+        Entries = WebOperationsHelpUpdates.Apply(Entries);
         var unique = new HashSet<string>();
         foreach (var e in Entries)
         {

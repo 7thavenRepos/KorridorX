@@ -386,6 +386,7 @@ builder.Services.AddScoped<FirebasePushNotificationDeliveryProvider>();
 builder.Services.AddSingleton<IFirebasePushSender, FirebasePushSender>();
 builder.Services.AddScoped<INotificationDeliveryProvider, RoutingNotificationDeliveryProvider>();
 builder.Services.AddScoped<IAuditService, AuditService>();
+builder.Services.AddScoped<KorridorX.Services.Treasury.HouseAccountProvisioningService>();
 builder.Services.AddScoped<IAdminUserManagementService, AdminUserManagementService>();
 builder.Services.AddScoped<IOperationalHealthService, OperationalHealthService>();
 builder.Services.AddScoped<IBusinessContextAccessor, HttpBusinessContextAccessor>();

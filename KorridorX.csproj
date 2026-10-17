@@ -43,5 +43,6 @@
 
   <ItemGroup>
     <EmbeddedResource Include="Content/SearchHelp/catalog.json" LogicalName="KorridorX.Content.SearchHelp.catalog.json" />
+    <EmbeddedResource Include="Content/SearchHelp/web-operations-20261017.json" LogicalName="KorridorX.Content.SearchHelp.web-operations-20261017.json" />
   </ItemGroup>
 </Project>
