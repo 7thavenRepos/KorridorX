@@ -219,6 +219,13 @@ public sealed class MarketplaceTradingWorkflowTests
             "GBP",
             "USD");
 
+        // Regression: the same PostgreSQL query must work for an empty book.
+        var emptyBook = await orders.GetOrderBookAsync(pair.Id);
+        Assert.Equal(pair.Id, emptyBook.MarketplacePairId);
+        Assert.Equal(pair.Code, emptyBook.PairCode);
+        Assert.Empty(emptyBook.Bids);
+        Assert.Empty(emptyBook.Asks);
+
         var trader = await CreateApprovedTraderAsync(
             db,
             "self-match",
@@ -237,6 +244,17 @@ public sealed class MarketplaceTradingWorkflowTests
 
         Assert.Equal(TradeOrderStatus.Open, sell.Status);
         Assert.Equal(TradeOrderStatus.Open, buy.Status);
+
+        // Regression: both grouped sides must be translated and materialized.
+        var book = await orders.GetOrderBookAsync(pair.Id);
+        var bid = Assert.Single(book.Bids);
+        var ask = Assert.Single(book.Asks);
+        Assert.Equal(10m, bid.Price);
+        Assert.Equal(2m, bid.Quantity);
+        Assert.Equal(1, bid.OrderCount);
+        Assert.Equal(10m, ask.Price);
+        Assert.Equal(2m, ask.Quantity);
+        Assert.Equal(1, ask.OrderCount);
 
         Assert.Equal(
             0,

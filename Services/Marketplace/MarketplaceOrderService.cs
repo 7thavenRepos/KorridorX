@@ -5,6 +5,7 @@ using KorridorX.Models.Enums;
 using KorridorX.Models.FinancialCore;
 using KorridorX.Models.Marketplace;
 using KorridorX.Services.FinancialCore;
+using KorridorX.Services.Pagination;
 using Microsoft.EntityFrameworkCore;
 
 namespace KorridorX.Services.Marketplace;
@@ -59,40 +60,30 @@ public class MarketplaceOrderService : IMarketplaceOrderService
             .FirstOrDefaultAsync(x => x.Id == marketplacePairId && !x.IsDeleted, ct)
             ?? throw new InvalidOperationException("Marketplace pair not found.");
 
-        var activeStatuses = new[] { TradeOrderStatus.Open, TradeOrderStatus.PartiallyFilled };
         var now = DateTime.UtcNow;
 
-        var bids = await _db.TradeOrders
-            .AsNoTracking()
-            .Where(x =>
-                x.MarketplacePairId == marketplacePairId &&
-                x.Side == TradeOrderSide.Buy &&
-                activeStatuses.Contains(x.Status) &&
-                x.RemainingQuantity > 0m &&
-                (!x.ExpiresAt.HasValue || x.ExpiresAt > now) &&
-                !x.IsDeleted &&
-                x.LimitPrice != null)
-            .GroupBy(x => x.LimitPrice!.Value)
-            .Select(g => new OrderBookLevelDto(g.Key, g.Sum(x => x.RemainingQuantity), g.Count()))
-            .OrderByDescending(x => x.Price)
+        // Aggregate, sort, and bound the price levels in PostgreSQL. The shared
+        // query is also used by the business order book, so both endpoints
+        // apply identical open-order, expiry, and soft-delete filters.
+        // Materialize the bounded result before constructing DTO records:
+        // projecting OrderBookLevelDto inside the grouped IQueryable prevents
+        // EF Core/Npgsql from translating the consumer order-book query.
+        var bidLevels = await BusinessOrderBookPageQueries
+            .Levels(_db, marketplacePairId, TradeOrderSide.Buy, now)
             .Take(depth)
             .ToListAsync(ct);
 
-        var asks = await _db.TradeOrders
-            .AsNoTracking()
-            .Where(x =>
-                x.MarketplacePairId == marketplacePairId &&
-                x.Side == TradeOrderSide.Sell &&
-                activeStatuses.Contains(x.Status) &&
-                x.RemainingQuantity > 0m &&
-                (!x.ExpiresAt.HasValue || x.ExpiresAt > now) &&
-                !x.IsDeleted &&
-                x.LimitPrice != null)
-            .GroupBy(x => x.LimitPrice!.Value)
-            .Select(g => new OrderBookLevelDto(g.Key, g.Sum(x => x.RemainingQuantity), g.Count()))
-            .OrderBy(x => x.Price)
+        var askLevels = await BusinessOrderBookPageQueries
+            .Levels(_db, marketplacePairId, TradeOrderSide.Sell, now)
             .Take(depth)
             .ToListAsync(ct);
+
+        var bids = bidLevels
+            .Select(x => new OrderBookLevelDto(x.Price, x.Quantity, x.OrderCount))
+            .ToList();
+        var asks = askLevels
+            .Select(x => new OrderBookLevelDto(x.Price, x.Quantity, x.OrderCount))
+            .ToList();
 
         return new OrderBookDto(pair.Id, pair.Code, bids, asks, now);
     }
