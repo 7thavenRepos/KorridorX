@@ -38,7 +38,7 @@ public sealed class ProviderWalletResolver : IProviderWalletResolver
     public async Task<string> SelectAsync(string operationType, Guid operationId, string providerCode,
         string assetCode, string? networkCode, string purpose, bool previouslySubmitted, CancellationToken ct = default)
     {
-        if (operationId == Guid.Empty || operationType is not ("Collection" or "Payout" or "CryptoDeposit" or "CryptoWithdrawal" or "CollectionAccount"))
+        if (operationId == Guid.Empty || operationType is not ("Collection" or "Payout" or "CryptoDeposit" or "CryptoWithdrawal" or "CollectionAccount" or "WalletDepositAccount"))
             throw new InvalidOperationException("A valid payment operation is required for wallet selection.");
         if (purpose is not (Collection or Payout)) throw new InvalidOperationException("Invalid wallet purpose.");
         var provider = providerCode.Trim().ToUpperInvariant();
@@ -54,7 +54,14 @@ public sealed class ProviderWalletResolver : IProviderWalletResolver
                 throw new InvalidOperationException("This earlier payment has no recorded provider wallet. Reconcile its original provider request before attempting it again.");
             var query = selectionDb.ProviderWalletConfigurations.AsNoTracking().Where(x => !x.IsDeleted && x.IsActive &&
                 x.ProviderCode == provider && x.Environment == EnvironmentName && x.AssetCode == asset && x.NetworkCode == network);
-            var wallet = await (purpose == Collection ? query.Where(x => x.DefaultForCollection) : query.Where(x => x.DefaultForPayout))
+            var channelSelection = await selectionDb.PaymentChannelSelections.AsNoTracking()
+                .SingleOrDefaultAsync(x => x.OperationType == operationType && x.OperationId == operationId, ct);
+            if (channelSelection is not null && (channelSelection.Environment != EnvironmentName || channelSelection.ProviderCode != provider))
+                throw new InvalidOperationException("Saved payment channel belongs to a different provider/environment.");
+            var selectedQuery = channelSelection is not null
+                ? query.Where(x => x.Id == channelSelection.ProviderWalletConfigurationId && x.ProviderWalletId == channelSelection.ProviderWalletId)
+                : purpose == Collection ? query.Where(x => x.DefaultForCollection) : query.Where(x => x.DefaultForPayout);
+            var wallet = await selectedQuery
                 .SingleOrDefaultAsync(ct)
                 ?? throw new InvalidOperationException($"Configure an active default {purpose.ToLowerInvariant()} wallet for {provider}/{asset}/{network} in SuperAdmin.");
             Validate(wallet, provider, asset, network, purpose);
@@ -71,6 +78,11 @@ public sealed class ProviderWalletResolver : IProviderWalletResolver
             selection = await FindSelectionAsync(selectionDb, operationType, operationId, ct)
                 ?? throw new InvalidOperationException("Wallet selection could not be recorded.");
         }
+        var pinnedChannel = await selectionDb.PaymentChannelSelections.AsNoTracking()
+            .SingleOrDefaultAsync(x => x.OperationType == operationType && x.OperationId == operationId, ct);
+        if (pinnedChannel is not null && (pinnedChannel.ProviderWalletConfigurationId != selection.WalletConfigurationId ||
+            pinnedChannel.ProviderWalletId != selection.ProviderWalletId || pinnedChannel.Environment != EnvironmentName || pinnedChannel.ProviderCode != provider))
+            throw new InvalidOperationException("Payment channel and provider wallet snapshots disagree. Reconciliation is required; the payment was not rerouted.");
         Validate(selection.WalletConfiguration, provider, asset, network, purpose);
         if (selection.Purpose != purpose || selection.ProviderWalletId != selection.WalletConfiguration.ProviderWalletId)
             throw new InvalidOperationException("The saved provider wallet selection does not match this payment.");

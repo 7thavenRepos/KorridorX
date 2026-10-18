@@ -22,6 +22,340 @@ namespace KorridorX.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("KorridorX.Models.Payments.PaymentChannel", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("AssetCode")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<bool>("BusinessEnabled")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("CapabilityCode")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)");
+
+                    b.Property<string>("CountryCode")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CreatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("DeletedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<int>("Direction")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("DisplayName")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.Property<string>("Environment")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<bool>("HasBeenActivated")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IndividualEnabled")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime?>("LastUpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("LastUpdatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal?>("MaximumAmount")
+                        .HasPrecision(36, 18)
+                        .HasColumnType("numeric(36,18)");
+
+                    b.Property<decimal>("MinimumAmount")
+                        .HasPrecision(36, 18)
+                        .HasColumnType("numeric(36,18)");
+
+                    b.Property<bool>("ProviderCapabilityConfirmed")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("ProviderCode")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<Guid>("ProviderWalletConfigurationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("Revision")
+                        .IsConcurrencyToken()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AssetCode");
+
+                    b.HasIndex("Environment", "Direction", "AssetCode");
+
+                    b.HasIndex("Environment", "Direction", "AssetCode", "CountryCode", "CapabilityCode", "ProviderWalletConfigurationId")
+                        .IsUnique()
+                        .HasDatabaseName("UX_PaymentChannel_Route");
+
+                    b.HasIndex("ProviderWalletConfigurationId");
+
+                    b.ToTable("PaymentChannels", (string)null);
+                });
+
+            modelBuilder.Entity("KorridorX.Models.Payments.PaymentChannelSelection", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal?>("Amount")
+                        .HasPrecision(36, 18)
+                        .HasColumnType("numeric(36,18)");
+
+                    b.Property<string>("AssetCode")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<bool>("Business")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("CapabilityCode")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)");
+
+                    b.Property<Guid>("ChannelId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ChannelRevision")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("CountryCode")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Environment")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<Guid?>("FinancialAccountId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("IdempotencyKey")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<Guid>("OperationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("OperationType")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<Guid>("OwnerId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("PaymentMethod")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ProviderCode")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<Guid>("ProviderWalletConfigurationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ProviderWalletId")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ChannelId");
+
+                    b.HasIndex("OperationType", "OperationId")
+                        .IsUnique();
+
+                    b.HasIndex("OwnerId", "FinancialAccountId", "IdempotencyKey")
+                        .IsUnique()
+                        .HasDatabaseName("UX_PaymentChannel_Request")
+                        .HasFilter("\"IdempotencyKey\" IS NOT NULL");
+
+                    b.HasIndex("ProviderWalletConfigurationId");
+
+                    b.ToTable("PaymentChannelSelections", (string)null);
+                });
+
+            modelBuilder.Entity("KorridorX.Models.Payments.WalletDepositAccount", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("AccountName")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("AccountNumber")
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
+
+                    b.Property<string>("AssetCode")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("BankName")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<bool>("CanRetryCreation")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("ConnectionKey")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CreatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("DeletedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Environment")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<string>("FailureReason")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<Guid>("FinancialAccountId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Iban")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime?>("LastCheckedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("LastUpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("LastUpdatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("PaymentChannelId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ProviderAccountId")
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
+
+                    b.Property<string>("ProviderCustomerId")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
+
+                    b.Property<string>("ProviderReference")
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
+
+                    b.Property<Guid>("ProviderWalletConfigurationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ProviderWalletId")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
+
+                    b.Property<string>("RoutingNumber")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<string>("SortCode")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Environment", "ConnectionKey", "ProviderAccountId")
+                        .IsUnique()
+                        .HasDatabaseName("UX_WalletDepositAccount_ProviderAccount")
+                        .HasFilter("\"ProviderAccountId\" IS NOT NULL");
+
+                    b.HasIndex("Environment", "ProviderWalletId", "ProviderCustomerId")
+                        .IsUnique()
+                        .HasDatabaseName("UX_WalletDepositAccount_CustomerWallet");
+
+                    b.HasIndex("FinancialAccountId");
+
+                    b.HasIndex("PaymentChannelId");
+
+                    b.HasIndex("ProviderWalletConfigurationId");
+
+                    b.ToTable("WalletDepositAccounts", (string)null);
+                });
+
             modelBuilder.Entity("KorridorX.Models.Audit.AuditLog", b =>
                 {
                     b.Property<Guid>("Id")
@@ -7495,6 +7829,18 @@ namespace KorridorX.Migrations
 
             modelBuilder.Entity("KorridorX.Models.Payments.Collection", b =>
                 {
+
+                    b.Property<Guid?>("PaymentChannelId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("PaymentChannelName")
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.Property<string>("ClientRequestKey")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
@@ -7660,6 +8006,11 @@ namespace KorridorX.Migrations
 
                     b.HasIndex("RelatedEntityType", "RelatedEntityId");
 
+                                        b.HasIndex("FinancialAccountId", "ClientRequestKey")
+                        .IsUnique()
+                        .HasDatabaseName("UX_Collection_WalletRequest")
+                        .HasFilter("\"ClientRequestKey\" IS NOT NULL");
+
                     b.ToTable("Collections");
                 });
 
@@ -7719,6 +8070,14 @@ namespace KorridorX.Migrations
 
             modelBuilder.Entity("KorridorX.Models.Payments.Payout", b =>
                 {
+
+                    b.Property<Guid?>("PaymentChannelId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("PaymentChannelName")
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
@@ -12609,6 +12968,60 @@ namespace KorridorX.Migrations
                 {
                     b.Navigation("Attempts");
                 });
+            modelBuilder.Entity("KorridorX.Models.Payments.PaymentChannel", b =>
+                {
+                    b.HasOne("KorridorX.Models.Lookups.Asset", null)
+                        .WithMany()
+                        .HasForeignKey("AssetCode")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("KorridorX.Models.Providers.ProviderWalletConfiguration", null)
+                        .WithMany()
+                        .HasForeignKey("ProviderWalletConfigurationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                });
+
+            modelBuilder.Entity("KorridorX.Models.Payments.PaymentChannelSelection", b =>
+                {
+                    b.HasOne("KorridorX.Models.Payments.PaymentChannel", null)
+                        .WithMany()
+                        .HasForeignKey("ChannelId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("KorridorX.Models.Providers.ProviderWalletConfiguration", null)
+                        .WithMany()
+                        .HasForeignKey("ProviderWalletConfigurationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                });
+
+            modelBuilder.Entity("KorridorX.Models.Payments.WalletDepositAccount", b =>
+                {
+                    b.HasOne("KorridorX.Models.FinancialCore.FinancialAccount", null)
+                        .WithMany()
+                        .HasForeignKey("FinancialAccountId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("KorridorX.Models.Payments.PaymentChannel", null)
+                        .WithMany()
+                        .HasForeignKey("PaymentChannelId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("KorridorX.Models.Providers.ProviderWalletConfiguration", null)
+                        .WithMany()
+                        .HasForeignKey("ProviderWalletConfigurationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                });
+
 #pragma warning restore 612, 618
         }
     }

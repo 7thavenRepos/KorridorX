@@ -25,6 +25,9 @@ public class Collection : AuditableEntity
     public string CurrencyCode { get; set; } = "";
     public decimal Amount { get; set; }
 
+    public Guid? PaymentChannelId { get; set; }
+    public string? PaymentChannelName { get; set; }
+    public string? ClientRequestKey { get; set; }
     public PaymentMethod PaymentMethod { get; set; }
     public CollectionStatus Status { get; set; } = CollectionStatus.Pending;
 

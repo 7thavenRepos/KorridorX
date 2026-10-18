@@ -79,7 +79,7 @@ public record BusinessTransferFundingDto(
     FinancialReservationStatus? ReservationStatus,
     CollectionDetailsDto? Collection);
 
-public record CreateBusinessExternalCollectionRequestDto(PaymentMethod PaymentMethod);
+public record CreateBusinessExternalCollectionRequestDto(PaymentMethod PaymentMethod, Guid? ChannelId = null);
 
 public record AdminSetBusinessWalletStatusRequestDto(string Reason);
 

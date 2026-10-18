@@ -1,3 +1,4 @@
+using KorridorX.Services.PaymentChannels;
 using System.Text.Json;
 using KorridorX.Data;
 using KorridorX.Configuration;
@@ -29,6 +30,7 @@ public class CollectionService : ICollectionService
     private readonly IComplianceGateService _complianceGateService;
     private readonly IProviderWalletResolver _wallets;
     private readonly IConsumerTransferFundingService _consumerFunding;
+    private readonly PaymentChannelService _channels;
 
     public CollectionService(
         AppDbContext db,
@@ -38,7 +40,7 @@ public class CollectionService : ICollectionService
         IRemittanceProvider remittanceProvider,
         IComplianceGateService complianceGateService,
         IProviderWalletResolver wallets,
-        IConsumerTransferFundingService consumerFunding)
+        IConsumerTransferFundingService consumerFunding, PaymentChannelService channels)
     {
         _db = db;
         _referenceGenerator = referenceGenerator;
@@ -48,6 +50,7 @@ public class CollectionService : ICollectionService
         _complianceGateService = complianceGateService;
         _wallets = wallets;
         _consumerFunding = consumerFunding;
+        _channels = channels;
     }
 
     public async Task<IReadOnlyList<CollectionPaymentMethodDto>> GetAvailablePaymentMethodsAsync(
@@ -63,19 +66,8 @@ public class CollectionService : ICollectionService
                 $"Payment methods are not available while the transfer status is '{transfer.Status}'.");
         }
 
-        var methods = _paymentMethodPolicy.GetSupportedMethods(
-            transfer.SourceCountryCode,
-            transfer.SourceCurrencyCode);
-
-        if (methods.Count == 0)
-        {
-            throw new InvalidOperationException(
-                $"No collection payment methods are configured for {transfer.SourceCountryCode}/{transfer.SourceCurrencyCode}.");
-        }
-
-        return methods
-            .Select(ToPaymentMethodDto)
-            .ToList();
+        return await _channels.DepositMethodsAsync(transfer.SourceCountryCode, transfer.SourceCurrencyCode,
+            false, false, null, ct);
     }
 
     public async Task<CollectionDetailsDto> CreateCollectionAsync(
@@ -99,7 +91,7 @@ public class CollectionService : ICollectionService
 
         if (existingCollection is not null)
         {
-            if (existingCollection.PaymentMethod != request.PaymentMethod)
+            if (existingCollection.PaymentMethod != request.PaymentMethod || (request.ChannelId.HasValue && existingCollection.PaymentChannelId != request.ChannelId))
             {
                 throw new InvalidOperationException(
                     $"A collection already exists for this transfer using '{GetPaymentMethodDisplayName(existingCollection.PaymentMethod)}'.");
@@ -121,14 +113,8 @@ public class CollectionService : ICollectionService
             throw new InvalidOperationException("This transfer is already fully funded from the consumer wallet.");
         }
 
-        if (!_paymentMethodPolicy.IsSupported(
-                transfer.SourceCountryCode,
-                transfer.SourceCurrencyCode,
-                request.PaymentMethod))
-        {
-            throw new InvalidOperationException(
-                $"Payment method '{GetPaymentMethodDisplayName(request.PaymentMethod)}' is not supported for {transfer.SourceCountryCode}/{transfer.SourceCurrencyCode}.");
-        }
+        var channel = await _channels.RequireDepositAsync(request.ChannelId, transfer.SourceCountryCode,
+            transfer.SourceCurrencyCode, false, false, request.PaymentMethod, funding.ExternalFundingRequired, ct);
 
         var now = DateTime.UtcNow;
         var reference = await GenerateUniqueCollectionReferenceAsync(ct);
@@ -144,6 +130,7 @@ public class CollectionService : ICollectionService
             Reference = reference,
             CurrencyCode = transfer.SourceCurrencyCode,
             Amount = funding.ExternalFundingRequired,
+            PaymentChannelId = channel?.Channel.Id, PaymentChannelName = channel?.Channel.DisplayName,
             PaymentMethod = request.PaymentMethod,
             Status = CollectionStatus.Pending,
             ProviderCode = transfer.ProviderCode,
@@ -169,6 +156,8 @@ public class CollectionService : ICollectionService
 
         collection.Attempts.Add(attempt);
 
+        if (channel is not null) _channels.Record(channel, "Collection", collection.Id, transfer.SourceCountryCode,
+            false, userId, funding.FinancialAccountId, collection.Amount);
         _db.Collections.Add(collection);
         _db.TransferTimelineEvents.Add(new TransferTimelineEvent
         {
@@ -252,6 +241,7 @@ public class CollectionService : ICollectionService
         var profile = transfer.CustomerProfile
             ?? throw new InvalidOperationException("Individual customer profile not found for this collection.");
 
+        await _channels.ValidateInitiationAsync("Collection", collection.Id, ct);
         var complianceGate = await _complianceGateService.EnsureCanInitiateMoneyMovementAsync(
             profile.Id,
             _remittanceProvider.ProviderCode,
@@ -398,7 +388,8 @@ public class CollectionService : ICollectionService
         Guid actorUserId,
         Guid transferId,
         PaymentMethod paymentMethod,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        Guid? channelId = null)
     {
         await using var tx = await _db.Database.BeginTransactionAsync(ct);
 
@@ -430,7 +421,7 @@ public class CollectionService : ICollectionService
 
         if (existing is not null)
         {
-            if (existing.PaymentMethod != paymentMethod)
+            if (existing.PaymentMethod != paymentMethod || (channelId.HasValue && existing.PaymentChannelId != channelId))
             {
                 throw new InvalidOperationException(
                     $"A collection already exists for this transfer using '{GetPaymentMethodDisplayName(existing.PaymentMethod)}'.");
@@ -440,14 +431,8 @@ public class CollectionService : ICollectionService
             return ToDetailsDto(existing);
         }
 
-        if (!_paymentMethodPolicy.IsSupported(
-                transfer.SourceCountryCode,
-                transfer.SourceCurrencyCode,
-                paymentMethod))
-        {
-            throw new InvalidOperationException(
-                $"Payment method '{GetPaymentMethodDisplayName(paymentMethod)}' is not supported for {transfer.SourceCountryCode}/{transfer.SourceCurrencyCode}.");
-        }
+        var channel = await _channels.RequireDepositAsync(channelId, transfer.SourceCountryCode,
+            transfer.SourceCurrencyCode, true, false, paymentMethod, transfer.TotalPayableAmount, ct);
 
         var now = DateTime.UtcNow;
         var collection = new Collection
@@ -460,6 +445,7 @@ public class CollectionService : ICollectionService
             Reference = await GenerateUniqueCollectionReferenceAsync(ct),
             CurrencyCode = transfer.SourceCurrencyCode,
             Amount = transfer.TotalPayableAmount,
+            PaymentChannelId = channel?.Channel.Id, PaymentChannelName = channel?.Channel.DisplayName,
             PaymentMethod = paymentMethod,
             Status = CollectionStatus.Pending,
             ProviderCode = transfer.ProviderCode,
@@ -484,6 +470,8 @@ public class CollectionService : ICollectionService
             AttemptedAt = now
         });
 
+        if (channel is not null) _channels.Record(channel, "Collection", collection.Id, transfer.SourceCountryCode,
+            true, businessProfileId, null, collection.Amount);
         _db.Collections.Add(collection);
         _db.TransferTimelineEvents.Add(new TransferTimelineEvent
         {
@@ -564,6 +552,7 @@ public class CollectionService : ICollectionService
         var business = transfer.BusinessProfile
             ?? throw new InvalidOperationException("Business profile is missing from the transfer.");
 
+        await _channels.ValidateInitiationAsync("Collection", collection.Id, ct);
         var compliance = await _complianceGateService.EnsureBusinessCanInitiateMoneyMovementAsync(
             business.Id,
             _remittanceProvider.ProviderCode,
@@ -786,6 +775,7 @@ public class CollectionService : ICollectionService
                 SourceCountryCode = x.Transfer != null ? x.Transfer.SourceCountryCode : null,
                 CurrencyCode = x.CurrencyCode,
                 Amount = x.Amount,
+                ChannelId = x.PaymentChannelId, ChannelName = x.PaymentChannelName,
                 PaymentMethod = x.PaymentMethod,
                 Status = x.Status,
                 ProviderCode = x.ProviderCode,

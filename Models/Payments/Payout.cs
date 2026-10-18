@@ -25,6 +25,8 @@ public class Payout : AuditableEntity
     public string CurrencyCode { get; set; } = "";
     public decimal Amount { get; set; }
 
+    public Guid? PaymentChannelId { get; set; }
+    public string? PaymentChannelName { get; set; }
     public PaymentMethod PaymentMethod { get; set; }
     public PayoutStatus Status { get; set; } = PayoutStatus.Pending;
 

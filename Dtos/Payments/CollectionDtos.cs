@@ -4,7 +4,8 @@ namespace KorridorX.Dtos.Payments;
 
 public record CreateCollectionRequestDto
 (
-    PaymentMethod PaymentMethod
+    PaymentMethod PaymentMethod,
+    Guid? ChannelId = null
 );
 
 public record CollectionPaymentMethodDto
@@ -12,10 +13,20 @@ public record CollectionPaymentMethodDto
     PaymentMethod PaymentMethod,
     string Code,
     string DisplayName
-);
+)
+{
+    public Guid? ChannelId { get; init; }
+    public string Flow { get; init; } = "Collection";
+    public string? Description { get; init; }
+    public decimal MinimumAmount { get; init; }
+    public decimal? MaximumAmount { get; init; }
+    public bool IsLegacy { get; init; }
+}
 
 public record CollectionDto
 {
+    public Guid? ChannelId { get; init; }
+    public string? ChannelName { get; init; }
     public Guid Id { get; init; }
     public Guid? TransferId { get; init; }
     public PaymentOperationPurpose Purpose { get; init; }

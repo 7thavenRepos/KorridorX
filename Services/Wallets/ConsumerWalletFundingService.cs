@@ -1,3 +1,5 @@
+using KorridorX.Services.PaymentChannels;
+using System.Data;
 using System.Text.Json;
 using KorridorX.Data;
 using KorridorX.Dtos.Payments;
@@ -25,6 +27,8 @@ public sealed class ConsumerWalletFundingService : IConsumerWalletFundingService
     private readonly IComplianceGateService _complianceGateService;
     private readonly IProviderWalletResolver _providerWallets;
     private readonly IReferenceGenerator _referenceGenerator;
+    private readonly PaymentChannelService _channels;
+    private readonly WalletFundingContextService _contexts;
 
     public ConsumerWalletFundingService(
         AppDbContext db,
@@ -33,7 +37,7 @@ public sealed class ConsumerWalletFundingService : IConsumerWalletFundingService
         IRemittanceProvider remittanceProvider,
         IComplianceGateService complianceGateService,
         IProviderWalletResolver providerWallets,
-        IReferenceGenerator referenceGenerator)
+        IReferenceGenerator referenceGenerator, PaymentChannelService channels, WalletFundingContextService contexts)
     {
         _db = db;
         _paymentMethodPolicy = paymentMethodPolicy;
@@ -42,28 +46,42 @@ public sealed class ConsumerWalletFundingService : IConsumerWalletFundingService
         _complianceGateService = complianceGateService;
         _providerWallets = providerWallets;
         _referenceGenerator = referenceGenerator;
+        _channels = channels; _contexts = contexts;
     }
 
-    public async Task<IReadOnlyList<CollectionPaymentMethodDto>> GetFundingMethodsAsync(
-        Guid userId,
-        Guid walletId,
-        CancellationToken ct = default)
+    public Task<IReadOnlyList<CollectionPaymentMethodDto>> GetFundingMethodsAsync(Guid userId, Guid walletId, CancellationToken ct = default) =>
+        GetMethodsCoreAsync(userId, walletId, false, ct);
+    public Task<IReadOnlyList<CollectionPaymentMethodDto>> GetBusinessFundingMethodsAsync(Guid userId, Guid walletId, CancellationToken ct = default) =>
+        GetMethodsCoreAsync(userId, walletId, true, ct);
+    private async Task<IReadOnlyList<CollectionPaymentMethodDto>> GetMethodsCoreAsync(Guid userId, Guid walletId, bool business, CancellationToken ct)
     {
-        var context = await LoadContextAsync(userId, walletId, ct);
-        return _paymentMethodPolicy
-            .GetSupportedMethods(context.Profile.CountryCode, context.Wallet.AssetCode)
-            .Where(x => x is PaymentMethod.Card or PaymentMethod.Interac)
-            .Select(ToPaymentMethodDto)
-            .ToList();
+        var context = await _contexts.LoadAsync(userId, walletId, business, false, true, ct);
+        return await _channels.DepositMethodsAsync(context.CountryCode, context.Wallet.AssetCode, business, true, null, ct);
     }
-
-    public async Task<CollectionDetailsDto> CreateCollectionAsync(
-        Guid userId,
-        Guid walletId,
-        CreateConsumerWalletFundingCollectionRequestDto request,
-        CancellationToken ct = default)
+    public Task<CollectionDetailsDto> CreateCollectionAsync(Guid userId, Guid walletId, CreateConsumerWalletFundingCollectionRequestDto request, CancellationToken ct = default) =>
+        CreateCoreAsync(userId, walletId, request, false, ct);
+    public Task<CollectionDetailsDto> CreateBusinessCollectionAsync(Guid userId, Guid walletId, CreateConsumerWalletFundingCollectionRequestDto request, CancellationToken ct = default) =>
+        CreateCoreAsync(userId, walletId, request, true, ct);
+    private async Task<CollectionDetailsDto> CreateCoreAsync(Guid userId, Guid walletId,
+        CreateConsumerWalletFundingCollectionRequestDto request, bool business, CancellationToken ct)
     {
-        var context = await LoadContextAsync(userId, walletId, ct);
+        var context = await _contexts.LoadAsync(userId, walletId, business, true, true, ct);
+        var key = request.IdempotencyKey?.Trim();
+        if (key is not null && (key.Length < 8 || key.Length > 100 || !System.Text.RegularExpressions.Regex.IsMatch(key, "^[A-Za-z0-9_-]+$")))
+            throw new InvalidOperationException("Invalid payment request identifier.");
+        await using var tx = await _db.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, ct);
+        if (key is not null)
+        {
+            var lockKey = "WalletCollection:" + walletId + ":" + key;
+            await _db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({lockKey}, 0))", ct);
+            var replay = await _db.Collections.Include(x => x.Attempts).SingleOrDefaultAsync(x => x.FinancialAccountId == walletId && x.ClientRequestKey == key && !x.IsDeleted, ct);
+            if (replay is not null)
+            {
+                if (replay.Amount != request.Amount || replay.PaymentMethod != request.PaymentMethod || (request.ChannelId.HasValue && replay.PaymentChannelId != request.ChannelId))
+                    throw new InvalidOperationException("The payment request identifier was reused with different details.");
+                await tx.CommitAsync(ct); return ToDetailsDto(replay);
+            }
+        }
 
         if (request.Amount <= 0m)
         {
@@ -81,15 +99,10 @@ public sealed class ConsumerWalletFundingService : IConsumerWalletFundingService
                 $"{context.Wallet.AssetCode} wallet funding supports up to {context.Wallet.Asset.DecimalPlaces} decimal places.");
         }
 
-        if (!_paymentMethodPolicy.IsSupported(
-                context.Profile.CountryCode,
-                context.Wallet.AssetCode,
-                request.PaymentMethod) ||
-            request.PaymentMethod is not PaymentMethod.Card and not PaymentMethod.Interac)
-        {
-            throw new InvalidOperationException(
-                $"Payment method '{DisplayName(request.PaymentMethod)}' is not available for this {context.Wallet.AssetCode} wallet.");
-        }
+        if (request.PaymentMethod is not PaymentMethod.Card and not PaymentMethod.Interac || business && request.PaymentMethod == PaymentMethod.Card)
+            throw new InvalidOperationException("Select an executable collection channel. Bank-account deposits use the deposit-account setup action, not a fixed-amount collection.");
+        var choice = await _channels.RequireDepositAsync(request.ChannelId, context.CountryCode,
+            context.Wallet.AssetCode, business, true, request.PaymentMethod, request.Amount, ct);
 
         var collection = new Collection
         {
@@ -98,8 +111,10 @@ public sealed class ConsumerWalletFundingService : IConsumerWalletFundingService
             FinancialAccount = context.Wallet,
             RelatedEntityType = nameof(FinancialAccount),
             RelatedEntityId = context.Wallet.Id,
-            ContextEntityType = "ConsumerWallet",
+            ContextEntityType = business ? "BusinessWallet" : "ConsumerWallet",
             ContextEntityId = context.Wallet.Id,
+            ClientRequestKey = key,
+            PaymentChannelId = choice?.Channel.Id, PaymentChannelName = choice?.Channel.DisplayName,
             Reference = await GenerateUniqueCollectionReferenceAsync(ct),
             CurrencyCode = context.Wallet.AssetCode,
             Amount = request.Amount,
@@ -125,19 +140,27 @@ public sealed class ConsumerWalletFundingService : IConsumerWalletFundingService
             AttemptedAt = DateTime.UtcNow
         });
 
+        if (choice is not null) _channels.Record(choice, "Collection", collection.Id, context.CountryCode,
+            business, context.OwnerId, walletId, collection.Amount);
         _db.Collections.Add(collection);
         await _db.SaveChangesAsync(ct);
+        await tx.CommitAsync(ct);
         return ToDetailsDto(collection);
     }
 
-    public async Task<CollectionDetailsDto> InitiateCollectionAsync(
-        Guid userId,
-        Guid walletId,
-        Guid collectionId,
-        InitiateCollectionRequestDto request,
-        CancellationToken ct = default)
+    public Task<CollectionDetailsDto> InitiateCollectionAsync(Guid userId, Guid walletId, Guid collectionId, InitiateCollectionRequestDto request, CancellationToken ct = default) =>
+        InitiateCoreAsync(userId, walletId, collectionId, request, false, ct);
+    public Task<CollectionDetailsDto> InitiateBusinessCollectionAsync(Guid userId, Guid walletId, Guid collectionId, InitiateCollectionRequestDto request, CancellationToken ct = default) =>
+        InitiateCoreAsync(userId, walletId, collectionId, request, true, ct);
+    private async Task<CollectionDetailsDto> InitiateCoreAsync(Guid userId, Guid walletId, Guid collectionId,
+        InitiateCollectionRequestDto request, bool business, CancellationToken ct)
     {
-        var context = await LoadContextAsync(userId, walletId, ct);
+        var context = await _contexts.LoadAsync(userId, walletId, business, true, true, ct);
+        // Serialize the submission claim, then commit it BEFORE the external
+        // request. A second caller/crash recovery cannot start a second charge.
+        await using var submission = await _db.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, ct);
+        var submissionKey = "WalletCollectionInitiate:" + collectionId;
+        await _db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({submissionKey}, 0))", ct);
 
         var collection = await _db.Collections
             .Include(x => x.Attempts)
@@ -165,29 +188,22 @@ public sealed class ConsumerWalletFundingService : IConsumerWalletFundingService
                 $"Wallet funding cannot be initiated while its status is '{collection.Status}'.");
         }
 
-        if (!_paymentMethodPolicy.IsSupported(
-                context.Profile.CountryCode,
-                collection.CurrencyCode,
-                collection.PaymentMethod) ||
-            collection.PaymentMethod is not PaymentMethod.Card and not PaymentMethod.Interac)
-        {
-            throw new InvalidOperationException(
-                $"Payment method '{DisplayName(collection.PaymentMethod)}' is not available for this wallet.");
-        }
+        if (collection.PaymentMethod is not PaymentMethod.Card and not PaymentMethod.Interac)
+            throw new InvalidOperationException("The saved collection method is not executable through this flow.");
+        if (collection.Attempts.Count > 1 && collection.Attempts.OrderByDescending(x => x.AttemptedAt).First().Status == ProviderRequestStatus.Pending)
+            throw new InvalidOperationException("A prior provider submission has an unknown outcome. Check payment status or contact support with this collection reference; a second charge was not started.");
 
-        var compliance = await _complianceGateService.EnsureCanInitiateMoneyMovementAsync(
-            context.Profile.Id,
-            _remittanceProvider.ProviderCode,
-            ct);
+        await _channels.ValidateInitiationAsync("Collection", collection.Id, ct);
+        var compliance = await _contexts.EnsureComplianceAsync(context, ct);
 
-        var email = request.PayerEmail ?? context.Profile.Email ?? context.Profile.User?.Email;
+        var email = request.PayerEmail ?? context.Email;
         if (string.IsNullOrWhiteSpace(email))
         {
             throw new InvalidOperationException("Payer email is required to fund this wallet.");
         }
 
         var customerName = string.IsNullOrWhiteSpace(request.CustomerName)
-            ? $"{context.Profile.FirstName} {context.Profile.LastName}".Trim()
+            ? context.Name
             : request.CustomerName.Trim();
 
         var providerWalletId = await _providerWallets.SelectAsync(
@@ -242,6 +258,7 @@ public sealed class ConsumerWalletFundingService : IConsumerWalletFundingService
 
         collection.Attempts.Add(attempt);
         await _db.SaveChangesAsync(ct);
+        await submission.CommitAsync(ct);
 
         try
         {
@@ -255,7 +272,7 @@ public sealed class ConsumerWalletFundingService : IConsumerWalletFundingService
                     compliance.ProviderCustomerId,
                     email,
                     customerName,
-                    context.Profile.PhoneNumber,
+                    context.Phone,
                     providerWalletId,
                     request.RedirectUrl,
                     card,
@@ -300,6 +317,13 @@ public sealed class ConsumerWalletFundingService : IConsumerWalletFundingService
         }
         catch (ProviderIntegrationException ex)
         {
+            if (ex.ProviderStatusCode is not (400 or 401 or 403 or 404 or 422))
+            {
+                attempt.ErrorMessage = "Provider submission outcome is unknown. Reconcile this collection before retrying.";
+                attempt.LastUpdatedAt = DateTime.UtcNow;
+                await _db.SaveChangesAsync(CancellationToken.None);
+                throw; // Durable pending claim prevents unsafe resubmission after timeout/5xx.
+            }
             await _collectionStatusService.ApplyTransitionAsync(
                 collection,
                 CollectionStatus.Failed,
@@ -318,13 +342,13 @@ public sealed class ConsumerWalletFundingService : IConsumerWalletFundingService
         }
     }
 
-    public async Task<CollectionDetailsDto> GetCollectionAsync(
-        Guid userId,
-        Guid walletId,
-        Guid collectionId,
-        CancellationToken ct = default)
+    public Task<CollectionDetailsDto> GetCollectionAsync(Guid userId, Guid walletId, Guid collectionId, CancellationToken ct = default) =>
+        GetCoreAsync(userId, walletId, collectionId, false, ct);
+    public Task<CollectionDetailsDto> GetBusinessCollectionAsync(Guid userId, Guid walletId, Guid collectionId, CancellationToken ct = default) =>
+        GetCoreAsync(userId, walletId, collectionId, true, ct);
+    private async Task<CollectionDetailsDto> GetCoreAsync(Guid userId, Guid walletId, Guid collectionId, bool business, CancellationToken ct)
     {
-        await LoadContextAsync(userId, walletId, ct);
+        await _contexts.LoadAsync(userId, walletId, business, false, false, ct);
 
         var collection = await _db.Collections
             .AsNoTracking()
@@ -339,51 +363,6 @@ public sealed class ConsumerWalletFundingService : IConsumerWalletFundingService
             ?? throw new InvalidOperationException("Wallet funding collection not found.");
 
         return ToDetailsDto(collection);
-    }
-
-    private async Task<FundingContext> LoadContextAsync(
-        Guid userId,
-        Guid walletId,
-        CancellationToken ct)
-    {
-        var profile = await _db.CustomerProfiles
-            .Include(x => x.User)
-            .FirstOrDefaultAsync(x => x.UserId == userId && !x.IsDeleted, ct)
-            ?? throw new InvalidOperationException("Customer profile not found.");
-
-        var wallet = await _db.FinancialAccounts
-            .Include(x => x.Asset)
-            .FirstOrDefaultAsync(x =>
-                x.Id == walletId &&
-                x.OwnerType == FinancialAccountOwnerType.User &&
-                x.OwnerId == userId &&
-                x.AccountType == FinancialAccountType.Customer &&
-                x.Status == FinancialAccountStatus.Active &&
-                !x.IsDeleted,
-                ct)
-            ?? throw new InvalidOperationException("Consumer wallet not found or inactive.");
-
-        var depositEnabled = await _db.CountryAssets
-            .AsNoTracking()
-            .Include(x => x.Country)
-            .Include(x => x.Asset)
-            .AnyAsync(x =>
-                x.CountryCode == profile.CountryCode &&
-                x.AssetCode == wallet.AssetCode &&
-                x.Country.IsSupported &&
-                x.Asset.IsSupported &&
-                x.Asset.IndividualEnabled &&
-                x.Asset.Type == AssetType.Fiat &&
-                x.CanDeposit,
-                ct);
-
-        if (!depositEnabled)
-        {
-            throw new InvalidOperationException(
-                $"Deposits are not enabled for the {wallet.AssetCode} wallet in {profile.CountryCode}.");
-        }
-
-        return new FundingContext(profile, wallet);
     }
 
     private async Task UpsertProviderTransactionAsync(
@@ -470,6 +449,7 @@ public sealed class ConsumerWalletFundingService : IConsumerWalletFundingService
                 Reference = collection.Reference,
                 CurrencyCode = collection.CurrencyCode,
                 Amount = collection.Amount,
+                ChannelId = collection.PaymentChannelId, ChannelName = collection.PaymentChannelName,
                 PaymentMethod = collection.PaymentMethod,
                 Status = collection.Status,
                 ProviderCode = collection.ProviderCode,
@@ -500,7 +480,4 @@ public sealed class ConsumerWalletFundingService : IConsumerWalletFundingService
                     x.ErrorMessage))
                 .ToList());
 
-    private sealed record FundingContext(
-        KorridorX.Models.Customers.CustomerProfile Profile,
-        FinancialAccount Wallet);
 }

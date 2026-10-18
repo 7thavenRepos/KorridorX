@@ -1,0 +1,167 @@
+[
+  {
+    "slug": "page-payment-channels",
+    "portal": "admin",
+    "title": "Payment channels",
+    "summary": "Configure Blaaiz collection and existing payout routes.",
+    "category": "Funding and wallets",
+    "pageRoute": "/admin/payment-channels",
+    "keywords": [
+      "payment channels",
+      "deposit",
+      "withdrawal",
+      "Blaaiz"
+    ],
+    "adminRoles": [
+      "SuperAdmin"
+    ],
+    "permissions": [],
+    "businessRoles": [],
+    "allowNoBusiness": false,
+    "isPage": true,
+    "reviewedOn": "2026-10-18"
+  },
+  {
+    "slug": "kx011-payment-channels",
+    "portal": "admin",
+    "title": "Configure Blaaiz deposit channels and transfer payouts",
+    "summary": "Choose multiple provider-backed routes, verify readiness, and safely hand an asset from legacy methods to managed channels.",
+    "category": "Funding and wallets",
+    "pageRoute": "/admin/payment-channels",
+    "keywords": [
+      "KX-011",
+      "payment channels",
+      "deposit",
+      "withdrawal",
+      "Blaaiz",
+      "Interac",
+      "NGN",
+      "USD",
+      "EUR",
+      "GBP",
+      "bank account"
+    ],
+    "adminRoles": [
+      "SuperAdmin"
+    ],
+    "permissions": [],
+    "businessRoles": [],
+    "allowNoBusiness": false,
+    "isPage": false,
+    "reviewedOn": "2026-10-18",
+    "prerequisites": [
+      "SuperAdmin access; approved provider capability; correct environment; eligible, verified provider wallet; country/asset permissions."
+    ],
+    "steps": [
+      {
+        "title": "Prepare prerequisites",
+        "instruction": "Use SuperAdmin. Configure the asset and country/asset mapping, enable the intended audience and deposit/withdrawal operation, and discover/register/verify the provider wallet in the current environment. Provider wallets are not House accounts."
+      },
+      {
+        "title": "Create a draft route",
+        "instruction": "Open Payment channels. Select Deposit or Withdrawal / transfer payout, the asset, country (or All eligible mapped countries), Blaaiz, a compatible provider wallet, and an implemented capability. Route identity cannot be edited later; create a new route and pause the old one."
+      },
+      {
+        "title": "Set presentation and audiences",
+        "instruction": "Choose the customer-facing name, instructions, display order and eligible audiences. Amount limits apply to fixed-amount collections/payouts. Dedicated bank accounts use no fixed deposit amount and therefore cannot enforce transaction limits in this form. Existing compliance controls still apply."
+      },
+      {
+        "title": "Review readiness",
+        "instruction": "Confirm provider feature approval only after checking your provider account. Review blocked reasons and warnings. CAD requests use the verified default CAD collection wallet; the Interac endpoint cannot arbitrarily select another pooled CAD wallet. Business card checkout is not implemented. Business virtual accounts are NGN-only."
+      },
+      {
+        "title": "Activate the complete intended set",
+        "instruction": "Prepare the required countries and audiences before activation. The FIRST activation manages the whole asset/direction in this environment, replacing legacy discovery for that scope. Pausing every channel leaves no methods; it deliberately does not restore legacy methods. Drafts alone do not change existing methods."
+      },
+      {
+        "title": "Test the correct client",
+        "instruction": "Business: open Business wallets, select a wallet and choose Deposit. Mobile: install the new staging build, open a wallet and Add money. A browser refresh does not update an installed mobile binary. New bank-account deposits do not appear in a transfer-specific fixed-amount checkout; fund the wallet first and then pay from it."
+      },
+      {
+        "title": "Separate payout routing",
+        "instruction": "Withdrawal configuration governs the existing remittance transfer payout, not a new cash-out-from-any-wallet screen. Country means recipient destination. The configured funding wallet must match the transfer source asset. Routes are ranked by display order; the saved payout keeps its selected route. Current executable payouts are NGN bank transfer and CAD Interac only."
+      }
+    ],
+    "expectedResult": "Only ready active channels matching the owner, country, asset and audience appear. A submitted payment or provisioned bank account is not a confirmed wallet credit.",
+    "warnings": [
+      "Blaaiz only. No Flutterwave or other-provider integration is included.",
+      "No balances are fabricated, and account creation does not credit funds. Only provider-confirmed, identity/amount/currency-verified receipts may credit the assigned wallet.",
+      "Provider api-dev: NGN virtual accounts can receive test deposits; USD creation works but deposits do not settle; GBP/EUR creation is on hold. Do not send real funds to development details.",
+      "No new channel fees or currency conversions are introduced. Existing collection fee/ledger policies remain.",
+      "Changing credentials does not reassign an old receiving account or payment to another provider connection."
+    ],
+    "troubleshooting": [
+      "No channels: check first-activation handover, active/ready state, selected asset, profile country, audience, country mapping and wallet status.",
+      "Blocked: read the precise reason. A checkbox is not evidence of provider approval. Correct configuration and use Refresh; never bypass it with database edits.",
+      "Bank account pending: Check account status. USD/GBP/EUR require verified individuals and complete currency-specific customer fields. NGN also supports verified businesses. A provider rejection needs customer-data review; a timeout requires lookup, not repeated creation.",
+      "Interac outcome unknown: retain the existing collection ID and check its status. Do not create a second charge. A durable pending submission may need operations reconciliation.",
+      "Pause stops new discovery/initiation but does not discard valid deposits arriving at previously issued bank accounts. Reconciliation and existing payment ownership remain intact."
+    ]
+  },
+  {
+    "slug": "kx011-business-deposits",
+    "portal": "business",
+    "title": "Deposit into a business wallet",
+    "summary": "Use backend-configured Interac or eligible dedicated bank details and recover interrupted funding safely.",
+    "category": "Funding and wallets",
+    "pageRoute": "/business/funding",
+    "keywords": [
+      "KX-011",
+      "payment channels",
+      "deposit",
+      "withdrawal",
+      "Blaaiz",
+      "Interac",
+      "NGN",
+      "USD",
+      "EUR",
+      "GBP",
+      "bank account"
+    ],
+    "adminRoles": [],
+    "permissions": [
+      "ViewWallets"
+    ],
+    "businessRoles": [],
+    "allowNoBusiness": false,
+    "isPage": false,
+    "reviewedOn": "2026-10-18",
+    "prerequisites": [
+      "The selected business needs ViewWallets; ManageFunding and provider-approved KYB are required to initiate or provision.",
+      "SuperAdmin must enable a compatible channel and provider wallet."
+    ],
+    "steps": [
+      {
+        "title": "Choose the correct business and wallet",
+        "instruction": "Open Business wallets and select the intended wallet. The selected business and wallet determine access. ViewWallets is required to read; ManageFunding is additionally required to start a deposit or create receiving details."
+      },
+      {
+        "title": "Choose an available channel",
+        "instruction": "The Deposit section lists only supported active channels. Select the customer-facing option. Two methods with similar names keep distinct channel IDs. An empty list is not a request to enter your own provider or bank details."
+      },
+      {
+        "title": "Use Interac",
+        "instruction": "For CAD, enter a positive amount and valid payer email, then send the Interac request once. The browser retains a reference before initiation. Follow the provider instructions and check payment status; an email or redirect is not confirmation of funds."
+      },
+      {
+        "title": "Use NGN bank deposits",
+        "instruction": "Select an NGN dedicated-bank-account channel and Set up bank account. Complete KYB first. Wait until the account is Active and verified bank details are shown. Send only the indicated currency to those details. Creation starts with no wallet credit."
+      },
+      {
+        "title": "Recover or refresh",
+        "instruction": "Use Check payment status or Refresh status for an existing attempt/account. If initiation times out, read the saved payment rather than creating another. Refresh the wallet after provider confirmation. Switching business cancels old requests and clears old business details."
+      }
+    ],
+    "expectedResult": "Only ready active channels matching the owner, country, asset and audience appear. A submitted payment or provisioned bank account is not a confirmed wallet credit.",
+    "warnings": [
+      "Blaaiz business card checkout and USD/GBP/EUR virtual accounts for type=business are not available in this release. NGN dedicated accounts and CAD Interac are the connected business deposit methods.",
+      "Use only ready customer-specific bank details. Treasury/provider pooled accounts and House accounts are not a customer deposit address.",
+      "Never send real funds to provider-development details. Do not share passwords, card data, access tokens or API keys with support."
+    ],
+    "troubleshooting": [
+      "No methods: ask an administrator to review the active payment channels, business audience, mapping, provider wallet and approval.",
+      "Pending bank setup: refresh; do not repeatedly create accounts. A provider rejection may require additional business information or corrected KYB.",
+      "A confirmed deposit missing from balance requires the business/wallet currency, collection or bank-account reference, amount, time, and a redacted error. Do not submit a second deposit merely to test a refresh."
+    ]
+  }
+]

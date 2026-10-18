@@ -633,7 +633,7 @@ public class BusinessFundingService : IBusinessFundingService
             userId,
             transferId,
             request.PaymentMethod,
-            ct);
+            ct, request.ChannelId);
 
         await _notifications.QueueBusinessAsync(
             access.BusinessProfileId,

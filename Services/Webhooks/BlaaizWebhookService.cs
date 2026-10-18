@@ -10,6 +10,7 @@ using KorridorX.Models.Providers;
 using KorridorX.Models.Webhooks;
 using KorridorX.Providers.Remittance;
 using KorridorX.Services.Payments;
+using KorridorX.Services.PaymentChannels;
 using KorridorX.Services.Compliance;
 using KorridorX.Services.EmbeddedFinance;
 using KorridorX.Services.DigitalAssets;
@@ -31,6 +32,7 @@ public class BlaaizWebhookService : IBlaaizWebhookService
     private readonly IEmbeddedPayoutSettlementService _embeddedPayoutSettlement;
     private readonly IDigitalAssetDepositIntentSettlementService _digitalAssetDepositIntents;
     private readonly BusinessKybNotificationService _kybNotifications;
+    private readonly WalletDepositAccountService _walletDepositAccounts;
 
     public BlaaizWebhookService(
         AppDbContext db,
@@ -42,7 +44,8 @@ public class BlaaizWebhookService : IBlaaizWebhookService
         IEmbeddedInboundCollectionService embeddedInboundCollections,
         IEmbeddedPayoutSettlementService embeddedPayoutSettlement,
         IDigitalAssetDepositIntentSettlementService digitalAssetDepositIntents,
-        BusinessKybNotificationService kybNotifications)
+        BusinessKybNotificationService kybNotifications,
+        WalletDepositAccountService walletDepositAccounts)
     {
         _db = db;
         _options = options.Value;
@@ -54,6 +57,7 @@ public class BlaaizWebhookService : IBlaaizWebhookService
         _embeddedPayoutSettlement = embeddedPayoutSettlement;
         _digitalAssetDepositIntents = digitalAssetDepositIntents;
         _kybNotifications = kybNotifications;
+        _walletDepositAccounts = walletDepositAccounts;
     }
 
     public Task<BlaaizWebhookResult> ProcessCollectionWebhookAsync(
@@ -109,9 +113,10 @@ public class BlaaizWebhookService : IBlaaizWebhookService
 
         var customerStatusEvent = eventType.Equals("customer.status_changed", StringComparison.OrdinalIgnoreCase);
         var retryableEvent = customerStatusEvent ||
-            eventType.StartsWith("virtual_account.", StringComparison.OrdinalIgnoreCase);
-        if (existing is not null && customerStatusEvent && existing.RawPayloadJson != rawPayload)
-            throw new InvalidOperationException("A customer-status event ID cannot be reused with a different payload.");
+            eventType.StartsWith("virtual_account.", StringComparison.OrdinalIgnoreCase) ||
+            eventType.StartsWith("collection.", StringComparison.OrdinalIgnoreCase);
+        if (existing is not null && retryableEvent && existing.RawPayloadJson != rawPayload)
+            throw new InvalidOperationException("A webhook event ID cannot be reused with a different payload.");
 
         var retryEvent = existing is not null &&
             existing.ProcessingStatus == WebhookProcessingStatus.Failed &&
@@ -260,6 +265,7 @@ public class BlaaizWebhookService : IBlaaizWebhookService
     {
         if (eventType.StartsWith("virtual_account.", StringComparison.OrdinalIgnoreCase))
         {
+            if (await _walletDepositAccounts.TryProcessAccountEventAsync(eventType, rawPayload, ct)) return true;
             return await new BlaaizVirtualAccountWebhookHandler(_db).ProcessAsync(eventType, rawPayload, ct);
         }
 
@@ -339,6 +345,27 @@ public class BlaaizWebhookService : IBlaaizWebhookService
 
             if (digitalAssetHandled)
                 return true;
+        }
+
+        // Signature was verified before reaching this route. Dedicated wallet accounts
+        // reconcile via provider verification and an atomic, replay-safe ledger update.
+        if (!isRefund && !string.IsNullOrWhiteSpace(collectionTransactionId))
+        {
+            var incomingAmount = ReadOptionalDecimal(data, root, "transaction_amount", "amount");
+            var incomingCurrency = ReadOptionalString(data, root, "transaction_currency", "currency");
+            if (incomingAmount.HasValue && !string.IsNullOrWhiteSpace(incomingCurrency) &&
+                await _walletDepositAccounts.TryProcessDepositAsync(new EmbeddedInboundCollectionRequest(
+                    collectionTransactionId, collectionReference,
+                    ReadOptionalString(data, root, "transaction_status", "status") ?? EventStatus(eventType),
+                    incomingCurrency, incomingAmount.Value,
+                    ReadOptionalDecimal(data, root, "amount_without_fee"),
+                    ReadOptionalDecimal(data, root, "fee", "transaction_fee"),
+                    ReadOptionalString(data, root, "fee_currency", "transaction_currency", "currency"),
+                    ReadOptionalString(data, root, "virtual_bank_account_id", "virtual_account_id", "bank_account_id", "account_id", "business_bank_account_id"),
+                    ReadOptionalString(data, root, "customer_id"),
+                    ReadOptionalString(data, root, "account_reference", "reservation_reference", "virtual_account_reference"),
+                    ReadOptionalString(data, root, "account_number", "virtual_account_number", "bank_account_number"),
+                    rawPayload, ReadOptionalDateTime(data, root, "updated_at", "date", "timestamp") ?? DateTime.UtcNow), ct)) return true;
         }
 
         var collection = await _db.Collections

@@ -33,7 +33,7 @@ public sealed class ConsumerWalletFundingCreditService : IConsumerWalletFundingC
         var wallet = await _db.FinancialAccounts
             .FirstOrDefaultAsync(x =>
                 x.Id == collection.FinancialAccountId.Value &&
-                x.OwnerType == FinancialAccountOwnerType.User &&
+                (x.OwnerType == FinancialAccountOwnerType.User || x.OwnerType == FinancialAccountOwnerType.Business) &&
                 x.AccountType == FinancialAccountType.Customer &&
                 x.AssetCode == collection.CurrencyCode &&
                 !x.IsDeleted,

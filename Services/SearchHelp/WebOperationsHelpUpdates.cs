@@ -40,6 +40,18 @@ public static class WebOperationsHelpUpdates
                 guide.ReviewedOn = "2026-10-17";
             }
         }
+        foreach (var guide in existing.Concat(additions).Where(x => !x.IsPage))
+        {
+            if (guide.PageRoute.EndsWith("/support", StringComparison.Ordinal) || guide.Slug == "kx009-web-operations-support-triage")
+            {
+                guide.Keywords = [.. guide.Keywords, "KX-011", "deposit channel", "pending bank account", "missing deposit"];
+                guide.Troubleshooting = [.. guide.Troubleshooting,
+                    "Payment channels: collect the workspace, wallet currency, channel display name, collection/account reference, amount/time and redacted error. Never request PAN, CVC, passwords, tokens or provider credentials.",
+                    "No methods may be correct for the country/audience/provider environment. Ask SuperAdmin to review Payment channels. NGN virtual accounts support verified businesses and individuals; non-NGN virtual accounts currently support individuals only.",
+                    "Account setup and checkout redirects do not credit balances. Unknown submission outcomes require status/reconciliation, not another payment. Provider-development GBP/EUR setup is on hold and USD deposits do not settle."];
+                guide.ReviewedOn = "2026-10-18";
+            }
+        }
         return existing.Concat(additions).ToArray();
     }
 }

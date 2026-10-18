@@ -91,6 +91,10 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<Guid
     public DbSet<InstantQuote> InstantQuotes => Set<InstantQuote>();
     public DbSet<InstantTrade> InstantTrades => Set<InstantTrade>();
 
+    public DbSet<PaymentChannel> PaymentChannels => Set<PaymentChannel>();
+    public DbSet<PaymentChannelSelection> PaymentChannelSelections => Set<PaymentChannelSelection>();
+    public DbSet<WalletDepositAccount> WalletDepositAccounts => Set<WalletDepositAccount>();
+
     public DbSet<Collection> Collections => Set<Collection>();
     public DbSet<CollectionAttempt> CollectionAttempts => Set<CollectionAttempt>();
     public DbSet<Payout> Payouts => Set<Payout>();

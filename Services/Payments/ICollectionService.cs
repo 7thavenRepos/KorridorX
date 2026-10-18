@@ -28,7 +28,8 @@ public interface ICollectionService
         Guid actorUserId,
         Guid transferId,
         PaymentMethod paymentMethod,
-        CancellationToken ct = default);
+        CancellationToken ct = default,
+        Guid? channelId = null);
 
     Task<CollectionDetailsDto> InitiateBusinessRemittanceCollectionAsync(
         Guid businessProfileId,

@@ -4,4 +4,6 @@ namespace KorridorX.Dtos.Wallets;
 
 public sealed record CreateConsumerWalletFundingCollectionRequestDto(
     decimal Amount,
-    PaymentMethod PaymentMethod);
+    PaymentMethod PaymentMethod,
+    Guid? ChannelId = null,
+    string? IdempotencyKey = null);

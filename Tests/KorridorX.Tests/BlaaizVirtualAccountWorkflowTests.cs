@@ -25,6 +25,31 @@ namespace KorridorX.Tests;
 [Collection(ReleaseCandidateDatabaseCollection.Name)]
 public sealed class BlaaizVirtualAccountWorkflowTests(ReleaseCandidateDatabaseFixture fixture)
 {
+    [Fact]
+    public void Webhook_test_setup_resolves_registered_dependencies()
+    {
+        using var scope = fixture.Factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        var service = Webhooks(scope.ServiceProvider, db);
+
+        Assert.NotNull(service);
+    }
+
+    [Fact]
+    public async Task Webhook_test_setup_rejects_invalid_signature_before_database_access()
+    {
+        await using var scope = fixture.Factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var service = Webhooks(scope.ServiceProvider, db);
+        var timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString();
+
+        // Signature validation precedes JSON routing and the first database query.
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
+            service.ProcessCollectionWebhookAsync(
+                "{\"event_type\":\"virtual_account.ready\"}", "invalid-signature", timestamp));
+    }
+
     [DatabaseIntegrationFact]
     public async Task Pending_provision_is_single_flight_and_keeps_account_pending()
     {
@@ -65,7 +90,7 @@ public sealed class BlaaizVirtualAccountWorkflowTests(ReleaseCandidateDatabaseFi
         await using var scope = fixture.Factory.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         var s = await Setup(db, mapping: true);
-        var service = Webhooks(db);
+        var service = Webhooks(scope.ServiceProvider, db);
         var payload = Payload(s);
         var first = await Signed(service, payload);
         var replay = await Signed(service, payload);
@@ -85,7 +110,7 @@ public sealed class BlaaizVirtualAccountWorkflowTests(ReleaseCandidateDatabaseFi
         await using var scope = fixture.Factory.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         var s = await Setup(db, mapping: true);
-        var service = Webhooks(db);
+        var service = Webhooks(scope.ServiceProvider, db);
         await Assert.ThrowsAsync<UnauthorizedAccessException>(() => service.ProcessCollectionWebhookAsync(Payload(s), "bad", DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString()));
         await Assert.ThrowsAsync<InvalidOperationException>(() => Signed(service, Payload(s).Replace(s.Wallet, "wrong-wallet")));
         db.ChangeTracker.Clear();
@@ -99,7 +124,7 @@ public sealed class BlaaizVirtualAccountWorkflowTests(ReleaseCandidateDatabaseFi
         await using var scope = fixture.Factory.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         var s = await Setup(db, mapping: true);
-        await Signed(Webhooks(db), Payload(s, "virtual_account.rejected", "REJECTED"));
+        await Signed(Webhooks(scope.ServiceProvider, db), Payload(s, "virtual_account.rejected", "REJECTED"));
         db.ChangeTracker.Clear();
         var mapping = await db.ProviderAccountMappings.SingleAsync(x => x.CollectionAccountId == s.Account.Id);
         Assert.Equal(ProviderAccountMappingStatus.Failed, mapping.Status);
@@ -119,7 +144,7 @@ public sealed class BlaaizVirtualAccountWorkflowTests(ReleaseCandidateDatabaseFi
         var customer = await db.ProviderCustomers.SingleAsync(x => x.ProviderCustomerId == s.Customer);
         customer.IsDeleted = true;
         await db.SaveChangesAsync();
-        var service = Webhooks(db);
+        var service = Webhooks(scope.ServiceProvider, db);
         var payload = Payload(s);
         await Assert.ThrowsAsync<InvalidOperationException>(() => Signed(service, payload));
         customer.IsDeleted = false;
@@ -198,7 +223,7 @@ public sealed class BlaaizVirtualAccountWorkflowTests(ReleaseCandidateDatabaseFi
         foreach (var currency in new[] { "EUR", "GBP" })
         {
             var s = await Setup(db, currency, mapping: true);
-            await Signed(Webhooks(db), Payload(s));
+            await Signed(Webhooks(scope.ServiceProvider, db), Payload(s));
             db.ChangeTracker.Clear();
             var inbound = scope.ServiceProvider.GetRequiredService<IEmbeddedInboundCollectionService>();
             var request = Deposit(s);
@@ -217,8 +242,13 @@ public sealed class BlaaizVirtualAccountWorkflowTests(ReleaseCandidateDatabaseFi
         "deposit-" + s.ProviderAccount, null, "COMPLETED", s.Account.AssetCode, 25m, 25m, 0m, s.Account.AssetCode,
         s.ProviderAccount, s.Customer, null, "12345678", "{}", DateTime.UtcNow);
     private const string Secret = "test-only-virtual-account-webhook-secret";
-    private static BlaaizWebhookService Webhooks(AppDbContext db) => new(db,
-        Options.Create(new BlaaizOptions { IsEnabled = true, WebhookSigningSecret = Secret }), null!, null!, null!, null!, null!, null!, null!, null!);
+    private static BlaaizWebhookService Webhooks(IServiceProvider services, AppDbContext db) =>
+        // Resolve the real scoped dependency graph, including WalletDepositAccountService.
+        // Only webhook signing options are overridden for these signed-payload tests.
+        // An extra null argument would compile but fail before the existing
+        // Embedded Finance virtual-account handler receives its callback.
+        ActivatorUtilities.CreateInstance<BlaaizWebhookService>(services, db,
+            Options.Create(new BlaaizOptions { IsEnabled = true, WebhookSigningSecret = Secret }));
     private static Task<BlaaizWebhookResult> Signed(BlaaizWebhookService service, string payload)
     {
         var timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString();

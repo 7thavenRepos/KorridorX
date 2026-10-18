@@ -1,3 +1,4 @@
+using KorridorX.Services.PaymentChannels;
 using System.Text.Json;
 using KorridorX.Configuration;
 using KorridorX.Data;
@@ -35,6 +36,7 @@ public class PayoutService : IPayoutService
     private readonly IComplianceScreeningService _screeningService;
     private readonly IOutboundFundsRestrictionService _outboundFundsRestrictions;
     private readonly IProviderWalletResolver _wallets;
+    private readonly PaymentChannelService _channels;
 
     public PayoutService(
         AppDbContext db,
@@ -47,7 +49,7 @@ public class PayoutService : IPayoutService
         ITransferRiskService transferRiskService,
         IComplianceScreeningService screeningService,
         IOutboundFundsRestrictionService outboundFundsRestrictions,
-        IProviderWalletResolver wallets)
+        IProviderWalletResolver wallets, PaymentChannelService channels)
     {
         _db = db;
         _referenceGenerator = referenceGenerator;
@@ -59,7 +61,7 @@ public class PayoutService : IPayoutService
         _transferRiskService = transferRiskService;
         _screeningService = screeningService;
         _outboundFundsRestrictions = outboundFundsRestrictions;
-        _wallets = wallets;
+        _wallets = wallets; _channels = channels;
     }
 
     public async Task<PayoutDetailsDto> DispatchForTransferAsync(
@@ -117,7 +119,8 @@ public class PayoutService : IPayoutService
             throw new InvalidOperationException($"Mobile-wallet payouts are not yet enabled for {_remittanceProvider.ProviderName}.");
         }
 
-        var paymentMethod = ResolvePayoutMethod(transfer.DestinationCurrencyCode);
+        var channel = await _channels.ResolvePayoutAsync(transfer, payout, ct);
+        var paymentMethod = payout?.PaymentMethod ?? channel?.Capability.PaymentMethod ?? ResolvePayoutMethod(transfer.DestinationCurrencyCode);
         ValidateDestination(
             transfer.DestinationCurrencyCode,
             paymentMethod,
@@ -164,12 +167,16 @@ public class PayoutService : IPayoutService
                 Reference = await GenerateUniquePayoutReferenceAsync(ct),
                 CurrencyCode = transfer.DestinationCurrencyCode,
                 Amount = transfer.DestinationAmount,
+                PaymentChannelId = channel?.Channel.Id, PaymentChannelName = channel?.Channel.DisplayName,
                 PaymentMethod = paymentMethod,
                 Status = PayoutStatus.Pending,
                 ProviderCode = transfer.ProviderCode,
                 CreatedByUserId = changedByUserId
             };
 
+            if (channel is not null) _channels.Record(channel, "Payout", payout.Id, transfer.DestinationCountryCode,
+                transfer.BusinessProfileId.HasValue, transfer.BusinessProfileId ?? transfer.CustomerProfile!.UserId,
+                null, payout.Amount);
             _db.Payouts.Add(payout);
             await _db.SaveChangesAsync(ct);
         }

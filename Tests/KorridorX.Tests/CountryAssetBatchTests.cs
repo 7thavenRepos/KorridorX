@@ -52,9 +52,9 @@ public sealed class CountryAssetBatchTests
         Assert.Empty(type.GetCustomAttributes<AllowAnonymousAttribute>()); Assert.Empty(method.GetCustomAttributes<AllowAnonymousAttribute>());
         Assert.Equal("country-assets/{countryCode}/{assetCode}", type.GetMethod(nameof(AdminMasterDataController.UpsertCountryAsset))!.GetCustomAttribute<HttpPutAttribute>()!.Template);
     }
-    [Fact] public void Help_enriches_master_data_without_changing_catalog_counts_or_permissions()
+    [Fact] public void Help_enriches_master_data_retains_existing_master_data_permissions()
     {
-        var catalog = new HelpCatalog(); Assert.Equal(80, catalog.Entries.Count(x => !x.IsPage));
+        var catalog = new HelpCatalog(); Assert.Equal(82, catalog.Entries.Count(x => !x.IsPage));
         var guides = catalog.Entries.Where(x => x.Portal == "admin" && !x.IsPage && x.PageRoute == "/admin/master-data").ToArray();
         Assert.NotEmpty(guides); Assert.All(guides, x => Assert.Contains("KX-010", x.Keywords));
         Assert.All(guides, x => Assert.Contains(x.Steps, s => s.Instruction.Contains("non-default")));
