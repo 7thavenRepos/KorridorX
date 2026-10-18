@@ -44,11 +44,14 @@ public static class WebOperationsHelpUpdates
         {
             if (guide.PageRoute.EndsWith("/support", StringComparison.Ordinal) || guide.Slug == "kx009-web-operations-support-triage")
             {
-                guide.Keywords = [.. guide.Keywords, "KX-011", "deposit channel", "pending bank account", "missing deposit"];
+                guide.Keywords = [.. guide.Keywords, "KX-011", "deposit channel", "pending bank account", "missing deposit", "KX-012", "Interac receiving email", "sending email verification", "unmatched Interac"];
                 guide.Troubleshooting = [.. guide.Troubleshooting,
                     "Payment channels: collect the workspace, wallet currency, channel display name, collection/account reference, amount/time and redacted error. Never request PAN, CVC, passwords, tokens or provider credentials.",
                     "No methods may be correct for the country/audience/provider environment. Ask SuperAdmin to review Payment channels. NGN virtual accounts support verified businesses and individuals; non-NGN virtual accounts currently support individuals only.",
-                    "Account setup and checkout redirects do not credit balances. Unknown submission outcomes require status/reconciliation, not another payment. Provider-development GBP/EUR setup is on hold and USD deposits do not settle."];
+                    "Account setup and checkout redirects do not credit balances. Unknown submission outcomes require status/reconciliation, not another payment. Provider-development GBP/EUR setup is on hold and USD deposits do not settle.",
+                    "Persistent CAD Interac: collect the wallet/workspace, receiving email, the actual sending email shown by the bank, bank/provider reference, amount and time. Never request a verification code. Verified registration email is the personal default; a business needs its own verified sending email. One sending email cannot identify different personal or business wallets on the same receiving route.",
+                    "For code expiry, resend cooldown or ownership conflict, use Wallet / Add money sender management and the KX-012 funding guide. Removing a sender stops future matching and does not release its historical ownership to another wallet.",
+                    "Missing unsolicited deposits: SuperAdmin reviews Interac receiving → retained deposits, records findings in audit notes, and checks provider-confirmed net amount and sender/receiving email. The review screen cannot credit, reassign or replay funds. Money Requests and dedicated bank deposits keep their existing status and reconciliation workflows."];
                 guide.ReviewedOn = "2026-10-18";
             }
         }

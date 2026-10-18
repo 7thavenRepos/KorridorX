@@ -175,7 +175,7 @@ public sealed class ConsumerTransferFundingService : IConsumerTransferFundingSer
         wallet.LastUpdatedAt = DateTime.UtcNow;
         wallet.LastUpdatedByUserId = actionedByUserId;
 
-        PostLedger(
+        var externalCredit = PostLedger(
             wallet,
             LedgerTransactionType.ExternalCollectionCredit,
             collection.Amount,
@@ -191,6 +191,7 @@ public sealed class ConsumerTransferFundingService : IConsumerTransferFundingSer
             LedgerBalanceBucket.Available,
             LedgerPostingSide.Credit,
             wallet.AvailableBalance);
+        KorridorX.Services.PaymentChannels.ProviderCollectionCreditGuard.ApplyLedgerIdentity(collection, externalCredit);
 
         if (transfer.Status != TransferStatus.PendingPayment)
         {
@@ -534,7 +535,7 @@ public sealed class ConsumerTransferFundingService : IConsumerTransferFundingSer
             throw new InvalidOperationException("The source wallet asset does not match the transfer.");
     }
 
-    private void PostLedger(
+    private LedgerTransaction PostLedger(
         FinancialAccount wallet,
         LedgerTransactionType type,
         decimal amount,
@@ -588,6 +589,7 @@ public sealed class ConsumerTransferFundingService : IConsumerTransferFundingSer
         });
 
         _db.LedgerTransactions.Add(transaction);
+        return transaction;
     }
 
     private static string? Clean(string? value, int maxLength)

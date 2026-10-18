@@ -94,6 +94,7 @@ public sealed class ConsumerWalletFundingCreditService : IConsumerWalletFundingC
             AccountBalanceAfter = wallet.AvailableBalance
         });
 
+        KorridorX.Services.PaymentChannels.ProviderCollectionCreditGuard.ApplyLedgerIdentity(collection, transaction);
         _db.LedgerTransactions.Add(transaction);
     }
 

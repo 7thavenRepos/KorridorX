@@ -94,6 +94,12 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<Guid
     public DbSet<PaymentChannel> PaymentChannels => Set<PaymentChannel>();
     public DbSet<PaymentChannelSelection> PaymentChannelSelections => Set<PaymentChannelSelection>();
     public DbSet<WalletDepositAccount> WalletDepositAccounts => Set<WalletDepositAccount>();
+    public DbSet<InteracReceivingRoute> InteracReceivingRoutes => Set<InteracReceivingRoute>();
+    public DbSet<InteracSendingEmail> InteracSendingEmails => Set<InteracSendingEmail>();
+    public DbSet<InteracSenderOwnership> InteracSenderOwnerships => Set<InteracSenderOwnership>();
+    public DbSet<ProviderCollectionCreditClaim> ProviderCollectionCreditClaims => Set<ProviderCollectionCreditClaim>();
+    public DbSet<InteracDeposit> InteracDeposits => Set<InteracDeposit>();
+    public DbSet<InteracDepositReviewNote> InteracDepositReviewNotes => Set<InteracDepositReviewNote>();
 
     public DbSet<Collection> Collections => Set<Collection>();
     public DbSet<CollectionAttempt> CollectionAttempts => Set<CollectionAttempt>();

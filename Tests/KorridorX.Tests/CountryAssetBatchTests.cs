@@ -54,7 +54,7 @@ public sealed class CountryAssetBatchTests
     }
     [Fact] public void Help_enriches_master_data_retains_existing_master_data_permissions()
     {
-        var catalog = new HelpCatalog(); Assert.Equal(82, catalog.Entries.Count(x => !x.IsPage));
+        var catalog = new HelpCatalog(); Assert.Equal(85, catalog.Entries.Count(x => !x.IsPage));
         var guides = catalog.Entries.Where(x => x.Portal == "admin" && !x.IsPage && x.PageRoute == "/admin/master-data").ToArray();
         Assert.NotEmpty(guides); Assert.All(guides, x => Assert.Contains("KX-010", x.Keywords));
         Assert.All(guides, x => Assert.Contains(x.Steps, s => s.Instruction.Contains("non-default")));

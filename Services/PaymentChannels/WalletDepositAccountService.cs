@@ -200,7 +200,7 @@ public sealed class WalletDepositAccountService(AppDbContext db, PaymentChannelS
         await using var tx = await db.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, ct);
         try
         {
-            var key = "WalletBankDeposit:" + request.ProviderTransactionId;
+            var key = ProviderCollectionCreditGuard.LockKey(wallets.ConnectionKey, request.ProviderTransactionId);
             await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({key}, 0))", ct);
             var account = await db.FinancialAccounts.FromSqlInterpolated($"SELECT * FROM \"FinancialAccounts\" WHERE \"Id\" = {row.FinancialAccountId} FOR UPDATE").SingleAsync(ct);
             // Reload an already tracked entity; the SQL row lock alone does not refresh EF's identity map.
@@ -231,6 +231,7 @@ public sealed class WalletDepositAccountService(AppDbContext db, PaymentChannelS
                 Status = CollectionStatus.Successful, ProviderCode = "BLAAIZ", ProviderCollectionId = request.ProviderTransactionId,
                 ProviderReference = verified.ProviderReference, InitiatedAt = DateTime.UtcNow, ConfirmedAt = DateTime.UtcNow };
             db.Collections.Add(collection);
+            await new ProviderCollectionCreditGuard(db, wallets, api).PrepareAsync(collection, request.ProviderTransactionId, ct);
             await credits.ApplySuccessfulCollectionAsync(collection, null, "VerifiedBankDeposit", ct);
             db.ProviderTransactions.Add(new ProviderTransaction { ProviderCode = ProviderCode.Blaaiz,
                 ProviderTransactionId = request.ProviderTransactionId, CollectionId = collection.Id, Collection = collection,
@@ -245,10 +246,10 @@ public sealed class WalletDepositAccountService(AppDbContext db, PaymentChannelS
             await tx.RollbackAsync(CancellationToken.None);
             // The outer webhook handler will save its FAILED receipt. Do not allow
             // that SaveChanges to accidentally persist our rolled-back tracked money.
-            foreach (var entry in db.ChangeTracker.Entries().Where(x => x.Entity is Collection or LedgerTransaction or LedgerPosting or ProviderTransaction or FinancialAccount).ToArray())
+            foreach (var entry in db.ChangeTracker.Entries().Where(x => x.Entity is Collection or LedgerTransaction or LedgerPosting or ProviderTransaction or FinancialAccount or ProviderCollectionCreditClaim).ToArray())
             {
                 if (entry.State == EntityState.Added) entry.State = EntityState.Detached;
-                else if (entry.State is EntityState.Modified or EntityState.Deleted) await entry.ReloadAsync(CancellationToken.None);
+                else if (entry.State != EntityState.Detached) await entry.ReloadAsync(CancellationToken.None);
             }
             throw;
         }

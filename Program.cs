@@ -319,6 +319,10 @@ builder.Services.AddScoped<IConsumerWalletFundingService>(sp => sp.GetRequiredSe
 builder.Services.AddScoped<KorridorX.Services.PaymentChannels.PaymentChannelService>();
 builder.Services.AddScoped<KorridorX.Services.PaymentChannels.WalletFundingContextService>();
 builder.Services.AddScoped<KorridorX.Services.PaymentChannels.WalletDepositAccountService>();
+builder.Services.AddScoped<KorridorX.Services.PaymentChannels.InteracFundingService>();
+builder.Services.AddScoped<KorridorX.Services.PaymentChannels.InteracAdminService>();
+builder.Services.AddScoped<KorridorX.Services.PaymentChannels.InteracDepositService>();
+builder.Services.AddScoped<KorridorX.Services.PaymentChannels.ProviderCollectionCreditGuard>();
 builder.Services.AddScoped<IRecipientService, RecipientService>();
 builder.Services.AddScoped<IBusinessBeneficiaryService, BusinessBeneficiaryService>();
 builder.Services.AddScoped<IBusinessAccessService, BusinessAccessService>();

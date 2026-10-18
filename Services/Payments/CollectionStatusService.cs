@@ -4,6 +4,9 @@ using KorridorX.Models.Payments;
 using KorridorX.Models.Transfers;
 using KorridorX.Services.Transfers;
 using KorridorX.Services.Wallets;
+using KorridorX.Services.PaymentChannels;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 
 namespace KorridorX.Services.Payments;
 
@@ -57,17 +60,20 @@ public class CollectionStatusService : ICollectionStatusService
     private readonly ITransferStatusService _transferStatusService;
     private readonly IConsumerTransferFundingService _consumerFunding;
     private readonly IConsumerWalletFundingCreditService _walletFundingCredits;
+    private readonly ProviderCollectionCreditGuard? _creditGuard;
 
     public CollectionStatusService(
         AppDbContext db,
         ITransferStatusService transferStatusService,
         IConsumerTransferFundingService consumerFunding,
-        IConsumerWalletFundingCreditService walletFundingCredits)
+        IConsumerWalletFundingCreditService walletFundingCredits,
+        ProviderCollectionCreditGuard? creditGuard = null)
     {
         _db = db;
         _transferStatusService = transferStatusService;
         _consumerFunding = consumerFunding;
         _walletFundingCredits = walletFundingCredits;
+        _creditGuard = creditGuard;
     }
 
     public bool CanTransition(
@@ -130,34 +136,46 @@ public class CollectionStatusService : ICollectionStatusService
         CollectionAttempt? attempt = null,
         CancellationToken ct = default)
     {
-        var changed = ApplyTransition(collection, newStatus, context, attempt);
-
-        if (changed && newStatus == CollectionStatus.Successful)
+        var guarded = newStatus == CollectionStatus.Successful && _creditGuard is not null &&
+            ProviderCollectionCreditGuard.Applies(collection, context.ProviderCollectionId);
+        IDbContextTransaction? ownedTransaction = null;
+        try
         {
-            if (collection.Purpose == PaymentOperationPurpose.Remittance &&
-                collection.FinancialAccountId.HasValue &&
-                collection.Transfer?.CustomerProfileId is not null &&
-                collection.Transfer.BusinessProfileId is null)
+            if (guarded)
             {
-                await _consumerFunding.ApplySuccessfulCollectionAsync(
-                    collection,
-                    context.ChangedByUserId,
-                    context.Source,
-                    ct);
+                if (_db.Database.CurrentTransaction is null)
+                    ownedTransaction = await _db.Database.BeginTransactionAsync(System.Data.IsolationLevel.ReadCommitted, ct);
+                await _creditGuard!.PrepareAsync(collection, context.ProviderCollectionId, ct);
             }
-            else if (collection.Purpose == PaymentOperationPurpose.AccountFunding &&
-                     collection.FinancialAccountId.HasValue &&
-                     !collection.TransferId.HasValue)
+            var changed = ApplyTransition(collection, newStatus, context, attempt);
+            if (changed && newStatus == CollectionStatus.Successful)
             {
-                await _walletFundingCredits.ApplySuccessfulCollectionAsync(
-                    collection,
-                    context.ChangedByUserId,
-                    context.Source,
-                    ct);
+                if (collection.Purpose == PaymentOperationPurpose.Remittance && collection.FinancialAccountId.HasValue &&
+                    collection.Transfer?.CustomerProfileId is not null && collection.Transfer.BusinessProfileId is null)
+                    await _consumerFunding.ApplySuccessfulCollectionAsync(collection, context.ChangedByUserId, context.Source, ct);
+                else if (collection.Purpose == PaymentOperationPurpose.AccountFunding && collection.FinancialAccountId.HasValue && !collection.TransferId.HasValue)
+                    await _walletFundingCredits.ApplySuccessfulCollectionAsync(collection, context.ChangedByUserId, context.Source, ct);
             }
+            if (ownedTransaction is not null)
+            {
+                await _db.SaveChangesAsync(ct);
+                await ownedTransaction.CommitAsync(ct);
+            }
+            return changed;
         }
-
-        return changed;
+        catch
+        {
+            if (ownedTransaction is not null)
+            {
+                await ownedTransaction.RollbackAsync(CancellationToken.None);
+                await ProviderCollectionCreditGuard.RestoreMoneyTrackingAsync(_db);
+            }
+            throw;
+        }
+        finally
+        {
+            if (ownedTransaction is not null) await ownedTransaction.DisposeAsync();
+        }
     }
 
 

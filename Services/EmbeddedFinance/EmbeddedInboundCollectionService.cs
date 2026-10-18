@@ -3,6 +3,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using KorridorX.Data;
+using KorridorX.Services.PaymentChannels;
 using KorridorX.Models.EmbeddedFinance;
 using KorridorX.Models.Enums;
 using KorridorX.Models.FinancialCore;
@@ -16,11 +17,13 @@ public sealed class EmbeddedInboundCollectionService : IEmbeddedInboundCollectio
 {
     private readonly AppDbContext _db;
     private readonly IEmbeddedWebhookPublisher _webhooks;
+    private readonly ProviderCollectionCreditGuard? _creditGuard;
 
-    public EmbeddedInboundCollectionService(AppDbContext db, IEmbeddedWebhookPublisher webhooks)
+    public EmbeddedInboundCollectionService(AppDbContext db, IEmbeddedWebhookPublisher webhooks, ProviderCollectionCreditGuard? creditGuard = null)
     {
         _db = db;
         _webhooks = webhooks;
+        _creditGuard = creditGuard;
     }
 
     public async Task<bool> TryProcessBlaaizDepositAsync(
@@ -63,155 +66,167 @@ public sealed class EmbeddedInboundCollectionService : IEmbeddedInboundCollectio
 
         await using var tx = await _db.Database.BeginTransactionAsync(IsolationLevel.Serializable, ct);
 
-        var providerTransaction = await _db.ProviderTransactions.FirstOrDefaultAsync(x =>
-            x.ProviderCode == ProviderCode.Blaaiz && x.ProviderTransactionId == request.ProviderTransactionId, ct);
-        if (providerTransaction?.CollectionId is not null)
+        try
         {
-            await ValidateCompletedReplayAsync(providerTransaction.CollectionId.Value, request, currency, ct);
+            var providerTransaction = await _db.ProviderTransactions.FirstOrDefaultAsync(x =>
+                x.ProviderCode == ProviderCode.Blaaiz && x.ProviderTransactionId == request.ProviderTransactionId, ct);
+            if (providerTransaction?.CollectionId is not null)
+            {
+                await ValidateCompletedReplayAsync(providerTransaction.CollectionId.Value, request, currency, ct);
+                await tx.CommitAsync(ct);
+                return true;
+            }
+
+            var financialAccount = await _db.FinancialAccounts.FirstOrDefaultAsync(x =>
+                x.Id == collectionAccount.FinancialAccountId &&
+                x.OwnerType == FinancialAccountOwnerType.BusinessCustomer &&
+                x.OwnerId == collectionAccount.BusinessCustomerId && !x.IsDeleted, ct)
+                ?? throw new InvalidOperationException("Mapped customer Financial Account was not found.");
+
+            if (financialAccount.Status != FinancialAccountStatus.Active) throw new InvalidOperationException("Mapped customer Financial Account is not active.");
+            if (!string.Equals(financialAccount.AssetCode, currency, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException("Mapped Financial Account asset does not match the provider deposit currency.");
+
+            var idempotencyScope = $"EmbeddedCollection:{ProviderCode.Blaaiz}:{collectionAccount.Id}";
+            var idempotencyKey = request.ProviderTransactionId.Trim();
+            var requestHash = Hash(new
+            {
+                Provider = ProviderCode.Blaaiz.ToString(),
+                request.ProviderTransactionId,
+                CurrencyCode = currency,
+                request.Amount,
+                CollectionAccountId = collectionAccount.Id,
+                FinancialAccountId = financialAccount.Id
+            });
+
+            var existingLedger = await _db.LedgerTransactions.AsNoTracking().FirstOrDefaultAsync(x =>
+                x.IdempotencyScope == idempotencyScope && x.IdempotencyKey == idempotencyKey, ct);
+            if (existingLedger is not null)
+            {
+                if (!string.Equals(existingLedger.IdempotencyRequestHash, requestHash, StringComparison.Ordinal))
+                    throw new InvalidOperationException("Provider transaction idempotency key was reused with different deposit details.");
+                await tx.CommitAsync(ct);
+                return true;
+            }
+
+            var now = request.OccurredAt == default ? DateTime.UtcNow : request.OccurredAt.ToUniversalTime();
+            var collection = new Collection
+            {
+                Purpose = PaymentOperationPurpose.AccountFunding,
+                FinancialAccountId = financialAccount.Id,
+                FinancialAccount = financialAccount,
+                RelatedEntityType = nameof(CollectionAccount),
+                RelatedEntityId = collectionAccount.Id,
+                ContextEntityType = nameof(BusinessCustomer),
+                ContextEntityId = collectionAccount.BusinessCustomerId,
+                Reference = $"COL-EMB-{Guid.NewGuid():N}"[..40],
+                CurrencyCode = currency,
+                Amount = request.Amount,
+                PaymentMethod = PaymentMethod.VirtualAccount,
+                Status = CollectionStatus.Successful,
+                ProviderCode = ProviderCode.Blaaiz.ToString(),
+                ProviderCollectionId = request.ProviderTransactionId.Trim(),
+                ProviderReference = Clean(request.ProviderReference, 150) ?? Clean(request.ProviderAccountReference, 150),
+                VirtualAccountNumber = Clean(mapping.AccountNumber ?? request.AccountNumber, 100),
+                VirtualAccountName = Clean(mapping.AccountName, 200),
+                VirtualAccountBankName = Clean(mapping.BankName, 150),
+                InitiatedAt = now,
+                ConfirmedAt = now
+            };
+            _db.Collections.Add(collection);
+            if (_creditGuard is not null) await _creditGuard.PrepareAsync(collection, request.ProviderTransactionId, ct);
+
+            financialAccount.SettledBalance += request.Amount;
+            financialAccount.AvailableBalance += request.Amount;
+            financialAccount.LastUpdatedAt = now;
+
+            var ledger = new LedgerTransaction
+            {
+                Reference = $"LED-EMB-{Guid.NewGuid():N}"[..40],
+                AssetCode = currency,
+                Type = LedgerTransactionType.ExternalCollectionCredit,
+                Status = LedgerTransactionStatus.Posted,
+                Amount = request.Amount,
+                Description = $"Blaaiz deposit credited to embedded collection account {collectionAccount.ExternalReference}.",
+                IdempotencyScope = idempotencyScope,
+                IdempotencyKey = idempotencyKey,
+                IdempotencyRequestHash = requestHash,
+                RelatedEntityType = nameof(Collection),
+                RelatedEntityId = collection.Id,
+                ContextEntityType = nameof(CollectionAccount),
+                ContextEntityId = collectionAccount.Id,
+                PostedAt = now
+            };
+            ledger.Postings.Add(new LedgerPosting
+            {
+                FinancialAccountId = financialAccount.Id,
+                FinancialAccount = financialAccount,
+                BalanceBucket = LedgerBalanceBucket.External,
+                Side = LedgerPostingSide.Debit,
+                Amount = request.Amount
+            });
+            ledger.Postings.Add(new LedgerPosting
+            {
+                FinancialAccountId = financialAccount.Id,
+                FinancialAccount = financialAccount,
+                BalanceBucket = LedgerBalanceBucket.Available,
+                Side = LedgerPostingSide.Credit,
+                Amount = request.Amount,
+                AccountBalanceAfter = financialAccount.AvailableBalance
+            });
+            _db.LedgerTransactions.Add(ledger);
+
+            providerTransaction ??= new ProviderTransaction
+            {
+                ProviderCode = ProviderCode.Blaaiz,
+                ProviderTransactionId = request.ProviderTransactionId.Trim()
+            };
+            if (_db.Entry(providerTransaction).State == EntityState.Detached) _db.ProviderTransactions.Add(providerTransaction);
+
+            providerTransaction.CollectionId = collection.Id;
+            providerTransaction.Collection = collection;
+            providerTransaction.ProviderReference = Clean(request.ProviderReference, 150) ?? Clean(request.ProviderAccountReference, 150);
+            providerTransaction.TransactionType = "collection";
+            providerTransaction.ProviderStatus = providerStatus;
+            providerTransaction.CurrencyCode = currency;
+            providerTransaction.Amount = request.Amount;
+            providerTransaction.AmountWithoutFee = request.AmountWithoutFee;
+            providerTransaction.ProviderFeeAmount = request.ProviderFeeAmount;
+            providerTransaction.ProviderFeeCurrencyCode = Clean(request.ProviderFeeCurrencyCode, 10) ?? currency;
+            providerTransaction.RawPayloadJson = request.RawPayloadJson;
+            providerTransaction.ProviderCreatedAt = now;
+            providerTransaction.LastSyncedAt = DateTime.UtcNow;
+            providerTransaction.LastUpdatedAt = DateTime.UtcNow;
+
+            await _webhooks.PublishAsync(collectionAccount.BusinessProfileId, "collection.completed", new
+            {
+                id = collection.Id,
+                collection.Reference,
+                businessCustomerId = collectionAccount.BusinessCustomerId,
+                collectionAccountId = collectionAccount.Id,
+                collectionAccountExternalReference = collectionAccount.ExternalReference,
+                financialAccountId = financialAccount.Id,
+                provider = ProviderCode.Blaaiz.ToString(),
+                providerTransactionId = request.ProviderTransactionId,
+                providerReference = providerTransaction.ProviderReference,
+                amount = collection.Amount,
+                currencyCode = collection.CurrencyCode,
+                status = collection.Status.ToString(),
+                confirmedAt = collection.ConfirmedAt
+            }, ct);
+
+            await _db.SaveChangesAsync(ct);
             await tx.CommitAsync(ct);
             return true;
         }
-
-        var financialAccount = await _db.FinancialAccounts.FirstOrDefaultAsync(x =>
-            x.Id == collectionAccount.FinancialAccountId &&
-            x.OwnerType == FinancialAccountOwnerType.BusinessCustomer &&
-            x.OwnerId == collectionAccount.BusinessCustomerId && !x.IsDeleted, ct)
-            ?? throw new InvalidOperationException("Mapped customer Financial Account was not found.");
-
-        if (financialAccount.Status != FinancialAccountStatus.Active) throw new InvalidOperationException("Mapped customer Financial Account is not active.");
-        if (!string.Equals(financialAccount.AssetCode, currency, StringComparison.OrdinalIgnoreCase))
-            throw new InvalidOperationException("Mapped Financial Account asset does not match the provider deposit currency.");
-
-        var idempotencyScope = $"EmbeddedCollection:{ProviderCode.Blaaiz}:{collectionAccount.Id}";
-        var idempotencyKey = request.ProviderTransactionId.Trim();
-        var requestHash = Hash(new
+        catch
         {
-            Provider = ProviderCode.Blaaiz.ToString(),
-            request.ProviderTransactionId,
-            CurrencyCode = currency,
-            request.Amount,
-            CollectionAccountId = collectionAccount.Id,
-            FinancialAccountId = financialAccount.Id
-        });
-
-        var existingLedger = await _db.LedgerTransactions.AsNoTracking().FirstOrDefaultAsync(x =>
-            x.IdempotencyScope == idempotencyScope && x.IdempotencyKey == idempotencyKey, ct);
-        if (existingLedger is not null)
-        {
-            if (!string.Equals(existingLedger.IdempotencyRequestHash, requestHash, StringComparison.Ordinal))
-                throw new InvalidOperationException("Provider transaction idempotency key was reused with different deposit details.");
-            await tx.CommitAsync(ct);
-            return true;
+            await tx.RollbackAsync(CancellationToken.None);
+            // The outer webhook records errors with this same DbContext. Restore
+            // rolled-back money and outbox entries before that outer SaveChanges.
+            await ProviderCollectionCreditGuard.RestoreMoneyTrackingAsync(_db);
+            throw;
         }
-
-        var now = request.OccurredAt == default ? DateTime.UtcNow : request.OccurredAt.ToUniversalTime();
-        var collection = new Collection
-        {
-            Purpose = PaymentOperationPurpose.AccountFunding,
-            FinancialAccountId = financialAccount.Id,
-            FinancialAccount = financialAccount,
-            RelatedEntityType = nameof(CollectionAccount),
-            RelatedEntityId = collectionAccount.Id,
-            ContextEntityType = nameof(BusinessCustomer),
-            ContextEntityId = collectionAccount.BusinessCustomerId,
-            Reference = $"COL-EMB-{Guid.NewGuid():N}"[..40],
-            CurrencyCode = currency,
-            Amount = request.Amount,
-            PaymentMethod = PaymentMethod.VirtualAccount,
-            Status = CollectionStatus.Successful,
-            ProviderCode = ProviderCode.Blaaiz.ToString(),
-            ProviderCollectionId = request.ProviderTransactionId.Trim(),
-            ProviderReference = Clean(request.ProviderReference, 150) ?? Clean(request.ProviderAccountReference, 150),
-            VirtualAccountNumber = Clean(mapping.AccountNumber ?? request.AccountNumber, 100),
-            VirtualAccountName = Clean(mapping.AccountName, 200),
-            VirtualAccountBankName = Clean(mapping.BankName, 150),
-            InitiatedAt = now,
-            ConfirmedAt = now
-        };
-        _db.Collections.Add(collection);
-
-        financialAccount.SettledBalance += request.Amount;
-        financialAccount.AvailableBalance += request.Amount;
-        financialAccount.LastUpdatedAt = now;
-
-        var ledger = new LedgerTransaction
-        {
-            Reference = $"LED-EMB-{Guid.NewGuid():N}"[..40],
-            AssetCode = currency,
-            Type = LedgerTransactionType.ExternalCollectionCredit,
-            Status = LedgerTransactionStatus.Posted,
-            Amount = request.Amount,
-            Description = $"Blaaiz deposit credited to embedded collection account {collectionAccount.ExternalReference}.",
-            IdempotencyScope = idempotencyScope,
-            IdempotencyKey = idempotencyKey,
-            IdempotencyRequestHash = requestHash,
-            RelatedEntityType = nameof(Collection),
-            RelatedEntityId = collection.Id,
-            ContextEntityType = nameof(CollectionAccount),
-            ContextEntityId = collectionAccount.Id,
-            PostedAt = now
-        };
-        ledger.Postings.Add(new LedgerPosting
-        {
-            FinancialAccountId = financialAccount.Id,
-            FinancialAccount = financialAccount,
-            BalanceBucket = LedgerBalanceBucket.External,
-            Side = LedgerPostingSide.Debit,
-            Amount = request.Amount
-        });
-        ledger.Postings.Add(new LedgerPosting
-        {
-            FinancialAccountId = financialAccount.Id,
-            FinancialAccount = financialAccount,
-            BalanceBucket = LedgerBalanceBucket.Available,
-            Side = LedgerPostingSide.Credit,
-            Amount = request.Amount,
-            AccountBalanceAfter = financialAccount.AvailableBalance
-        });
-        _db.LedgerTransactions.Add(ledger);
-
-        providerTransaction ??= new ProviderTransaction
-        {
-            ProviderCode = ProviderCode.Blaaiz,
-            ProviderTransactionId = request.ProviderTransactionId.Trim()
-        };
-        if (_db.Entry(providerTransaction).State == EntityState.Detached) _db.ProviderTransactions.Add(providerTransaction);
-
-        providerTransaction.CollectionId = collection.Id;
-        providerTransaction.Collection = collection;
-        providerTransaction.ProviderReference = Clean(request.ProviderReference, 150) ?? Clean(request.ProviderAccountReference, 150);
-        providerTransaction.TransactionType = "collection";
-        providerTransaction.ProviderStatus = providerStatus;
-        providerTransaction.CurrencyCode = currency;
-        providerTransaction.Amount = request.Amount;
-        providerTransaction.AmountWithoutFee = request.AmountWithoutFee;
-        providerTransaction.ProviderFeeAmount = request.ProviderFeeAmount;
-        providerTransaction.ProviderFeeCurrencyCode = Clean(request.ProviderFeeCurrencyCode, 10) ?? currency;
-        providerTransaction.RawPayloadJson = request.RawPayloadJson;
-        providerTransaction.ProviderCreatedAt = now;
-        providerTransaction.LastSyncedAt = DateTime.UtcNow;
-        providerTransaction.LastUpdatedAt = DateTime.UtcNow;
-
-        await _webhooks.PublishAsync(collectionAccount.BusinessProfileId, "collection.completed", new
-        {
-            id = collection.Id,
-            collection.Reference,
-            businessCustomerId = collectionAccount.BusinessCustomerId,
-            collectionAccountId = collectionAccount.Id,
-            collectionAccountExternalReference = collectionAccount.ExternalReference,
-            financialAccountId = financialAccount.Id,
-            provider = ProviderCode.Blaaiz.ToString(),
-            providerTransactionId = request.ProviderTransactionId,
-            providerReference = providerTransaction.ProviderReference,
-            amount = collection.Amount,
-            currencyCode = collection.CurrencyCode,
-            status = collection.Status.ToString(),
-            confirmedAt = collection.ConfirmedAt
-        }, ct);
-
-        await _db.SaveChangesAsync(ct);
-        await tx.CommitAsync(ct);
-        return true;
     }
 
     private async Task ValidateCompletedReplayAsync(

@@ -33,6 +33,8 @@ public class BlaaizWebhookService : IBlaaizWebhookService
     private readonly IDigitalAssetDepositIntentSettlementService _digitalAssetDepositIntents;
     private readonly BusinessKybNotificationService _kybNotifications;
     private readonly WalletDepositAccountService _walletDepositAccounts;
+    private readonly InteracDepositService _interacDeposits;
+    private readonly InteracAdminService _interacRoutes;
 
     public BlaaizWebhookService(
         AppDbContext db,
@@ -45,7 +47,8 @@ public class BlaaizWebhookService : IBlaaizWebhookService
         IEmbeddedPayoutSettlementService embeddedPayoutSettlement,
         IDigitalAssetDepositIntentSettlementService digitalAssetDepositIntents,
         BusinessKybNotificationService kybNotifications,
-        WalletDepositAccountService walletDepositAccounts)
+        WalletDepositAccountService walletDepositAccounts,
+        InteracDepositService interacDeposits, InteracAdminService interacRoutes)
     {
         _db = db;
         _options = options.Value;
@@ -58,6 +61,8 @@ public class BlaaizWebhookService : IBlaaizWebhookService
         _digitalAssetDepositIntents = digitalAssetDepositIntents;
         _kybNotifications = kybNotifications;
         _walletDepositAccounts = walletDepositAccounts;
+        _interacDeposits = interacDeposits;
+        _interacRoutes = interacRoutes;
     }
 
     public Task<BlaaizWebhookResult> ProcessCollectionWebhookAsync(
@@ -100,7 +105,7 @@ public class BlaaizWebhookService : IBlaaizWebhookService
         var providerStatus = ReadOptionalString(data, root, "transaction_status", "status", "new_status");
         var type = ReadOptionalString(data, root, "type", "transaction_type");
         var eventType = ReadOptionalString(root, data, "event_type", "event")
-            ?? InferEventType(type, providerStatus, expectedChannel);
+            ?? (type?.StartsWith("auto_deposit_email.", StringComparison.OrdinalIgnoreCase) == true ? type : InferEventType(type, providerStatus, expectedChannel));
         var eventId = ReadOptionalString(root, data, "event_id")
             ?? CreateDeterministicEventId(eventType, rawPayload);
 
@@ -114,7 +119,8 @@ public class BlaaizWebhookService : IBlaaizWebhookService
         var customerStatusEvent = eventType.Equals("customer.status_changed", StringComparison.OrdinalIgnoreCase);
         var retryableEvent = customerStatusEvent ||
             eventType.StartsWith("virtual_account.", StringComparison.OrdinalIgnoreCase) ||
-            eventType.StartsWith("collection.", StringComparison.OrdinalIgnoreCase);
+            eventType.StartsWith("collection.", StringComparison.OrdinalIgnoreCase) ||
+            eventType.StartsWith("auto_deposit_email.", StringComparison.OrdinalIgnoreCase);
         if (existing is not null && retryableEvent && existing.RawPayloadJson != rawPayload)
             throw new InvalidOperationException("A webhook event ID cannot be reused with a different payload.");
 
@@ -263,6 +269,10 @@ public class BlaaizWebhookService : IBlaaizWebhookService
         string rawPayload,
         CancellationToken ct)
     {
+        if (eventType.StartsWith("auto_deposit_email.", StringComparison.OrdinalIgnoreCase))
+            return await _interacRoutes.ProcessRegistrationEventAsync(ReadOptionalString(data, root, "email") ?? "",
+                ReadOptionalString(data, root, "status") ?? "", ct);
+
         if (eventType.StartsWith("virtual_account.", StringComparison.OrdinalIgnoreCase))
         {
             if (await _walletDepositAccounts.TryProcessAccountEventAsync(eventType, rawPayload, ct)) return true;
@@ -320,6 +330,9 @@ public class BlaaizWebhookService : IBlaaizWebhookService
             ? ReadOptionalString(data, root, "refund_reference", "reference")
             : collectionReference;
 
+        if (!isRefund && string.IsNullOrWhiteSpace(collectionTransactionId) &&
+            await _interacDeposits.TryProcessAsync(rawPayload, ct)) return true;
+
         if (string.IsNullOrWhiteSpace(collectionTransactionId) &&
             string.IsNullOrWhiteSpace(collectionReference) &&
             string.IsNullOrWhiteSpace(refundId))
@@ -358,7 +371,7 @@ public class BlaaizWebhookService : IBlaaizWebhookService
                     collectionTransactionId, collectionReference,
                     ReadOptionalString(data, root, "transaction_status", "status") ?? EventStatus(eventType),
                     incomingCurrency, incomingAmount.Value,
-                    ReadOptionalDecimal(data, root, "amount_without_fee"),
+                    ReadOptionalDecimal(data, root, "transaction_amount_without_fee", "amount_without_fee"),
                     ReadOptionalDecimal(data, root, "fee", "transaction_fee"),
                     ReadOptionalString(data, root, "fee_currency", "transaction_currency", "currency"),
                     ReadOptionalString(data, root, "virtual_bank_account_id", "virtual_account_id", "bank_account_id", "account_id", "business_bank_account_id"),
@@ -367,6 +380,25 @@ public class BlaaizWebhookService : IBlaaizWebhookService
                     ReadOptionalString(data, root, "account_number", "virtual_account_number", "bank_account_number"),
                     rawPayload, ReadOptionalDateTime(data, root, "updated_at", "date", "timestamp") ?? DateTime.UtcNow), ct)) return true;
         }
+
+        // Preserve dedicated embedded customer accounts before considering unsolicited
+        // CAD sender-email routing. These identifiers must never be replaced by email.
+        if (!isRefund && !string.IsNullOrWhiteSpace(collectionTransactionId) &&
+            string.Equals(ReadOptionalString(data, root, "transaction_currency", "currency"), "CAD", StringComparison.OrdinalIgnoreCase) &&
+            !await _db.Collections.AsNoTracking().AnyAsync(x => !x.IsDeleted &&
+                (x.ProviderCollectionId == collectionTransactionId || collectionReference != null && x.ProviderReference == collectionReference), ct))
+        {
+            var embeddedAmount = ReadOptionalDecimal(data, root, "transaction_amount", "amount");
+            if (embeddedAmount.HasValue && await _embeddedInboundCollections.TryProcessBlaaizDepositAsync(new EmbeddedInboundCollectionRequest(
+                collectionTransactionId, collectionReference, ReadOptionalString(data, root, "transaction_status", "status") ?? EventStatus(eventType),
+                "CAD", embeddedAmount.Value, ReadOptionalDecimal(data, root, "transaction_amount_without_fee", "amount_without_fee"),
+                ReadOptionalDecimal(data, root, "fee", "transaction_fee"), "CAD",
+                ReadOptionalString(data, root, "virtual_bank_account_id", "virtual_account_id", "bank_account_id", "account_id", "business_bank_account_id"),
+                ReadOptionalString(data, root, "customer_id"), ReadOptionalString(data, root, "account_reference", "reservation_reference", "virtual_account_reference"),
+                ReadOptionalString(data, root, "account_number", "virtual_account_number", "bank_account_number"), rawPayload,
+                ReadOptionalDateTime(data, root, "updated_at", "date", "timestamp") ?? DateTime.UtcNow), ct)) return true;
+        }
+        if (!isRefund && await _interacDeposits.TryProcessAsync(rawPayload, ct)) return true;
 
         var collection = await _db.Collections
             .Include(x => x.Transfer)
@@ -396,7 +428,7 @@ public class BlaaizWebhookService : IBlaaizWebhookService
                         inboundStatus,
                         inboundCurrency,
                         inboundAmount.Value,
-                        ReadOptionalDecimal(data, root, "amount_without_fee"),
+                        ReadOptionalDecimal(data, root, "transaction_amount_without_fee", "amount_without_fee"),
                         ReadOptionalDecimal(data, root, "fee", "transaction_fee"),
                         ReadOptionalString(data, root, "fee_currency", "transaction_currency", "currency"),
                         ReadOptionalString(data, root, "virtual_bank_account_id", "virtual_account_id", "bank_account_id", "account_id", "business_bank_account_id"),
@@ -418,7 +450,7 @@ public class BlaaizWebhookService : IBlaaizWebhookService
         var mappedStatus = MapCollectionStatus(eventType, providerStatus);
         var amount = ReadOptionalDecimal(data, root, "transaction_amount", "amount");
         var providerFee = ReadOptionalDecimal(data, root, "fee", "transaction_fee");
-        var amountWithoutFee = ReadOptionalDecimal(data, root, "amount_without_fee");
+        var amountWithoutFee = ReadOptionalDecimal(data, root, "transaction_amount_without_fee", "amount_without_fee");
         var currency = ReadOptionalString(data, root, "transaction_currency", "currency");
         var failureReason = ReadOptionalString(data, root, "failure_reason", "reason", "message");
         var occurredAt = ReadOptionalDateTime(data, root, "updated_at", "date", "timestamp")
@@ -535,7 +567,7 @@ public class BlaaizWebhookService : IBlaaizWebhookService
         var mappedStatus = MapPayoutStatus(eventType, providerStatus);
         var amount = ReadRecipientAmount(data) ?? ReadOptionalDecimal(data, root, "transaction_amount", "amount");
         var providerFee = ReadOptionalDecimal(data, root, "fee", "transaction_fee");
-        var amountWithoutFee = ReadOptionalDecimal(data, root, "amount_without_fee");
+        var amountWithoutFee = ReadOptionalDecimal(data, root, "transaction_amount_without_fee", "amount_without_fee");
         var currency = ReadRecipientString(data, "currency")
             ?? ReadOptionalString(data, root, "transaction_currency", "currency");
         var failureReason = ReadOptionalString(data, root, "failure_reason", "reason", "message");

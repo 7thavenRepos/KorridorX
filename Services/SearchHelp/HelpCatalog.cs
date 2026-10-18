@@ -50,6 +50,11 @@ public sealed class HelpCatalog
         var channelGuides = JsonSerializer.Deserialize<HelpEntry[]>(channelStream, new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
             ?? throw new InvalidOperationException("The payment-channel guides are empty.");
         Entries = Entries.Concat(channelGuides).ToArray();
+        using var interacStream = typeof(HelpCatalog).Assembly.GetManifestResourceStream("KorridorX.Content.SearchHelp.interac-funding-20261018.json")
+            ?? throw new InvalidOperationException("The Interac funding guides are missing.");
+        var interacGuides = JsonSerializer.Deserialize<HelpEntry[]>(interacStream, new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
+            ?? throw new InvalidOperationException("The Interac funding guides are empty.");
+        Entries = Entries.Concat(interacGuides).ToArray();
         var unique = new HashSet<string>();
         foreach (var e in Entries)
         {

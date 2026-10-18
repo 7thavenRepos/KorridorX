@@ -262,7 +262,10 @@ public class ProviderReconciliationService : IProviderReconciliationService
         var status = MapCollectionStatus(result.ProviderStatus);
         if (status is CollectionStatus.Successful or CollectionStatus.Refunded)
         {
-            ValidateMoney(collection.Amount, collection.CurrencyCode, result.Amount, result.CurrencyCode);
+            var confirmedAmount = collection.RelatedEntityType == nameof(InteracDeposit)
+                ? result.AmountWithoutFee ?? throw new InvalidOperationException("Unsolicited Interac reconciliation requires the confirmed net amount.")
+                : result.Amount;
+            ValidateMoney(collection.Amount, collection.CurrencyCode, confirmedAmount, result.CurrencyCode);
         }
 
         var attempt = collection.Attempts.OrderByDescending(x => x.AttemptedAt).FirstOrDefault();

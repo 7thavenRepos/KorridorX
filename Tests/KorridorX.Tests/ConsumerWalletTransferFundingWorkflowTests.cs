@@ -88,6 +88,10 @@ public sealed class ConsumerWalletTransferFundingWorkflowTests
                 .Include(x => x.Transfer)
                 .SingleAsync(x => x.Id == collectionDetails.Collection.Id);
 
+            // This workflow simulates funding without an external provider receipt.
+            // Provider-backed completion now requires an immutable confirmed transaction.
+            collection.ProviderCode = "Test";
+
             var initiated = await statuses.ApplyTransitionAsync(
                 collection,
                 CollectionStatus.Initiated,

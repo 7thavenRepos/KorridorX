@@ -1,5 +1,7 @@
 using System.Diagnostics;
 using System.Net.Http.Json;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using KorridorX.Configuration;
 using KorridorX.Exceptions;
@@ -14,6 +16,7 @@ namespace KorridorX.Providers.Remittance.Blaaiz;
 public class BlaaizTokenService : IBlaaizTokenService
 {
     private const string CacheKey = "Blaaiz:OAuthAccessToken";
+    private const string InteracReadScope = "interac-auto-deposit-email:read";
     private static readonly SemaphoreSlim TokenLock = new(1, 1);
 
     private readonly IHttpClientFactory _httpClientFactory;
@@ -58,6 +61,138 @@ public class BlaaizTokenService : IBlaaizTokenService
         {
             TokenLock.Release();
         }
+    }
+
+    public async Task<string> GetInteracAutoDepositReadAccessTokenAsync(CancellationToken ct = default)
+    {
+        EnsureEnabled();
+        var connection = CaptureInteracReadConnection();
+        // Capture credentials/endpoints once so rotation cannot put a new connection's token under an old key.
+        var identity = JsonSerializer.Serialize(new[]
+        {
+            connection.ApiBaseUri.AbsoluteUri,
+            connection.TokenUri.AbsoluteUri,
+            connection.ClientId,
+            connection.ClientSecret,
+            InteracReadScope
+        });
+        var scopedKey = "Blaaiz:OAuth:InteracRead:" +
+            Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(identity)));
+
+        if (_cache.TryGetValue<string>(scopedKey, out var cached) && !string.IsNullOrWhiteSpace(cached))
+            return cached;
+
+        await TokenLock.WaitAsync(ct);
+        try
+        {
+            if (_cache.TryGetValue<string>(scopedKey, out cached) && !string.IsNullOrWhiteSpace(cached))
+                return cached;
+
+            return await AcquireInteracReadTokenAsync(connection, scopedKey, ct);
+        }
+        finally
+        {
+            TokenLock.Release();
+        }
+    }
+
+    private InteracReadConnection CaptureInteracReadConnection()
+    {
+        if (!Uri.TryCreate((_options.BaseUrl ?? "").TrimEnd('/') + "/", UriKind.Absolute, out var apiBaseUri) ||
+            apiBaseUri.Scheme != Uri.UriSchemeHttps ||
+            !string.IsNullOrEmpty(apiBaseUri.UserInfo) ||
+            !string.IsNullOrEmpty(apiBaseUri.Fragment) ||
+            string.IsNullOrWhiteSpace(_options.TokenEndpoint) ||
+            !Uri.TryCreate(apiBaseUri, _options.TokenEndpoint, out var tokenUri) ||
+            tokenUri.Scheme != Uri.UriSchemeHttps ||
+            !string.Equals(apiBaseUri.Authority, tokenUri.Authority, StringComparison.OrdinalIgnoreCase) ||
+            !string.IsNullOrEmpty(tokenUri.UserInfo) ||
+            !string.IsNullOrEmpty(tokenUri.Fragment))
+        {
+            throw new InvalidOperationException("Blaaiz Interac registration reads require a token endpoint on the configured HTTPS provider connection.");
+        }
+
+        if (string.IsNullOrWhiteSpace(_options.ClientId) || string.IsNullOrWhiteSpace(_options.ClientSecret))
+            throw new InvalidOperationException("The current Blaaiz connection has no OAuth credentials for Interac registration reads.");
+
+        return new InteracReadConnection(apiBaseUri, tokenUri, _options.ClientId, _options.ClientSecret);
+    }
+
+    private async Task<string> AcquireInteracReadTokenAsync(InteracReadConnection connection, string scopedKey, CancellationToken ct)
+    {
+        var requestLogId = await _auditService.StartAsync(
+            ProviderCode.Blaaiz,
+            connection.TokenUri.AbsolutePath,
+            HttpMethod.Post.Method,
+            JsonSerializer.Serialize(new { contentType = "application/x-www-form-urlencoded" }),
+            JsonSerializer.Serialize(new
+            {
+                grant_type = "client_credentials",
+                client_id = Mask(connection.ClientId),
+                client_secret = "***REDACTED***",
+                scope = InteracReadScope
+            }),
+            ct: ct);
+
+        var stopwatch = Stopwatch.StartNew();
+        try
+        {
+            using var body = new FormUrlEncodedContent(new Dictionary<string, string>
+            {
+                ["grant_type"] = "client_credentials",
+                ["client_id"] = connection.ClientId,
+                ["client_secret"] = connection.ClientSecret,
+                ["scope"] = InteracReadScope
+            });
+            var client = _httpClientFactory.CreateClient("BlaaizAuth");
+            using var response = await client.PostAsync(connection.TokenUri, body, ct);
+            var rawResponse = await response.Content.ReadAsStringAsync(ct);
+            stopwatch.Stop();
+
+            if (!response.IsSuccessStatusCode)
+            {
+                const string message = "Blaaiz could not authorize Interac registration reads. Confirm the current connection is authorized for interac-auto-deposit-email:read. Existing credentials and configured scopes were not changed.";
+                // OAuth errors can echo request secrets or token material; never retain their raw response.
+                var safeResponse = JsonSerializer.Serialize(new { message });
+                await _auditService.FailAsync(requestLogId, (int)response.StatusCode, safeResponse, message, stopwatch.ElapsedMilliseconds, ct);
+                throw new ProviderIntegrationException(message, (int)response.StatusCode, safeResponse, requestLogId);
+            }
+
+            BlaaizTokenResponse? token = null;
+            try { token = JsonSerializer.Deserialize<BlaaizTokenResponse>(rawResponse, JsonOptions()); }
+            catch (JsonException) { }
+
+            if (token is null || string.IsNullOrWhiteSpace(token.AccessToken) || token.ExpiresIn <= 0 ||
+                !string.Equals(token.TokenType, "Bearer", StringComparison.OrdinalIgnoreCase) ||
+                (token.Scope is not null && !string.Equals(token.Scope.Trim(), InteracReadScope, StringComparison.Ordinal)))
+            {
+                const string message = "Blaaiz returned an invalid OAuth response for the Interac registration read scope.";
+                var safeResponse = JsonSerializer.Serialize(new { message });
+                await _auditService.FailAsync(requestLogId, (int)response.StatusCode, safeResponse, message, stopwatch.ElapsedMilliseconds, ct);
+                throw new ProviderIntegrationException(message, (int)response.StatusCode, safeResponse, requestLogId);
+            }
+
+            await _auditService.CompleteAsync(requestLogId, (int)response.StatusCode,
+                JsonSerializer.Serialize(new { token_type = token.TokenType, expires_in = token.ExpiresIn, access_token = "***REDACTED***", scope = InteracReadScope }),
+                stopwatch.ElapsedMilliseconds, ct);
+
+            var cacheSeconds = Math.Max(1, token.ExpiresIn - Math.Max(0, _options.TokenRefreshBufferSeconds));
+            _cache.Set(scopedKey, token.AccessToken, TimeSpan.FromSeconds(cacheSeconds));
+            return token.AccessToken;
+        }
+        catch (ProviderIntegrationException) { throw; }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+        catch (Exception ex)
+        {
+            const string message = "Unable to connect to Blaaiz authentication for Interac registration reads.";
+            await _auditService.FailAsync(requestLogId, null, null, message, stopwatch.ElapsedMilliseconds, ct);
+            throw new ProviderIntegrationException(message, requestLogId: requestLogId, innerException: ex);
+        }
+    }
+
+    private sealed record InteracReadConnection(Uri ApiBaseUri, Uri TokenUri, string ClientId, string ClientSecret)
+    {
+        public override string ToString() => "Blaaiz Interac registration read connection";
     }
 
     private async Task<string> AcquireTokenAsync(CancellationToken ct)

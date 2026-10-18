@@ -25,6 +25,16 @@ public interface IBlaaizApiClient
         string providerWalletId,
         CancellationToken ct = default);
 
+    Task<BlaaizApiResult<BlaaizInteracAutoDepositEmailEnvelope>> GetInteracAutoDepositEmailAsync(
+        string registrationId,
+        CancellationToken ct = default);
+
+    Task<BlaaizApiResult<BlaaizInteracAutoDepositEmailListEnvelope>> ListInteracAutoDepositEmailsAsync(
+        string? status = null,
+        string? searchTerm = null,
+        int page = 1,
+        CancellationToken ct = default);
+
     Task<BlaaizApiResult<BlaaizSwapResponse>> SwapBusinessWalletsAsync(
         BlaaizSwapRequest request,
         CancellationToken ct = default);

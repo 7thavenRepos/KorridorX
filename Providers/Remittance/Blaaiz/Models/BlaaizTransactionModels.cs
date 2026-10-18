@@ -16,6 +16,30 @@ public sealed class BlaaizTransactionData
     [JsonPropertyName("id")]
     public string Id { get; set; } = "";
 
+    [JsonPropertyName("business_id")]
+    public string? BusinessId { get; set; }
+
+    [JsonPropertyName("business_customer_id")]
+    public string? BusinessCustomerId { get; set; }
+
+    [JsonPropertyName("business_wallet_id")]
+    public string? BusinessWalletId { get; set; }
+
+    [JsonPropertyName("payee_collection_email")]
+    public string? PayeeCollectionEmail { get; set; }
+
+    [JsonPropertyName("source_information")]
+    public BlaaizTransactionSourceInformation? SourceInformation { get; set; }
+
+    [JsonPropertyName("external_reference")]
+    public string? ExternalReference { get; set; }
+
+    [JsonPropertyName("merchant_reference")]
+    public string? MerchantReference { get; set; }
+
+    [JsonPropertyName("refund_status")]
+    public string? RefundStatus { get; set; }
+
     [JsonPropertyName("status")]
     public string Status { get; set; } = "";
 
@@ -84,4 +108,14 @@ public sealed class BlaaizTransactionRecipient
 
     [JsonPropertyName("email")]
     public string? Email { get; set; }
+}
+
+public sealed class BlaaizTransactionSourceInformation
+{
+    // The sender's Interac email, distinct from the receiving payee_collection_email.
+    [JsonPropertyName("collection_email")]
+    public string? CollectionEmail { get; set; }
+
+    [JsonPropertyName("collection_name")]
+    public string? CollectionName { get; set; }
 }

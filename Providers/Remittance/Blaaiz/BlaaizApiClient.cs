@@ -189,6 +189,62 @@ public class BlaaizApiClient : IBlaaizApiClient
             ct);
     }
 
+    // Registration/activation is performed in the provider dashboard. These methods only read it.
+    public Task<BlaaizApiResult<BlaaizInteracAutoDepositEmailEnvelope>> GetInteracAutoDepositEmailAsync(
+        string registrationId,
+        CancellationToken ct = default)
+    {
+        if (!Guid.TryParse(registrationId?.Trim(), out var parsedId) || parsedId == Guid.Empty)
+            throw new InvalidOperationException("A valid provider Interac registration ID is required.");
+
+        var providerRegistrationId = parsedId.ToString("D");
+        return SendAsync<object, BlaaizInteracAutoDepositEmailEnvelope>(
+            HttpMethod.Get,
+            $"/api/external/interac-auto-deposit-email/{providerRegistrationId}",
+            null,
+            JsonSerializer.Serialize(new { providerRegistrationId }),
+            null,
+            null,
+            null,
+            null,
+            ct,
+            useInteracRegistrationReadToken: true);
+    }
+
+    public Task<BlaaizApiResult<BlaaizInteracAutoDepositEmailListEnvelope>> ListInteracAutoDepositEmailsAsync(
+        string? status = null,
+        string? searchTerm = null,
+        int page = 1,
+        CancellationToken ct = default)
+    {
+        var cleanStatus = string.IsNullOrWhiteSpace(status) ? null : status.Trim().ToUpperInvariant();
+        if (cleanStatus is not null and not ("PENDING" or "PROCESSING" or "ACTIVE" or "BLOCKED"))
+            throw new InvalidOperationException("The provider Interac registration status filter is invalid.");
+        if (page < 1)
+            throw new InvalidOperationException("The provider Interac registration page must be at least one.");
+        var cleanSearchTerm = string.IsNullOrWhiteSpace(searchTerm) ? null : searchTerm.Trim();
+        if (cleanSearchTerm?.Length > 255)
+            throw new InvalidOperationException("The provider Interac email search text cannot exceed 255 characters.");
+
+        var query = new List<string> { $"page={page}" };
+        if (cleanStatus is not null)
+            query.Add($"status={Uri.EscapeDataString(cleanStatus)}");
+        if (cleanSearchTerm is not null)
+            query.Add($"search_term={Uri.EscapeDataString(cleanSearchTerm)}");
+
+        return SendAsync<object, BlaaizInteracAutoDepositEmailListEnvelope>(
+            HttpMethod.Get,
+            "/api/external/interac-auto-deposit-email?" + string.Join("&", query),
+            null,
+            JsonSerializer.Serialize(new { status = cleanStatus, searchTerm = cleanSearchTerm, page }),
+            null,
+            null,
+            null,
+            null,
+            ct,
+            useInteracRegistrationReadToken: true);
+    }
+
     public Task<BlaaizApiResult<BlaaizSwapResponse>> SwapBusinessWalletsAsync(
         BlaaizSwapRequest request,
         CancellationToken ct = default)
@@ -870,9 +926,14 @@ public class BlaaizApiClient : IBlaaizApiClient
         Guid? relatedPayoutId,
         Func<string, string>? responseSanitizer,
         CancellationToken ct,
-        IReadOnlyDictionary<string, string>? additionalHeaders = null)
+        IReadOnlyDictionary<string, string>? additionalHeaders = null,
+        bool useInteracRegistrationReadToken = false)
     {
-        var token = await _tokenService.GetAccessTokenAsync(ct);
+        if (useInteracRegistrationReadToken && method != HttpMethod.Get)
+            throw new InvalidOperationException("The Interac registration read token can be used only for GET requests.");
+        var token = useInteracRegistrationReadToken
+            ? await _tokenService.GetInteracAutoDepositReadAccessTokenAsync(ct)
+            : await _tokenService.GetAccessTokenAsync(ct);
 
         var requestLogId = await _auditService.StartAsync(
             ProviderCode.Blaaiz,
@@ -927,6 +988,8 @@ public class BlaaizApiClient : IBlaaizApiClient
                 var message = ExtractErrorMessage(
                     rawResponse,
                     $"Blaaiz request failed with HTTP {(int)response.StatusCode}.");
+                if (useInteracRegistrationReadToken && response.StatusCode == System.Net.HttpStatusCode.Forbidden)
+                    message = "Blaaiz denied Interac registration reads. Confirm interac-auto-deposit-email:read and API/IP access are authorized for the current provider connection.";
 
                 await _auditService.FailAsync(
                     requestLogId,

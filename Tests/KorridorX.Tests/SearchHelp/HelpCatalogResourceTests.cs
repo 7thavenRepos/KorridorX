@@ -12,6 +12,7 @@ public sealed class HelpCatalogResourceTests
     [InlineData("KorridorX.Content.SearchHelp.catalog.json", 103)]
     [InlineData("KorridorX.Content.SearchHelp.web-operations-20261017.json", 15)]
     [InlineData("KorridorX.Content.SearchHelp.payment-channels-20261018.json", 3)]
+    [InlineData("KorridorX.Content.SearchHelp.interac-funding-20261018.json", 4)]
     public void Required_help_resources_are_embedded_and_readable(
         string logicalName, int expectedEntryCount)
     {
@@ -49,5 +50,21 @@ public sealed class HelpCatalogResourceTests
         Assert.Null(catalog.Article(SearchHelpTestScopes.Business((BusinessPermission)0), "kx011-business-deposits"));
         Assert.Null(catalog.Article(permitted with { Business = null }, "kx011-business-deposits"));
         Assert.Null(catalog.Article(SearchHelpTestScopes.Admin("SuperAdmin"), "kx011-business-deposits"));
+    }
+
+    [Fact]
+    public void Interac_guides_preserve_admin_and_business_permission_boundaries()
+    {
+        var catalog = new HelpCatalog();
+        var admin = SearchHelpTestScopes.Admin("SuperAdmin");
+        Assert.NotNull(catalog.Article(admin, "kx012-interac-receiving"));
+        Assert.NotNull(catalog.Article(admin, "kx012-interac-review"));
+        Assert.Null(catalog.Article(SearchHelpTestScopes.Admin("Support"), "kx012-interac-receiving"));
+        Assert.Null(catalog.Article(SearchHelpTestScopes.Business(), "kx012-interac-review"));
+        var business = SearchHelpTestScopes.Business(BusinessPermission.ViewWallets);
+        Assert.NotNull(catalog.Article(business, "kx012-interac-funding"));
+        Assert.Null(catalog.Article(business with { Business = null }, "kx012-interac-funding"));
+        Assert.Null(catalog.Article(SearchHelpTestScopes.Business((BusinessPermission)0), "kx012-interac-funding"));
+        Assert.Contains(catalog.Library(business, "/business/funding").Articles, x => x.Slug == "kx012-interac-funding");
     }
 }
