@@ -3,12 +3,14 @@ using KorridorX.Models.Audit;
 using KorridorX.Models.EmbeddedFinance;
 using KorridorX.Models.Enums;
 using KorridorX.Models.FinancialCore;
+using KorridorX.Models.Notifications;
 using KorridorX.Models.Payments;
 using KorridorX.Models.Providers;
 using KorridorX.Models.Transfers;
 using KorridorX.Providers.Remittance.Blaaiz;
 using KorridorX.Providers.Remittance.Blaaiz.Models;
 using KorridorX.Services.Providers;
+using KorridorX.Services.Notifications;
 using Microsoft.EntityFrameworkCore;
 
 namespace KorridorX.Services.PaymentChannels;
@@ -107,6 +109,7 @@ public sealed class ProviderCollectionCreditGuard(AppDbContext db, IProviderWall
         foreach (var entry in db.ChangeTracker.Entries().Where(x => x.Entity is Collection or CollectionAttempt or Transfer or TransferTimelineEvent or
             FinancialAccount or FinancialReservation or LedgerTransaction or LedgerPosting or ProviderTransaction or ProviderCollectionCreditClaim or InteracDeposit or
             BusinessWebhookEvent or BusinessWebhookDelivery ||
+            x.Entity is NotificationMessage { RelatedEntityType: WalletActivityNotificationFactory.FundingEntityType } ||
             x.Entity is AuditLog { Category: "InteracFunding" }).ToArray())
         {
             if (entry.State == EntityState.Added) entry.State = EntityState.Detached;

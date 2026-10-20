@@ -8,6 +8,7 @@ using KorridorX.Models.Enums;
 using KorridorX.Models.Identity;
 using KorridorX.Services.Audit;
 using KorridorX.Services.Auth;
+using KorridorX.Services.Notifications;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
@@ -23,6 +24,7 @@ public sealed class TransactionPinService : ITransactionPinService
     private readonly ConsumerExternalAuthOptions _externalOptions;
     private readonly ExternalAuthChallengeService _challenges;
     private readonly IExternalProviderTokenVerifier _verifier;
+    private readonly INotificationQueueService _notifications;
 
     public TransactionPinService(
         AppDbContext db,
@@ -31,7 +33,8 @@ public sealed class TransactionPinService : ITransactionPinService
         IOptions<SecurityOptions> securityOptions,
         IOptions<ConsumerExternalAuthOptions> externalOptions,
         ExternalAuthChallengeService challenges,
-        IExternalProviderTokenVerifier verifier)
+        IExternalProviderTokenVerifier verifier,
+        INotificationQueueService notifications)
     {
         _db = db;
         _userManager = userManager;
@@ -40,6 +43,7 @@ public sealed class TransactionPinService : ITransactionPinService
         _externalOptions = externalOptions.Value;
         _challenges = challenges;
         _verifier = verifier;
+        _notifications = notifications;
     }
 
     public async Task<TransactionPinStatusDto> GetStatusAsync(
@@ -65,6 +69,7 @@ public sealed class TransactionPinService : ITransactionPinService
             throw new InvalidOperationException("Current password is incorrect.");
         }
 
+        var replacing = !string.IsNullOrWhiteSpace(user.TransactionPinHash);
         user.TransactionPinHash = _userManager.PasswordHasher.HashPassword(user, pin);
         user.TransactionPinFailedAttempts = 0;
         user.TransactionPinLockedUntil = null;
@@ -79,6 +84,7 @@ public sealed class TransactionPinService : ITransactionPinService
             NewValues: new { IsConfigured = true },
             UserId: user.Id));
 
+        await QueuePinNoticeAsync(user, replacing, ct);
         await _db.SaveChangesAsync(ct);
         return await ToStatusAsync(user);
     }
@@ -113,6 +119,7 @@ public sealed class TransactionPinService : ITransactionPinService
 
         await using var transaction = await _db.Database.BeginTransactionAsync(ct);
         await ClaimGoogleProofAsync(user.Id, challenge, request.IdToken, ct);
+        var replacing = !string.IsNullOrWhiteSpace(user.TransactionPinHash);
         user.TransactionPinHash = _userManager.PasswordHasher.HashPassword(user, request.Pin);
         user.TransactionPinFailedAttempts = 0;
         user.TransactionPinLockedUntil = null;
@@ -126,9 +133,17 @@ public sealed class TransactionPinService : ITransactionPinService
             EntityId: user.Id.ToString(),
             NewValues: new { IsConfigured = true, VerificationMethod = "Google" },
             UserId: user.Id));
+        await QueuePinNoticeAsync(user, replacing, ct);
         await _db.SaveChangesAsync(ct);
         await transaction.CommitAsync(ct);
         return await ToStatusAsync(user);
+    }
+
+    private Task QueuePinNoticeAsync(ApplicationUser user, bool replacing, CancellationToken ct)
+    {
+        var notice = WalletActivityNotificationFactory.PinConfigured(user.FirstName, replacing);
+        return _notifications.QueueUserAsync(user.Id, notice.Subject, notice.Body,
+            NotificationSecurityPolicy.AccountSecurityEntityType, user.Id, ct);
     }
 
     private async Task RequireGoogleLinkAsync(ApplicationUser user)

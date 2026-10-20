@@ -8,6 +8,7 @@ using KorridorX.Models.EmbeddedFinance;
 using KorridorX.Models.Enums;
 using KorridorX.Models.FinancialCore;
 using KorridorX.Models.Identity;
+using KorridorX.Models.Notifications;
 using KorridorX.Models.Payments;
 using KorridorX.Models.Providers;
 using KorridorX.Providers.Remittance.Blaaiz;
@@ -74,6 +75,9 @@ public sealed class InteracFundingWorkflowTests(ReleaseCandidateDatabaseFixture 
         var resolver = new Resolver("InteracTest-" + suffix, Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(suffix))));
         db.Users.Add(new ApplicationUser { Id = userId, UserName = registrationEmail, NormalizedUserName = registrationEmail.ToUpperInvariant(),
             Email = registrationEmail, NormalizedEmail = registrationEmail.ToUpperInvariant(), EmailConfirmed = true, SecurityStamp = Guid.NewGuid().ToString(), UserType = UserType.Consumer });
+        db.MobilePushDevices.Add(new MobilePushDevice { UserId = userId, Platform = "android", PushToken = "local-fake-" + suffix,
+            PushTokenHash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(suffix))),
+            DeviceFingerprint = suffix, DeviceName = "Local test device" });
         db.CustomerProfiles.Add(new CustomerProfile { UserId = userId, CountryCode = "CA", FirstName = "Interac", LastName = "Test", KycStatus = KycStatus.Approved });
         var business = new BusinessProfile { OwnerUserId = userId, BusinessName = "Interac business " + suffix, CountryCode = "CA", KybStatus = KybStatus.Approved };
         db.BusinessProfiles.Add(business);
@@ -119,7 +123,9 @@ public sealed class InteracFundingWorkflowTests(ReleaseCandidateDatabaseFixture 
         var contexts = new WalletFundingContextService(db, new BusinessAccessService(db, new SelectedBusiness(state.BusinessId)), null!);
         var funding = new InteracFundingService(db, contexts, state.Resolver, new NotificationQueueService(db, Options.Create(new NotificationDeliveryOptions())), options);
         var guard = new ProviderCollectionCreditGuard(db, state.Resolver, api);
-        var statuses = new CollectionStatusService(db, null!, null!, new ConsumerWalletFundingCreditService(db), guard);
+        var queue = new NotificationQueueService(db, Options.Create(new NotificationDeliveryOptions
+            { Firebase = new FirebasePushDeliveryOptions { IsEnabled = true } }));
+        var statuses = new CollectionStatusService(db, null!, null!, new ConsumerWalletFundingCreditService(db, queue), guard);
         return new(funding, new InteracDepositService(db, state.Resolver, api, guard, statuses), new InteracAdminService(db, state.Resolver, api, options), statuses, guard, fake);
     }
 
@@ -138,6 +144,19 @@ public sealed class InteracFundingWorkflowTests(ReleaseCandidateDatabaseFixture 
         return Regex.Match(body, @"\b\d{6}\b").Value;
     }
 
+    private static async Task AssertFundingNotices(AppDbContext db, Guid userId, Guid collectionId, string creditedAmount)
+    {
+        var messages = await db.NotificationMessages.AsNoTracking().Where(x => x.UserId == userId &&
+            x.RelatedEntityType == WalletActivityNotificationFactory.FundingEntityType).ToListAsync();
+        Assert.Equal(2, messages.Count);
+        var email = Assert.Single(messages.Where(x => x.Channel == NotificationChannels.Email));
+        var push = Assert.Single(messages.Where(x => x.Channel == NotificationChannels.Push));
+        Assert.All(messages, x => { Assert.Equal(NotificationStatuses.Pending, x.Status); Assert.Equal(collectionId.ToString(), x.RelatedEntityId); });
+        Assert.Contains("CAD " + creditedAmount, email.Body);
+        Assert.Contains("CAD " + creditedAmount, push.Body);
+        Assert.DoesNotContain("<p>", push.Body);
+    }
+
     [DatabaseIntegrationFact]
     public async Task Verified_unsolicited_deposit_credits_net_once_without_transfer_and_replay_preserves_original_claim()
     {
@@ -151,6 +170,7 @@ public sealed class InteracFundingWorkflowTests(ReleaseCandidateDatabaseFixture 
         Assert.Single(await db.LedgerTransactions.Where(x => x.IdempotencyKey == s.Transaction.Id).ToListAsync());
         var provider = await db.ProviderTransactions.AsNoTracking().SingleAsync(x => x.ProviderTransactionId == s.Transaction.Id);
         Assert.Equal(100m, provider.Amount); Assert.Equal(97.5m, provider.AmountWithoutFee); Assert.Equal(2.5m, provider.ProviderFeeAmount);
+        await AssertFundingNotices(db, s.UserId, collection.Id, "97.50");
     }
 
     [DatabaseIntegrationFact]
@@ -166,6 +186,7 @@ public sealed class InteracFundingWorkflowTests(ReleaseCandidateDatabaseFixture 
         Assert.Equal(100m, (await db.FinancialAccounts.AsNoTracking().SingleAsync(x => x.Id == s.WalletId)).AvailableBalance);
         Assert.Single(await db.LedgerTransactions.Where(x => x.IdempotencyKey == s.Transaction.Id).ToListAsync());
         Assert.Equal(collection.Id, (await db.InteracDeposits.SingleAsync(x => x.ProviderTransactionId == s.Transaction.Id)).CollectionId);
+        await AssertFundingNotices(db, s.UserId, collection.Id, "100.00");
     }
 
     [DatabaseIntegrationFact]
@@ -181,6 +202,8 @@ public sealed class InteracFundingWorkflowTests(ReleaseCandidateDatabaseFixture 
         await db.SaveChangesAsync(); // Simulate the outer webhook saving its failed attempt.
         Assert.Equal(0m, (await db.FinancialAccounts.AsNoTracking().SingleAsync(x => x.Id == s.BusinessWalletId)).AvailableBalance);
         Assert.Single(await db.LedgerTransactions.Where(x => x.IdempotencyKey == s.Transaction.Id).ToListAsync());
+        Assert.Equal(2, await db.NotificationMessages.CountAsync(x => x.UserId == s.UserId &&
+            x.RelatedEntityType == WalletActivityNotificationFactory.FundingEntityType));
     }
 
     [DatabaseIntegrationFact]
@@ -196,6 +219,8 @@ public sealed class InteracFundingWorkflowTests(ReleaseCandidateDatabaseFixture 
         Assert.Equal("NeedsReview", receipt.Status); Assert.Null(receipt.CreditedAt);
         Assert.Equal(0m, (await db.FinancialAccounts.AsNoTracking().SingleAsync(x => x.Id == s.WalletId)).AvailableBalance);
         Assert.Contains(await db.AuditLogs.Where(x => x.EntityId == receipt.Id.ToString()).ToListAsync(), x => x.Action == "DEPOSIT_HELD_FOR_REVIEW");
+        Assert.False(await db.NotificationMessages.AnyAsync(x => x.UserId == s.UserId &&
+            x.RelatedEntityType == WalletActivityNotificationFactory.FundingEntityType));
     }
 
     [DatabaseIntegrationFact]
@@ -205,6 +230,8 @@ public sealed class InteracFundingWorkflowTests(ReleaseCandidateDatabaseFixture 
         s.Transaction.BusinessWalletId = "different-wallet"; await h.Deposits.TryProcessAsync(Payload(s), default);
         Assert.Equal("NeedsReview", (await db.InteracDeposits.SingleAsync(x => x.ProviderTransactionId == s.Transaction.Id)).Status);
         Assert.Equal(0m, (await db.FinancialAccounts.AsNoTracking().SingleAsync(x => x.Id == s.WalletId)).AvailableBalance);
+        Assert.False(await db.NotificationMessages.AnyAsync(x => x.UserId == s.UserId &&
+            x.RelatedEntityType == WalletActivityNotificationFactory.FundingEntityType));
         s.Transaction.Id += "-old"; s.Transaction.BusinessWalletId = s.Route.ProviderWalletId; s.Transaction.Date = DateTime.UtcNow.AddHours(-1);
         await h.Deposits.TryProcessAsync(Payload(s), default);
         Assert.Contains("predates", (await db.InteracDeposits.SingleAsync(x => x.ProviderTransactionId == s.Transaction.Id)).ReviewReason);
@@ -288,6 +315,8 @@ public sealed class InteracFundingWorkflowTests(ReleaseCandidateDatabaseFixture 
         await Task.WhenAll(Process(), Process());
         Assert.Equal(97.5m, (await db.FinancialAccounts.AsNoTracking().SingleAsync(x => x.Id == s.WalletId)).AvailableBalance);
         Assert.Single(await db.LedgerTransactions.Where(x => x.IdempotencyKey == s.Transaction.Id).ToListAsync());
+        var collection = await db.Collections.SingleAsync(x => x.ProviderCollectionId == s.Transaction.Id);
+        await AssertFundingNotices(db, s.UserId, collection.Id, "97.50");
     }
 
     [DatabaseIntegrationFact]
@@ -302,15 +331,48 @@ public sealed class InteracFundingWorkflowTests(ReleaseCandidateDatabaseFixture 
                 Reference = "ROLLBACK-" + Guid.NewGuid().ToString("N"), CurrencyCode = "CAD", Amount = 123m, PaymentMethod = PaymentMethod.Interac };
             var outbox = new BusinessWebhookEvent { Id = outboxId, BusinessProfileId = s.BusinessId,
                 EventId = "evt_" + Guid.NewGuid().ToString("N"), EventType = "collection.completed", PayloadJson = "{}" };
+            var notification = new NotificationMessage { UserId = s.UserId, Channel = NotificationChannels.Email,
+                Recipient = s.RegistrationEmail, Subject = "Wallet funded", Body = "Rolled back credit", RelatedEntityType = WalletActivityNotificationFactory.FundingEntityType,
+                RelatedEntityId = created.Id.ToString() };
+            db.NotificationMessages.Add(notification);
             db.BusinessWebhookEvents.Add(outbox);
             db.Collections.Add(created); await db.SaveChangesAsync(); Assert.Equal(EntityState.Unchanged, db.Entry(created).State);
             await transaction.RollbackAsync(); await ProviderCollectionCreditGuard.RestoreMoneyTrackingAsync(db);
             Assert.Equal(EntityState.Detached, db.Entry(created).State);
             Assert.Equal(EntityState.Detached, db.Entry(outbox).State);
+            Assert.Equal(EntityState.Detached, db.Entry(notification).State);
         }
         await db.SaveChangesAsync();
         Assert.Equal(0m, (await db.FinancialAccounts.AsNoTracking().SingleAsync(x => x.Id == s.WalletId)).AvailableBalance);
         Assert.Empty(await db.Collections.Where(x => x.FinancialAccountId == s.WalletId).ToListAsync());
         Assert.False(await db.BusinessWebhookEvents.AnyAsync(x => x.Id == outboxId));
+        Assert.False(await db.NotificationMessages.AnyAsync(x => x.UserId == s.UserId &&
+            x.RelatedEntityType == WalletActivityNotificationFactory.FundingEntityType));
+    }
+
+    [DatabaseIntegrationFact]
+    public async Task Rolled_back_credit_does_not_leave_unsaved_success_notifications_for_outer_save()
+    {
+        await using var scope = fixture.Factory.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<AppDbContext>(); var s = await Setup(db);
+        await using (var transaction = await db.Database.BeginTransactionAsync())
+        {
+            var collection = new Collection { FinancialAccountId = s.WalletId, Purpose = PaymentOperationPurpose.AccountFunding,
+                Reference = "ROLLBACK-NOTICE-" + Guid.NewGuid().ToString("N"), CurrencyCode = "CAD", Amount = 12m,
+                Status = CollectionStatus.Successful, PaymentMethod = PaymentMethod.Interac, ProviderCode = "Test" };
+            db.Collections.Add(collection);
+            var queue = new NotificationQueueService(db, Options.Create(new NotificationDeliveryOptions
+                { Firebase = new FirebasePushDeliveryOptions { IsEnabled = true } }));
+            var credits = new ConsumerWalletFundingCreditService(db, queue);
+            await credits.ApplySuccessfulCollectionAsync(collection, null, "Test");
+            await credits.ApplySuccessfulCollectionAsync(collection, null, "Test");
+            Assert.Equal(2, db.NotificationMessages.Local.Count(x => x.RelatedEntityType == WalletActivityNotificationFactory.FundingEntityType));
+            Assert.Single(db.LedgerTransactions.Local.Where(x => x.RelatedEntityId == collection.Id));
+            await transaction.RollbackAsync();
+            await ProviderCollectionCreditGuard.RestoreMoneyTrackingAsync(db);
+        }
+        await db.SaveChangesAsync();
+        Assert.Equal(0m, (await db.FinancialAccounts.AsNoTracking().SingleAsync(x => x.Id == s.WalletId)).AvailableBalance);
+        Assert.False(await db.NotificationMessages.AnyAsync(x => x.UserId == s.UserId &&
+            x.RelatedEntityType == WalletActivityNotificationFactory.FundingEntityType));
     }
 }

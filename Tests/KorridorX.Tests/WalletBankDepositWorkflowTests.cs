@@ -9,6 +9,7 @@ using KorridorX.Models.Payments;
 using KorridorX.Models.Providers;
 using KorridorX.Providers.Remittance;
 using KorridorX.Services.EmbeddedFinance;
+using KorridorX.Services.Notifications;
 using KorridorX.Services.PaymentChannels;
 using KorridorX.Services.Payments;
 using KorridorX.Services.Providers;
@@ -65,7 +66,8 @@ public sealed class WalletBankDepositWorkflowTests(ReleaseCandidateDatabaseFixtu
             null, null, null, bank.ProviderAccountId, bank.ProviderCustomerId, null, bank.AccountNumber, "{}", DateTime.UtcNow);
         proxy.Result = new(request.ProviderTransactionId, null, "collection", "SUCCESSFUL", "NGN", 100m, null, null, "{}", Guid.NewGuid());
         var channels = new PaymentChannelService(db, resolver, Options.Create(new BlaaizOptions()), new CollectionPaymentMethodPolicy());
-        return new(new WalletDepositAccountService(db, channels, null!, resolver, null!, provider, new ConsumerWalletFundingCreditService(db)), bank, wallet, proxy, request, userId);
+        var notifications = new NotificationQueueService(db, Options.Create(new NotificationDeliveryOptions()));
+        return new(new WalletDepositAccountService(db, channels, null!, resolver, null!, provider, new ConsumerWalletFundingCreditService(db, notifications)), bank, wallet, proxy, request, userId);
     }
     [DatabaseIntegrationFact] public async Task Verified_deposit_posts_once_even_when_channel_was_paused_after_account_creation()
     {
@@ -76,6 +78,10 @@ public sealed class WalletBankDepositWorkflowTests(ReleaseCandidateDatabaseFixtu
         Assert.Equal(f.Bank.Id, collection.RelatedEntityId); Assert.Equal(f.Bank.PaymentChannelId, collection.PaymentChannelId);
         Assert.Single(await db.LedgerTransactions.Where(x => x.RelatedEntityId == collection.Id).ToListAsync());
         Assert.Single(await db.ProviderTransactions.Where(x => x.ProviderTransactionId == f.Request.ProviderTransactionId).ToListAsync());
+        var notification = Assert.Single(await db.NotificationMessages.Where(x => x.UserId == f.UserId &&
+            x.RelatedEntityType == WalletActivityNotificationFactory.FundingEntityType).ToListAsync());
+        Assert.Equal(NotificationChannels.Email, notification.Channel); Assert.Contains("NGN 100.00", notification.Body);
+        Assert.Equal(collection.Id.ToString(), notification.RelatedEntityId);
     }
     [DatabaseIntegrationFact] public async Task Wrong_verified_amount_never_credits_wallet()
     {
@@ -84,6 +90,8 @@ public sealed class WalletBankDepositWorkflowTests(ReleaseCandidateDatabaseFixtu
         await Assert.ThrowsAsync<InvalidOperationException>(() => f.Service.TryProcessDepositAsync(f.Request, default));
         Assert.Equal(0m, (await db.FinancialAccounts.AsNoTracking().SingleAsync(x => x.Id == f.Wallet.Id)).AvailableBalance);
         Assert.Empty(await db.Collections.Where(x => x.FinancialAccountId == f.Wallet.Id).ToListAsync());
+        Assert.False(await db.NotificationMessages.AnyAsync(x => x.UserId == f.UserId &&
+            x.RelatedEntityType == WalletActivityNotificationFactory.FundingEntityType));
     }
     [DatabaseIntegrationFact] public async Task Unverified_owner_leaves_no_tracked_money_for_outer_webhook_save()
     {

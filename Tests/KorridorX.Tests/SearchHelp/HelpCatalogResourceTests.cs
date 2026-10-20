@@ -11,9 +11,9 @@ public sealed class HelpCatalogResourceTests
     [Theory]
     [InlineData("KorridorX.Content.SearchHelp.catalog.json", 103)]
     [InlineData("KorridorX.Content.SearchHelp.web-operations-20261017.json", 15)]
-    [InlineData("KorridorX.Content.SearchHelp.payment-channels-20261018.json", 3)]
+    [InlineData("KorridorX.Content.SearchHelp.payment-channels-20261018.json", 5)]
     [InlineData("KorridorX.Content.SearchHelp.interac-funding-20261018.json", 4)]
-    [InlineData("KorridorX.Content.SearchHelp.fx-provider-rates-20261020.json", 5)]
+    [InlineData("KorridorX.Content.SearchHelp.fx-provider-rates-20261020.json", 6)]
     public void Required_help_resources_are_embedded_and_readable(
         string logicalName, int expectedEntryCount)
     {

@@ -17,13 +17,19 @@ public sealed class WalletsController : ControllerBase
 {
     private readonly IConsumerWalletService _wallets;
     private readonly IConsumerWalletFundingService _funding;
+    private readonly IConsumerWalletReceivingAccountService _receivingAccounts;
+    private readonly ILogger<WalletsController> _logger;
 
     public WalletsController(
         IConsumerWalletService wallets,
-        IConsumerWalletFundingService funding)
+        IConsumerWalletFundingService funding,
+        IConsumerWalletReceivingAccountService receivingAccounts,
+        ILogger<WalletsController> logger)
     {
         _wallets = wallets;
         _funding = funding;
+        _receivingAccounts = receivingAccounts;
+        _logger = logger;
     }
 
     [HttpGet]
@@ -51,12 +57,35 @@ public sealed class WalletsController : ControllerBase
         [FromBody] CreateConsumerWalletRequestDto request,
         CancellationToken ct)
     {
-        var result = await _wallets.CreateWalletAsync(GetUserId(), request, ct);
+        var userId = GetUserId();
+        var result = await _wallets.CreateWalletAsync(userId, request, ct);
+        try
+        {
+            result = result with { ReceivingAccount = await _receivingAccounts.SetupAsync(userId, result.Id, ct) };
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+        catch (Exception error)
+        {
+            // Adding the wallet has already committed. A separate provider/setup failure must
+            // not report that the wallet creation failed or invite another financial account.
+            _logger.LogWarning("Wallet {WalletId} was added but receiving setup needs attention; error type {ErrorType}.",
+                result.Id, error.GetType().Name);
+            result = result with { ReceivingAccount = new("ActionRequired",
+                "Your wallet was added. Receiving-account setup could not be confirmed. Open Add money to check its status or contact support.", null, null, true) };
+        }
 
         return Ok(ApiResponses.Ok(
             result,
             "Wallet is ready."));
     }
+
+    [HttpGet("{walletId:guid}/receiving-account")]
+    public async Task<IActionResult> GetReceivingAccount(Guid walletId, CancellationToken ct) =>
+        Ok(ApiResponses.Ok(await _receivingAccounts.GetAsync(GetUserId(), walletId, ct), "Receiving-account status retrieved."));
+
+    [HttpPost("{walletId:guid}/receiving-account/setup")]
+    public async Task<IActionResult> SetupReceivingAccount(Guid walletId, CancellationToken ct) =>
+        Ok(ApiResponses.Ok(await _receivingAccounts.SetupAsync(GetUserId(), walletId, ct), "Receiving-account setup checked."));
 
     [HttpGet("{walletId:guid}/funding-methods")]
     public async Task<IActionResult> GetFundingMethods(

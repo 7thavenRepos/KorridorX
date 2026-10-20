@@ -3,6 +3,7 @@ using KorridorX.Dtos.Wallets;
 using KorridorX.Models.Enums;
 using KorridorX.Models.FinancialCore;
 using KorridorX.Models.Lookups;
+using KorridorX.Services.Notifications;
 using Microsoft.EntityFrameworkCore;
 
 namespace KorridorX.Services.Wallets;
@@ -10,10 +11,12 @@ namespace KorridorX.Services.Wallets;
 public sealed class ConsumerWalletService : IConsumerWalletService
 {
     private readonly AppDbContext _db;
+    private readonly INotificationQueueService _notifications;
 
-    public ConsumerWalletService(AppDbContext db)
+    public ConsumerWalletService(AppDbContext db, INotificationQueueService notifications)
     {
         _db = db;
+        _notifications = notifications;
     }
 
     public async Task<IReadOnlyList<ConsumerWalletDto>> GetWalletsAsync(
@@ -140,6 +143,9 @@ public sealed class ConsumerWalletService : IConsumerWalletService
         };
 
         _db.FinancialAccounts.Add(account);
+        var notice = WalletActivityNotificationFactory.WalletAdded(assetCode);
+        await _notifications.QueueUserAsync(userId, notice.Subject, notice.Body,
+            nameof(FinancialAccount), account.Id, ct);
         await _db.SaveChangesAsync(ct);
         await _db.Entry(account).Reference(x => x.Asset).LoadAsync(ct);
 

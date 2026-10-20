@@ -3,11 +3,26 @@
     "slug": "page-fx",
     "portal": "admin",
     "title": "FX rates and pricing",
-    "summary": "Configure live provider pricing, customer markup and scheduled refreshes for existing trading pairs.",
+    "summary": "Configure live provider pricing, customer markup, scheduled refreshes and corridor transfer fees.",
     "category": "Finance",
     "pageRoute": "/admin/fx",
-    "keywords": ["FX", "Blaaiz", "provider rates", "markup", "live quote", "refresh schedule"],
-    "adminRoles": ["Operations", "Admin", "SuperAdmin"],
+    "keywords": [
+      "FX",
+      "Blaaiz",
+      "provider rates",
+      "markup",
+      "live quote",
+      "refresh schedule",
+      "transfer fees",
+      "fixed fee",
+      "percentage fee",
+      "fee not configured"
+    ],
+    "adminRoles": [
+      "Operations",
+      "Admin",
+      "SuperAdmin"
+    ],
     "permissions": [],
     "businessRoles": [],
     "allowNoBusiness": false,
@@ -21,8 +36,22 @@
     "summary": "Select an existing pair, check a live provider rate, preview customer pricing and activate a reviewed configuration.",
     "category": "Finance",
     "pageRoute": "/admin/fx",
-    "keywords": ["FX", "Blaaiz", "rates:read", "provider rate", "markup", "schedule", "Instant", "Marketplace", "activation"],
-    "adminRoles": ["Operations", "Admin", "SuperAdmin"],
+    "keywords": [
+      "FX",
+      "Blaaiz",
+      "rates:read",
+      "provider rate",
+      "markup",
+      "schedule",
+      "Instant",
+      "Marketplace",
+      "activation"
+    ],
+    "adminRoles": [
+      "Operations",
+      "Admin",
+      "SuperAdmin"
+    ],
     "permissions": [],
     "businessRoles": [],
     "allowNoBusiness": false,
@@ -78,8 +107,20 @@
     "summary": "Check provider access, active configuration, rate capability and observation times without using an old rate as a substitute.",
     "category": "Finance",
     "pageRoute": "/admin/fx",
-    "keywords": ["FX unavailable", "rates:read", "connection changed", "scope", "provider timestamp", "missing rate", "wallet valuation"],
-    "adminRoles": ["Operations", "Admin", "SuperAdmin"],
+    "keywords": [
+      "FX unavailable",
+      "rates:read",
+      "connection changed",
+      "scope",
+      "provider timestamp",
+      "missing rate",
+      "wallet valuation"
+    ],
+    "adminRoles": [
+      "Operations",
+      "Admin",
+      "SuperAdmin"
+    ],
     "permissions": [],
     "businessRoles": [],
     "allowNoBusiness": false,
@@ -124,9 +165,19 @@
     "summary": "Understand fresh provider checks, the quoted customer rate, separate fees and quote expiry before creating a business transfer.",
     "category": "Payments",
     "pageRoute": "/business/transfers",
-    "keywords": ["live FX", "provider rate", "quote unavailable", "markup", "fees", "expiry"],
+    "keywords": [
+      "live FX",
+      "provider rate",
+      "quote unavailable",
+      "markup",
+      "fees",
+      "expiry"
+    ],
     "adminRoles": [],
-    "permissions": ["ViewTransfers", "CreateTransfers"],
+    "permissions": [
+      "ViewTransfers",
+      "CreateTransfers"
+    ],
     "businessRoles": [],
     "allowNoBusiness": false,
     "isPage": false,
@@ -169,9 +220,19 @@
     "summary": "Request current server pricing, review any business pricing adjustment and keep each conversion within its own quote expiry.",
     "category": "Trading",
     "pageRoute": "/business/trading",
-    "keywords": ["Instant", "live FX", "conversion quote", "business pricing", "provider unavailable", "expiry"],
+    "keywords": [
+      "Instant",
+      "live FX",
+      "conversion quote",
+      "business pricing",
+      "provider unavailable",
+      "expiry"
+    ],
     "adminRoles": [],
-    "permissions": ["ViewTrading", "Trade"],
+    "permissions": [
+      "ViewTrading",
+      "Trade"
+    ],
     "businessRoles": [],
     "allowNoBusiness": false,
     "isPage": false,
@@ -206,6 +267,71 @@
       "The provider must enable Instant conversion for the selected rate. Send money availability alone does not enable a conversion.",
       "A paused pair, unavailable asset, inactive account or insufficient house liquidity can prevent a quote even when the provider is reachable.",
       "The background refresh schedule does not control how old a new quote may be: every new quote still needs a successful live check."
+    ]
+  },
+  {
+    "slug": "manage-transfer-fees",
+    "portal": "admin",
+    "title": "Configure transfer fees for a corridor",
+    "summary": "Create and activate an explicit fixed and percentage transfer fee for a configured currency direction, country corridor, customer type and amount range.",
+    "category": "Finance",
+    "pageRoute": "/admin/fx",
+    "keywords": [
+      "transfer fee",
+      "fees",
+      "fee not configured",
+      "corridor",
+      "CAD NGN",
+      "fixed fee",
+      "percentage fee",
+      "zero fee"
+    ],
+    "adminRoles": [
+      "Operations",
+      "Admin",
+      "SuperAdmin"
+    ],
+    "permissions": [],
+    "businessRoles": [],
+    "allowNoBusiness": false,
+    "isPage": false,
+    "reviewedOn": "2026-10-20",
+    "prerequisites": [
+      "Admin or SuperAdmin access is required to create, edit or activate rules. Operations can view them.",
+      "An existing currency direction in Trading & business wallets and supported sending/receiving country-currency mappings in Master data."
+    ],
+    "steps": [
+      {
+        "title": "Open transfer fee management",
+        "instruction": "Open Admin → FX rates & pricing and scroll to Transfer fees. No rule is created or activated automatically, including after a database reset."
+      },
+      {
+        "title": "Select the route and audience",
+        "instruction": "Select Currency direction, Transfer type, Sending country and Receiving country. Each configured direction appears once even if it exists in both pair catalogs. Personal transfers use the customer profile country as sending country and the recipient country as receiving country. Business transfer types follow the existing business-enabled asset mappings on both sides."
+      },
+      {
+        "title": "Set the amount band and explicit price",
+        "instruction": "Enter Minimum send amount, optional Maximum send amount, Fixed fee and Percentage fee. Amount bounds and fixed fee use source currency; the fee currency cannot be changed independently. Blank maximum means unlimited and both bounds are included. Enter 0 explicitly for a free fixed or percentage component. A free transfer still requires an active zero-fee rule."
+      },
+      {
+        "title": "Save and activate",
+        "instruction": "Choose Save inactive fee rule, review the saved row, then Activate. Activation requires an active existing currency direction and rejects overlapping active amount ranges for the same countries, currencies and transfer type. Deactivate a previous overlapping rule or adjust the range before activating a replacement."
+      },
+      {
+        "title": "Check the next quote",
+        "instruction": "Retry Get transfer quote for an amount inside the configured range. The quote displays the fee and total payable. Fee equals fixed fee plus source amount times percentage divided by 100, with the existing quote rounding; total payable equals source amount plus fee. Existing saved quotes keep their amounts and expiry."
+      }
+    ],
+    "expectedResult": "New quotes find one active fee rule for the exact countries, currency direction, transfer type and source amount. Fee changes are recorded in the audit log.",
+    "warnings": [
+      "Transfer fees are separate from FX markup and provider deductions on wallet deposits. Activating a transfer fee does not change the policy for absorbing provider deposit costs.",
+      "Ranges include both endpoints: for a currency with two decimal places, ranges ending at 100 and starting at 100 overlap; a next range could start at 100.01.",
+      "Deactivating the only matching fee rule stops new quotes for that corridor and amount. It does not change existing quotes or balances."
+    ],
+    "troubleshooting": [
+      "For Transfer fee is not configured for this corridor, check exact sending profile country, recipient country, source/destination currencies, transfer type, active status and the requested send amount against the amount band. Configuring only the FX rate does not configure a transfer fee.",
+      "If a country is missing, configure its supported currency mapping and sending/receiving permission in Master data. If a direction is missing, configure it in Trading & business wallets.",
+      "If the rule changed while editing, reload fees and review the current version before retrying."
     ]
   }
 ]

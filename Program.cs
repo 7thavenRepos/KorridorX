@@ -311,6 +311,8 @@ builder.Services.AddScoped<IdentitySeedRunner>();
 
 builder.Services.AddScoped<ICustomerProfileService, CustomerProfileService>();
 builder.Services.AddScoped<IConsumerWalletService, ConsumerWalletService>();
+builder.Services.AddScoped<IConsumerWalletReceivingAccountService, ConsumerWalletReceivingAccountService>();
+builder.Services.AddScoped<KorridorX.Services.Fx.IAdminTransferFeeService, KorridorX.Services.Fx.AdminTransferFeeService>();
 builder.Services.AddScoped<IConsumerWalletValuationService, ConsumerWalletValuationService>();
 builder.Services.AddScoped<IConsumerTransferFundingService, ConsumerTransferFundingService>();
 builder.Services.AddScoped<IConsumerWalletFundingCreditService, ConsumerWalletFundingCreditService>();

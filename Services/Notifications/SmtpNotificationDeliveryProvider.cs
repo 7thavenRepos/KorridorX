@@ -1,5 +1,7 @@
 using System.Net;
 using System.Net.Mail;
+using System.Net.Mime;
+using System.Text;
 using KorridorX.Configuration;
 using KorridorX.Models.Notifications;
 using Microsoft.Extensions.Options;
@@ -10,13 +12,16 @@ public sealed class SmtpNotificationDeliveryProvider : INotificationDeliveryProv
 {
     private readonly NotificationDeliveryOptions _options;
     private readonly ILogger<SmtpNotificationDeliveryProvider> _logger;
+    private readonly string _frontendBaseUrl;
 
     public SmtpNotificationDeliveryProvider(
         IOptions<NotificationDeliveryOptions> options,
-        ILogger<SmtpNotificationDeliveryProvider> logger)
+        ILogger<SmtpNotificationDeliveryProvider> logger,
+        IOptions<SecurityOptions> securityOptions)
     {
         _options = options.Value;
         _logger = logger;
+        _frontendBaseUrl = securityOptions.Value.Accounts.FrontendBaseUrl;
     }
 
     public async Task<NotificationDeliveryResult> SendAsync(
@@ -39,13 +44,18 @@ public sealed class SmtpNotificationDeliveryProvider : INotificationDeliveryProv
 
         try
         {
+            var content = BrandedEmailTemplate.Render(notification.Subject, notification.Body, _frontendBaseUrl);
             using var message = new MailMessage
             {
                 From = new MailAddress(_options.Smtp.FromAddress, _options.Smtp.FromName),
                 Subject = notification.Subject,
-                Body = notification.Body,
-                IsBodyHtml = true
+                Body = content.PlainText,
+                BodyEncoding = Encoding.UTF8,
+                SubjectEncoding = Encoding.UTF8,
+                IsBodyHtml = false
             };
+            message.AlternateViews.Add(AlternateView.CreateAlternateViewFromString(
+                content.Html, Encoding.UTF8, MediaTypeNames.Text.Html));
             message.To.Add(notification.Recipient);
 
             using var smtp = new SmtpClient(_options.Smtp.Host, _options.Smtp.Port)

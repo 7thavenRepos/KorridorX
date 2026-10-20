@@ -125,7 +125,7 @@ public static class AccountSecurityEmailFactory
         var encoder = HtmlEncoder.Default;
         return $"<p>Hello {encoder.Encode(firstName)},</p>" +
                $"<p>{encoder.Encode(heading)} by selecting the secure link below.</p>" +
-               $"<p><a href=\"{encoder.Encode(link)}\" style=\"display:inline-block;padding:14px 24px;background:#123d35;color:#ffffff;text-decoration:none;border-radius:6px;font-weight:bold;\">{encoder.Encode(actionLabel)}</a></p>" +
+               $"<p><a href=\"{encoder.Encode(link)}\" style=\"display:inline-block;padding:14px 24px;background:#ffebef;color:#005b31;text-decoration:none;border-radius:32px;font-weight:bold;\">{encoder.Encode(actionLabel)}</a></p>" +
                "<p>If the button does not work, copy and paste this address into your browser:</p>" +
                $"<p style=\"overflow-wrap:anywhere;word-break:break-all;\"><a href=\"{encoder.Encode(link)}\">{encoder.Encode(link)}</a></p>" +
                "<p>This link is single-use and expires automatically.</p>" +

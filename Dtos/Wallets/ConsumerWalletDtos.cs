@@ -17,7 +17,10 @@ public sealed record ConsumerWalletDto(
     bool CanReceive,
     bool CanTrade,
     bool CanUseInstant,
-    DateTime CreatedAt);
+    DateTime CreatedAt)
+{
+    public ConsumerWalletReceivingAccountDto? ReceivingAccount { get; init; }
+}
 
 public sealed record AvailableConsumerWalletAssetDto(
     string AssetCode,

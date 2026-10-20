@@ -163,5 +163,123 @@
       "Pending bank setup: refresh; do not repeatedly create accounts. A provider rejection may require additional business information or corrected KYB.",
       "A confirmed deposit missing from balance requires the business/wallet currency, collection or bank-account reference, amount, time, and a redacted error. Do not submit a second deposit merely to test a refresh."
     ]
+  },
+  {
+    "portal": "admin",
+    "category": "Funding and wallets",
+    "permissions": [],
+    "businessRoles": [],
+    "allowNoBusiness": false,
+    "isPage": false,
+    "reviewedOn": "2026-10-20",
+    "slug": "automatic-wallet-receiving-accounts",
+    "title": "Enable automatic personal receiving accounts",
+    "summary": "Prepare provider-backed deposit routes so adding a personal wallet can open its dedicated receiving account.",
+    "pageRoute": "/admin/payment-channels",
+    "keywords": [
+      "virtual account",
+      "dedicated account",
+      "no payment method",
+      "automatic",
+      "GBP",
+      "NGN",
+      "USD",
+      "EUR"
+    ],
+    "adminRoles": [
+      "SuperAdmin"
+    ],
+    "prerequisites": [
+      "An existing production-approved provider wallet and bank-account capability for the required currency, profile country and individual audience.",
+      "The user must satisfy the existing KorridorX and provider identity requirements; a wallet alone does not grant a bank account."
+    ],
+    "steps": [
+      {
+        "title": "Enable the currency and country mapping",
+        "instruction": "In Master data, check the supported fiat asset, Individual and Deposit capabilities, profile-country mapping and deposit permission. Review the currency decimal places: the mobile amount form uses this configured value."
+      },
+      {
+        "title": "Prepare the provider route",
+        "instruction": "In Provider wallets, verify the current-connection collection wallet for the asset. In Payment channels, configure and activate a Deposit channel with the dedicated-bank-account capability and Individuals audience. Confirm provider approval only after it is actually available on the provider account. With multiple eligible provider wallets, set the intended collection default or let the user select a bank-deposit option."
+      },
+      {
+        "title": "Open the user wallet",
+        "instruction": "Adding a personal wallet automatically requests its receiving account when eligible. Existing wallets request setup when the user opens Add money. Pending results expose Check account status; only provider-confirmed Active details can be used. Opening a wallet or creating receiving details does not create a transfer or credit a balance."
+      },
+      {
+        "title": "Resolve a blocked account",
+        "instruction": "VerificationRequired means complete identity approval and check again. Unavailable means review the route, country and currency capabilities. An uncertain creation is looked up before another creation is allowed. Existing accounts remain tied to their saved provider connection and route."
+      }
+    ],
+    "expectedResult": "Eligible personal wallets show their persistent receiving details without requiring an amount or creating a transfer. Unsupported or pending accounts show a specific status.",
+    "warnings": [
+      "The application cannot enable an unapproved provider capability. Staging deployment with production Blaaiz credentials still uses real provider accounts.",
+      "Keep CAD Interac receiving-email and Money Request configuration separate. Business receiving-account setup keeps its existing permissions and supported currencies."
+    ],
+    "troubleshooting": [
+      "No payment method: inspect active Payment channels, the individual audience, profile country, country-asset Deposit permission and verified provider wallet. Adding a wallet does not create these admin settings.",
+      "A previous-connection receiving account requires operational reconciliation; it must not silently move to a new provider connection.",
+      "USD showing zero decimal places is asset configuration; correct Master data deliberately before further amount testing."
+    ]
+  },
+  {
+    "portal": "admin",
+    "category": "Funding and wallets",
+    "permissions": [],
+    "businessRoles": [],
+    "allowNoBusiness": false,
+    "isPage": false,
+    "reviewedOn": "2026-10-20",
+    "slug": "wallet-security-and-funding-notifications",
+    "title": "Check wallet, PIN and funding notifications",
+    "summary": "Understand automatic device registration, confirmed-credit receipts and branded email delivery.",
+    "pageRoute": "/admin/monitoring",
+    "keywords": [
+      "push",
+      "email",
+      "notifications",
+      "PIN",
+      "funding",
+      "wallet",
+      "Firebase",
+      "SMTP"
+    ],
+    "adminRoles": [
+      "Operations",
+      "Admin",
+      "SuperAdmin"
+    ],
+    "prerequisites": [
+      "Notification worker, SMTP delivery and Firebase delivery must be configured in the server environment. This page does not store credentials.",
+      "The installed mobile build must have its existing matching Firebase configuration, and the customer must allow notifications on their phone."
+    ],
+    "steps": [
+      {
+        "title": "Register the customer device",
+        "instruction": "After sign-in, the app requests phone permission once when needed, then registers the device with KorridorX. Notifications shows enabled only after permission and successful registration. A denied permission is respected; the customer can enable it in device settings and return to the app."
+      },
+      {
+        "title": "Review the event",
+        "instruction": "New personal wallet creation and successful PIN setup/change queue account notices. Verified incoming wallet credits queue the actual amount credited and transaction reference. Existing transfer, support and account-security notification flows remain in place. Viewing a balance or checking account status is not a new funding event."
+      },
+      {
+        "title": "Review delivery",
+        "instruction": "Open Monitoring, notifications & audit and inspect delivery status, channel and redacted error for the event. SMTP and push use their existing retry worker. A successful wallet credit remains successful even if delivery is temporarily unavailable; resolve delivery configuration without replaying the deposit."
+      },
+      {
+        "title": "Read the branded receipt",
+        "instruction": "SMTP wraps existing account and transaction content in the shared green-and-pink KorridorX design. PIN values are never included. Security codes and action links retain their existing expiry and redaction policies. Funding receipts show the actual wallet credit, including any existing provider net settlement deduction."
+      }
+    ],
+    "expectedResult": "New eligible events are recorded once with their underlying operation and delivered through configured email and registered push channels, with delivery status available for support.",
+    "warnings": [
+      "Phone notification permission cannot be forced by the app. Permission alone does not prove backend registration or Firebase delivery.",
+      "Transfer fees, FX markup and provider deposit charges remain separate. This release does not choose a provider-fee absorption policy or modify balances."
+    ],
+    "troubleshooting": [
+      "After a database reset, signing in registers the device again; older erased notification history is not recreated.",
+      "Check NotificationDelivery WorkerEnabled, Smtp IsEnabled and Firebase IsEnabled plus existing sender/project credentials through the authorized server configuration process. Do not paste secrets into support messages.",
+      "Queued email with no delivery: review worker and SMTP state. Push failure with phone permission: review device registration, matching Firebase project, server credentials and delivery status."
+    ]
   }
 ]
