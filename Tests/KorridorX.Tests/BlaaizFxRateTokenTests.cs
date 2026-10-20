@@ -174,17 +174,68 @@ public sealed class BlaaizFxRateTokenTests
         using var cache = new MemoryCache(new MemoryCacheOptions());
         var options = FxProviderTestSupport.Options();
         options.TimeoutSeconds = 1;
-        using var service = Create(new Factory(handler), cache, options);
+        var clock = new ControlledDeadlineClock();
+        using var service = Create(new Factory(handler), cache, options, clock: clock);
         var first = service.GetRatesReadAccessTokenAsync();
         await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        var second = service.GetRatesReadAccessTokenAsync();
+        Assert.Equal(2, clock.TimerCount);
+        clock.Advance(TimeSpan.FromSeconds(1));
+        // Timer callbacks need not run in creation order. Expire the waiter while
+        // deliberately withholding the first operation's cancellation callback.
+        clock.FireTimer(1);
         try
         {
-            var error = await Assert.ThrowsAsync<ProviderIntegrationException>(() => service.GetRatesReadAccessTokenAsync().WaitAsync(TimeSpan.FromSeconds(5)));
+            var error = await Assert.ThrowsAsync<ProviderIntegrationException>(() => second.WaitAsync(TimeSpan.FromSeconds(5)));
             Assert.Contains("timed out", error.Message);
             Assert.Single(handler.Requests);
         }
         finally { release.TrySetResult(); }
-        await Assert.ThrowsAsync<ProviderIntegrationException>(() => first.WaitAsync(TimeSpan.FromSeconds(5)));
+        var firstError = await Assert.ThrowsAsync<ProviderIntegrationException>(() => first.WaitAsync(TimeSpan.FromSeconds(5)));
+        Assert.Contains("timed out", firstError.Message);
+        handler.Respond = null;
+        Assert.Equal("fixture-scoped-token", await service.GetRatesReadAccessTokenAsync());
+        Assert.Equal(2, handler.Requests.Count); // The late token was not cached; the permit was released.
+        Assert.Equal("fixture-scoped-token", await service.GetRatesReadAccessTokenAsync());
+        Assert.Equal(2, handler.Requests.Count);
+    }
+
+    [Fact]
+    public async Task OAuth_deadline_rejects_a_late_body_even_before_its_timer_callback_runs()
+    {
+        var clock = new ControlledDeadlineClock();
+        using var body = new BoundaryStream(Encoding.UTF8.GetBytes(ValidToken), () => clock.Advance(TimeSpan.FromSeconds(1)));
+        using var handler = new FxProviderTestSupport.Handler(ValidToken)
+        { Respond = (_, _) => Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StreamContent(body) }) };
+        using var cache = new MemoryCache(new MemoryCacheOptions());
+        var options = FxProviderTestSupport.Options();
+        options.TimeoutSeconds = 1;
+        using var service = Create(new Factory(handler), cache, options, clock: clock);
+        var error = await Assert.ThrowsAsync<ProviderIntegrationException>(() => service.GetRatesReadAccessTokenAsync());
+        Assert.Contains("timed out", error.Message);
+        handler.Respond = null;
+        Assert.Equal("fixture-scoped-token", await service.GetRatesReadAccessTokenAsync());
+        Assert.Equal(2, handler.Requests.Count);
+    }
+
+    [Fact]
+    public async Task Caller_cancellation_before_late_headers_is_not_cached_or_reported_as_provider_failure()
+    {
+        using var cancellation = new CancellationTokenSource();
+        using var handler = new FxProviderTestSupport.Handler(ValidToken)
+        {
+            Respond = (_, _) =>
+            {
+                cancellation.Cancel();
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(ValidToken) });
+            }
+        };
+        using var cache = new MemoryCache(new MemoryCacheOptions());
+        using var service = Create(new Factory(handler), cache);
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => service.GetRatesReadAccessTokenAsync(cancellation.Token));
+        handler.Respond = null;
+        Assert.Equal("fixture-scoped-token", await service.GetRatesReadAccessTokenAsync());
+        Assert.Equal(2, handler.Requests.Count);
     }
 
     [Fact]
@@ -298,5 +349,44 @@ public sealed class BlaaizFxRateTokenTests
         public List<string> Names { get; } = [];
         public HttpClient CreateClient(string name)
         { Names.Add(name); return new HttpClient(handler, disposeHandler: false); }
+    }
+
+    private sealed class ControlledDeadlineClock : TimeProvider
+    {
+        private readonly DateTimeOffset _origin = DateTimeOffset.UtcNow;
+        private readonly List<ControlledTimer> _timers = [];
+        private TimeSpan _elapsed;
+        public int TimerCount => _timers.Count;
+        public override long TimestampFrequency => TimeSpan.TicksPerSecond;
+        public override long GetTimestamp() => _elapsed.Ticks;
+        public override DateTimeOffset GetUtcNow() => _origin + _elapsed;
+        public void Advance(TimeSpan amount) => _elapsed += amount;
+        public void FireTimer(int index) => _timers[index].Fire();
+        public override ITimer CreateTimer(TimerCallback callback, object? state, TimeSpan dueTime, TimeSpan period)
+        {
+            var timer = new ControlledTimer(callback, state);
+            _timers.Add(timer);
+            return timer;
+        }
+
+        private sealed class ControlledTimer(TimerCallback callback, object? state) : ITimer
+        {
+            private bool _disposed;
+            public void Fire() { if (!_disposed) callback(state); }
+            public bool Change(TimeSpan dueTime, TimeSpan period) => !_disposed;
+            public void Dispose() => _disposed = true;
+            public ValueTask DisposeAsync() { Dispose(); return ValueTask.CompletedTask; }
+        }
+    }
+
+    private sealed class BoundaryStream(byte[] bytes, Action onFirstRead) : MemoryStream(bytes)
+    {
+        private bool _read;
+        public override ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken ct = default)
+        {
+            var result = base.ReadAsync(buffer, CancellationToken.None);
+            if (!_read) { _read = true; onFirstRead(); }
+            return result;
+        }
     }
 }

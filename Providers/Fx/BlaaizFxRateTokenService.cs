@@ -38,14 +38,25 @@ public sealed class BlaaizFxRateTokenService : IBlaaizFxRateTokenService, IDispo
         ct.ThrowIfCancellationRequested();
         _connection.EnsureAvailable();
         if (TryCached(out var cached)) return cached;
-        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(_connection.TimeoutSeconds), _clock);
+        var timeoutDuration = TimeSpan.FromSeconds(_connection.TimeoutSeconds);
+        var startedAt = _clock.GetTimestamp();
+        using var timeout = new CancellationTokenSource(timeoutDuration, _clock);
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(ct, timeout.Token);
         var operationCt = deadline.Token;
+        void CheckDeadline()
+        {
+            ct.ThrowIfCancellationRequested();
+            // Timers can be dispatched late and custom transports can ignore cancellation.
+            // Never accept/cache a result outside the original budget, including permit wait.
+            if (operationCt.IsCancellationRequested || _clock.GetElapsedTime(startedAt) >= timeoutDuration)
+                throw new OperationCanceledException(operationCt);
+        }
         var entered = false;
         try
         {
             await _refresh.WaitAsync(operationCt);
             entered = true;
+            CheckDeadline();
             if (TryCached(out cached)) return cached;
             var requestedAt = _clock.GetUtcNow();
             using var request = new HttpRequestMessage(HttpMethod.Post, _connection.TokenUri);
@@ -61,6 +72,7 @@ public sealed class BlaaizFxRateTokenService : IBlaaizFxRateTokenService, IDispo
             });
             using var client = _httpClientFactory.CreateClient(HttpClientName);
             using var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, operationCt);
+            CheckDeadline();
             if (!response.IsSuccessStatusCode)
                 throw new ProviderIntegrationException(
                     "Blaaiz rejected the rates:read OAuth request. Check the current provider credentials, scope grant and API/IP access.",
@@ -68,6 +80,7 @@ public sealed class BlaaizFxRateTokenService : IBlaaizFxRateTokenService, IDispo
 
             // Tokens and OAuth response bodies are deliberately never put in provider audit logs or exceptions.
             var json = await ReadBoundedAsync(response.Content, 64 * 1024, operationCt);
+            CheckDeadline();
             using var document = JsonDocument.Parse(json, new JsonDocumentOptions { MaxDepth = 8 });
             var root = document.RootElement;
             if (root.ValueKind != JsonValueKind.Object ||
@@ -90,6 +103,7 @@ public sealed class BlaaizFxRateTokenService : IBlaaizFxRateTokenService, IDispo
             var expiresAt = requestedAt.AddSeconds(expiresIn);
             if (expiresAt <= _clock.GetUtcNow()) throw InvalidToken();
             var usableUntil = expiresAt.AddSeconds(-_connection.RefreshBufferSeconds);
+            CheckDeadline();
             if (usableUntil > _clock.GetUtcNow())
                 _cache.Set(_cacheKey, new CachedToken(token, expiresAt), usableUntil);
             return token;
