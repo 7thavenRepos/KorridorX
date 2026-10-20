@@ -10,6 +10,7 @@ using KorridorX.Models.Enums;
 using KorridorX.Models.Fx;
 using KorridorX.Models.Providers;
 using KorridorX.Models.Transfers;
+using KorridorX.Providers.Remittance;
 using KorridorX.Services.References;
 using KorridorX.Services.BusinessFunding;
 using KorridorX.Services.Notifications;
@@ -17,7 +18,9 @@ using KorridorX.Services.Payments;
 using KorridorX.Services.Transfers;
 using KorridorX.Services.Compliance;
 using KorridorX.Services.Security;
+using KorridorX.Services.Fx;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace KorridorX.Services.BusinessTransfers;
 
@@ -41,6 +44,7 @@ public class BusinessPaymentBatchService : IBusinessPaymentBatchService
     private readonly ITransferRiskService _transferRiskService;
     private readonly IComplianceScreeningService _screeningService;
     private readonly ITransactionMonitoringService _transactionMonitoringService;
+    private readonly IServiceScopeFactory _scopeFactory;
 
     public BusinessPaymentBatchService(
         AppDbContext db,
@@ -52,7 +56,8 @@ public class BusinessPaymentBatchService : IBusinessPaymentBatchService
         IComplianceLimitService complianceLimitService,
         ITransferRiskService transferRiskService,
         IComplianceScreeningService screeningService,
-        ITransactionMonitoringService transactionMonitoringService)
+        ITransactionMonitoringService transactionMonitoringService,
+        IServiceScopeFactory scopeFactory)
     {
         _db = db;
         _accessService = accessService;
@@ -64,6 +69,7 @@ public class BusinessPaymentBatchService : IBusinessPaymentBatchService
         _transferRiskService = transferRiskService;
         _screeningService = screeningService;
         _transactionMonitoringService = transactionMonitoringService;
+        _scopeFactory = scopeFactory;
     }
 
     public async Task<BusinessPaymentBatchDetailsDto> ImportAsync(
@@ -109,8 +115,6 @@ public class BusinessPaymentBatchService : IBusinessPaymentBatchService
             RequiredApprovals = access.RequiresTransferApproval ? access.RequiredTransferApprovals : 0,
             CreatedByUserId = userId
         };
-        _db.BusinessPaymentBatches.Add(batch);
-
         for (var index = 0; index < rows.Count; index++)
         {
             var item = await BuildItemAsync(
@@ -128,6 +132,8 @@ public class BusinessPaymentBatchService : IBusinessPaymentBatchService
             ? BusinessPaymentBatchStatus.ReadyForApproval
             : BusinessPaymentBatchStatus.ValidationFailed;
 
+        // Each live quote commits independently; only track the batch once all rows are built.
+        _db.BusinessPaymentBatches.Add(batch);
         await _db.SaveChangesAsync(ct);
         return await GetBatchAsync(userId, batch.Id, ct);
     }
@@ -730,19 +736,12 @@ public class BusinessPaymentBatchService : IBusinessPaymentBatchService
         Guid userId,
         CancellationToken ct)
     {
-        var now = DateTime.UtcNow;
-        var rate = await _db.ExchangeRates.AsNoTracking()
-            .Where(x =>
-                x.SourceCurrencyCode == batch.SourceCurrencyCode &&
-                x.DestinationCurrencyCode == item.DestinationCurrencyCode &&
-                x.IsActive &&
-                x.EffectiveFrom <= now &&
-                (x.EffectiveTo == null || x.EffectiveTo > now))
-            .OrderByDescending(x => x.EffectiveFrom)
-            .FirstOrDefaultAsync(ct)
-            ?? throw new InvalidOperationException("Exchange rate is not available for this batch item.");
-
-        var fee = await _db.TransferFees.AsNoTracking()
+        // Quote persistence must not flush pending batch approvals, transfers or reservations.
+        await using var scope = _scopeFactory.CreateAsyncScope();
+        var quoteDb = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var liveRates = scope.ServiceProvider.GetRequiredService<ILiveFxRateService>();
+        var remittanceProvider = scope.ServiceProvider.GetRequiredService<IRemittanceProvider>();
+        var fee = await quoteDb.TransferFees.AsNoTracking()
             .Where(x =>
                 x.SourceCountryCode == batch.SourceCountryCode &&
                 x.DestinationCountryCode == item.DestinationCountryCode &&
@@ -756,28 +755,41 @@ public class BusinessPaymentBatchService : IBusinessPaymentBatchService
             .FirstOrDefaultAsync(ct)
             ?? throw new InvalidOperationException("Transfer fee is not configured for this batch item corridor.");
 
-        var feeAmount = Math.Round(fee.FixedFee + item.SourceAmount * fee.PercentageFee / 100m, 2, MidpointRounding.AwayFromZero);
-        var quote = new TransferQuote
-        {
-            BusinessProfileId = batch.BusinessProfileId,
-            SourceCountryCode = batch.SourceCountryCode,
-            DestinationCountryCode = item.DestinationCountryCode,
-            SourceCurrencyCode = batch.SourceCurrencyCode,
-            DestinationCurrencyCode = item.DestinationCurrencyCode,
-            TransferType = transferType,
-            SourceAmount = item.SourceAmount,
-            DestinationAmount = Math.Round(item.SourceAmount * rate.CustomerRate, 2, MidpointRounding.AwayFromZero),
-            ProviderRate = rate.ProviderRate,
-            CustomerRate = rate.CustomerRate,
-            FeeAmount = feeAmount,
-            FeeCurrencyCode = fee.FeeCurrencyCode,
-            TotalPayableAmount = item.SourceAmount + feeAmount,
-            ProviderCode = rate.ProviderCode,
-            ExpiresAt = DateTime.UtcNow.AddMinutes(30),
-            CreatedByUserId = userId
-        };
-        _db.TransferQuotes.Add(quote);
-        return quote;
+        var savedQuote = await liveRates.UseFreshRateAsync(
+            batch.SourceCurrencyCode, item.DestinationCurrencyCode, FxRateUse.Transfer,
+            async (rate, observationId, quoteCt) =>
+            {
+                var feeAmount = Math.Round(fee.FixedFee + item.SourceAmount * fee.PercentageFee / 100m, 2, MidpointRounding.AwayFromZero);
+                var quote = new TransferQuote
+                {
+                    BusinessProfileId = batch.BusinessProfileId,
+                    SourceCountryCode = batch.SourceCountryCode,
+                    DestinationCountryCode = item.DestinationCountryCode,
+                    SourceCurrencyCode = batch.SourceCurrencyCode,
+                    DestinationCurrencyCode = item.DestinationCurrencyCode,
+                    TransferType = transferType,
+                    SourceAmount = item.SourceAmount,
+                    DestinationAmount = Math.Round(item.SourceAmount * rate.CustomerRate, 2, MidpointRounding.AwayFromZero),
+                    ProviderRate = rate.ProviderRate,
+                    CustomerRate = rate.CustomerRate,
+                    FxRateObservationId = observationId,
+                    FeeAmount = feeAmount,
+                    FeeCurrencyCode = fee.FeeCurrencyCode,
+                    TotalPayableAmount = item.SourceAmount + feeAmount,
+                    ProviderCode = remittanceProvider.ProviderCode.ToString(),
+                    ExpiresAt = DateTime.UtcNow.AddMinutes(30),
+                    CreatedByUserId = userId
+                };
+                quoteDb.TransferQuotes.Add(quote);
+                await quoteDb.SaveChangesAsync(quoteCt);
+                return quote;
+            }, ct);
+
+        // The isolated quote transaction already committed this row and its observation.
+        // Keep outer failure recovery from treating that persisted row as a new insert.
+        quoteDb.Entry(savedQuote).State = EntityState.Detached;
+        _db.TransferQuotes.Attach(savedQuote);
+        return savedQuote;
     }
 
     private async Task EnsureDestinationStillValidAsync(

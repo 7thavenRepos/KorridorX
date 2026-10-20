@@ -14,6 +14,8 @@ public class ExchangeRateConfiguration : IEntityTypeConfiguration<ExchangeRate>
         builder.Property(x => x.DestinationCurrencyCode).HasMaxLength(20);
         builder.Property(x => x.ProviderCode).HasMaxLength(50);
         builder.Property(x => x.ProviderRateId).HasMaxLength(150);
+        builder.HasOne<FxProviderRateConfiguration>().WithMany().HasForeignKey(x => x.FxProviderRateConfigurationId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne<FxRateObservation>().WithMany().HasForeignKey(x => x.FxRateObservationId).OnDelete(DeleteBehavior.Restrict);
 
         builder.Property(x => x.ProviderRate).HasPrecision(18, 8);
         builder.Property(x => x.CustomerRate).HasPrecision(18, 8);
@@ -31,6 +33,7 @@ public class TransferQuoteConfiguration : IEntityTypeConfiguration<TransferQuote
         builder.HasIndex(x => x.SourceFinancialAccountId);
         builder.HasIndex(x => x.ExpiresAt);
         builder.HasIndex(x => x.ProviderQuoteId);
+        builder.HasOne<FxRateObservation>().WithMany().HasForeignKey(x => x.FxRateObservationId).OnDelete(DeleteBehavior.Restrict);
         builder.HasIndex(x => new { x.CustomerProfileId, x.IsUsed, x.ExpiresAt });
         builder.HasIndex(x => new { x.BusinessProfileId, x.IsUsed, x.ExpiresAt });
 

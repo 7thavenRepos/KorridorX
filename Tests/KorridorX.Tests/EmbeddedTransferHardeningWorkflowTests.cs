@@ -13,9 +13,11 @@ using KorridorX.Models.Fx;
 using KorridorX.Models.Payments;
 using KorridorX.Models.Providers;
 using KorridorX.Models.Transfers;
+using KorridorX.Providers.Remittance;
 using KorridorX.Services.Compliance;
 using KorridorX.Services.EmbeddedFinance;
 using KorridorX.Services.FinancialCore;
+using KorridorX.Services.Fx;
 using KorridorX.Services.Payments;
 using KorridorX.Services.References;
 using KorridorX.Services.Transfers;
@@ -380,7 +382,9 @@ public sealed class EmbeddedTransferHardeningWorkflowTests
             new NoOpComplianceLimitService(),
             payout,
             new TestReferenceGenerator(),
-            new NoOpWebhookPublisher());
+            new NoOpWebhookPublisher(),
+            scope.ServiceProvider.GetRequiredService<ILiveFxRateService>(),
+            scope.ServiceProvider.GetRequiredService<IRemittanceProvider>());
     }
 
     private async Task<Scenario> CreateScenarioAsync(AppDbContext db, decimal availableBalance)

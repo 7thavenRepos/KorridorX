@@ -25,32 +25,8 @@ public sealed class FxOperationsService : IFxOperationsService
         _options = options.Value;
     }
 
-    public async Task<FxMarkupRuleDto> UpsertMarkupRuleAsync(Guid userId, UpsertFxMarkupRuleRequestDto request, CancellationToken ct = default)
-    {
-        var source = Normalize(request.SourceCurrencyCode);
-        var destination = Normalize(request.DestinationCurrencyCode);
-        if (source == destination) throw new InvalidOperationException("Source and destination currencies must be different.");
-        if (request.MinimumCustomerRate.HasValue && request.MaximumCustomerRate.HasValue && request.MinimumCustomerRate > request.MaximumCustomerRate)
-            throw new InvalidOperationException("Minimum customer rate cannot exceed the maximum customer rate.");
-
-        var rule = await _db.FxMarkupRules.FirstOrDefaultAsync(x =>
-            x.SourceCurrencyCode == source && x.DestinationCurrencyCode == destination && x.IsActive && !x.IsDeleted, ct);
-        if (rule is null)
-        {
-            rule = new FxMarkupRule { SourceCurrencyCode = source, DestinationCurrencyCode = destination, CreatedByUserId = userId };
-            _db.FxMarkupRules.Add(rule);
-        }
-        rule.MarkupPercentage = request.MarkupPercentage;
-        rule.MinimumCustomerRate = request.MinimumCustomerRate;
-        rule.MaximumCustomerRate = request.MaximumCustomerRate;
-        rule.IsActive = request.IsActive;
-        rule.LastUpdatedAt = DateTime.UtcNow;
-        rule.LastUpdatedByUserId = userId;
-        await _db.SaveChangesAsync(ct);
-
-        await _audit.RecordAsync(new AuditRecordRequest("FxMarkupRuleUpserted", "FX", nameof(FxMarkupRule), rule.Id.ToString(), NewValues: request, UserId: userId), ct);
-        return ToRuleDto(rule);
-    }
+    public Task<FxMarkupRuleDto> UpsertMarkupRuleAsync(Guid userId, UpsertFxMarkupRuleRequestDto request, CancellationToken ct = default) =>
+        throw new InvalidOperationException("Use FX provider configurations to select an existing pair, fetch a live provider rate, set its markup and activate it. Legacy manual rate and markup entries remain available as history.");
 
     public async Task<PagedResult<FxMarkupRuleDto>> GetMarkupRulesAsync(int page, int pageSize, CancellationToken ct = default)
     {
@@ -60,53 +36,15 @@ public sealed class FxOperationsService : IFxOperationsService
         return new PagedResult<FxMarkupRuleDto> { Meta = paged.Meta, Items = paged.Items.Select(ToRuleDto).ToList() };
     }
 
-    public async Task<ManagedExchangeRateDto> CreateManagedRateAsync(Guid userId, CreateManagedExchangeRateRequestDto request, CancellationToken ct = default)
-    {
-        var source = Normalize(request.SourceCurrencyCode);
-        var destination = Normalize(request.DestinationCurrencyCode);
-        if (source == destination) throw new InvalidOperationException("Source and destination currencies must be different.");
-
-        var rule = await _db.FxMarkupRules.AsNoTracking().Where(x =>
-            x.SourceCurrencyCode == source && x.DestinationCurrencyCode == destination && x.IsActive && !x.IsDeleted)
-            .OrderByDescending(x => x.CreatedAt).FirstOrDefaultAsync(ct);
-
-        var customerRate = CalculateCustomerRate(request.ProviderRate, rule);
-        var now = DateTime.UtcNow;
-        var existing = await _db.ExchangeRates.Where(x =>
-            x.SourceCurrencyCode == source && x.DestinationCurrencyCode == destination && x.IsActive && !x.IsDeleted).ToListAsync(ct);
-        foreach (var old in existing)
-        {
-            old.IsActive = false;
-            old.EffectiveTo = now;
-            old.LastUpdatedAt = now;
-            old.LastUpdatedByUserId = userId;
-        }
-
-        var rate = new ExchangeRate
-        {
-            SourceCurrencyCode = source,
-            DestinationCurrencyCode = destination,
-            ProviderRate = request.ProviderRate,
-            CustomerRate = customerRate,
-            MarkupRate = request.ProviderRate - customerRate,
-            ProviderCode = string.IsNullOrWhiteSpace(request.ProviderCode) ? "Blaaiz" : request.ProviderCode.Trim(),
-            ProviderRateId = string.IsNullOrWhiteSpace(request.ProviderRateId) ? null : request.ProviderRateId.Trim(),
-            EffectiveFrom = request.EffectiveFrom?.ToUniversalTime() ?? now,
-            EffectiveTo = request.EffectiveTo?.ToUniversalTime(),
-            IsActive = true,
-            CreatedByUserId = userId
-        };
-        _db.ExchangeRates.Add(rate);
-        await _db.SaveChangesAsync(ct);
-
-        await _audit.RecordAsync(new AuditRecordRequest("ExchangeRateCreated", "FX", nameof(ExchangeRate), rate.Id.ToString(), NewValues: new { rate.SourceCurrencyCode, rate.DestinationCurrencyCode, rate.ProviderRate, rate.CustomerRate, rate.MarkupRate, rate.ProviderCode }, UserId: userId), ct);
-        return ToRateDto(rate);
-    }
+    public Task<ManagedExchangeRateDto> CreateManagedRateAsync(Guid userId, CreateManagedExchangeRateRequestDto request, CancellationToken ct = default) =>
+        throw new InvalidOperationException("Use FX provider configurations to select an existing pair, fetch a live provider rate, set its markup and activate it. Legacy manual rate and markup entries remain available as history.");
 
     public async Task<ManagedExchangeRateDto> DeactivateRateAsync(Guid userId, Guid rateId, CancellationToken ct = default)
     {
         var rate = await _db.ExchangeRates.FirstOrDefaultAsync(x => x.Id == rateId && !x.IsDeleted, ct)
             ?? throw new InvalidOperationException("Exchange rate not found.");
+        if (rate.FxProviderRateConfigurationId.HasValue)
+            throw new InvalidOperationException("Deactivate the provider configuration to stop live pricing for this pair.");
         if (rate.IsActive)
         {
             rate.IsActive = false;
@@ -132,15 +70,16 @@ public sealed class FxOperationsService : IFxOperationsService
     public async Task<FxOperationsDashboardDto> GetDashboardAsync(CancellationToken ct = default)
     {
         var now = DateTime.UtcNow;
-        var staleBefore = now.AddMinutes(-_options.FxRateStaleMinutes);
+        var overdueBefore = now.AddMinutes(-2);
         var rates = await _db.ExchangeRates.AsNoTracking().Where(x => !x.IsDeleted && x.IsActive)
             .OrderBy(x => x.SourceCurrencyCode).ThenBy(x => x.DestinationCurrencyCode).ToListAsync(ct);
         return new FxOperationsDashboardDto
         {
             GeneratedAt = now,
             ActiveRateCount = rates.Count,
-            StaleRateCount = rates.Count(x => x.EffectiveFrom < staleBefore),
-            ActiveMarkupRuleCount = await _db.FxMarkupRules.CountAsync(x => !x.IsDeleted && x.IsActive, ct),
+            StaleRateCount = await _db.FxProviderRateConfigurations.CountAsync(x => !x.IsDeleted && x.IsActive &&
+                (x.LastError != null || (x.ScheduleMode != "Disabled" && x.NextRefreshAtUtc < overdueBefore)), ct),
+            ActiveMarkupRuleCount = await _db.FxProviderRateConfigurations.CountAsync(x => !x.IsDeleted && x.IsActive, ct),
             Rates = rates.Select(ToRateDto).ToList()
         };
     }

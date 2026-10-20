@@ -56,6 +56,8 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<Guid
     public DbSet<RecipientMobileWallet> RecipientMobileWallets => Set<RecipientMobileWallet>();
 
     public DbSet<ExchangeRate> ExchangeRates => Set<ExchangeRate>();
+    public DbSet<FxProviderRateConfiguration> FxProviderRateConfigurations => Set<FxProviderRateConfiguration>();
+    public DbSet<FxRateObservation> FxRateObservations => Set<FxRateObservation>();
     public DbSet<TransferQuote> TransferQuotes => Set<TransferQuote>();
     public DbSet<TransferFee> TransferFees => Set<TransferFee>();
 

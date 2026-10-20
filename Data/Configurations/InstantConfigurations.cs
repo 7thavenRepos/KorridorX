@@ -54,6 +54,7 @@ public sealed class InstantQuoteConfiguration : IEntityTypeConfiguration<Instant
 {
     public void Configure(EntityTypeBuilder<InstantQuote> builder)
     {
+        builder.HasOne<KorridorX.Models.Fx.FxRateObservation>().WithMany().HasForeignKey(x => x.FxRateObservationId).OnDelete(DeleteBehavior.Restrict);
         builder.HasIndex(x => x.Reference).IsUnique();
         builder.HasIndex(x => new { x.UserId, x.Status, x.ExpiresAt });
         builder.HasIndex(x => new { x.OwnerType, x.OwnerId, x.Status, x.ExpiresAt });

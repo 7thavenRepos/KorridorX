@@ -1,5 +1,4 @@
 using System.Data;
-using KorridorX.Configuration;
 using KorridorX.Data;
 using KorridorX.Dtos.Instant;
 using KorridorX.Infrastructure;
@@ -8,8 +7,8 @@ using KorridorX.Models.FinancialCore;
 using KorridorX.Models.Instant;
 using KorridorX.Services.EmbeddedFinance;
 using KorridorX.Services.FinancialCore;
+using KorridorX.Services.Fx;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Options;
 using Npgsql;
 
 namespace KorridorX.Services.Instant;
@@ -22,18 +21,18 @@ public sealed class InstantTradingService : IInstantTradingService
     private readonly AppDbContext _db;
     private readonly IFinancialReservationService _reservations;
     private readonly IBusinessPricingService _businessPricing;
-    private readonly TreasuryOptions _treasuryOptions;
+    private readonly ILiveFxRateService _liveRates;
 
     public InstantTradingService(
         AppDbContext db,
         IFinancialReservationService reservations,
         IBusinessPricingService businessPricing,
-        IOptions<TreasuryOptions> treasuryOptions)
+        ILiveFxRateService liveRates)
     {
         _db = db;
         _reservations = reservations;
         _businessPricing = businessPricing;
-        _treasuryOptions = treasuryOptions.Value;
+        _liveRates = liveRates;
     }
 
     public async Task<IReadOnlyList<InstantPairDto>> GetPairsAsync(CancellationToken ct = default)
@@ -107,8 +106,6 @@ public sealed class InstantTradingService : IInstantTradingService
         CreateInstantQuoteRequestDto request,
         CancellationToken ct = default)
     {
-        var now = DateTime.UtcNow;
-
         var pair = await _db.InstantPairs
             .AsNoTracking()
             .Include(x => x.SourceAsset)
@@ -173,61 +170,55 @@ public sealed class InstantTradingService : IInstantTradingService
         if (sourceAccount.AvailableBalance < request.SourceAmount)
             throw new InvalidOperationException($"Insufficient {pair.SourceAssetCode} available balance.");
 
-        var staleBefore = now.AddMinutes(-_treasuryOptions.FxRateStaleMinutes);
-        var rate = await _db.ExchangeRates
-            .AsNoTracking()
-            .Where(x =>
-                !x.IsDeleted &&
-                x.IsActive &&
-                x.SourceCurrencyCode == pair.SourceAssetCode &&
-                x.DestinationCurrencyCode == pair.DestinationAssetCode &&
-                x.EffectiveFrom <= now &&
-                (!x.EffectiveTo.HasValue || x.EffectiveTo > now))
-            .OrderByDescending(x => x.EffectiveFrom)
-            .FirstOrDefaultAsync(ct)
-            ?? throw new InvalidOperationException("No active FX rate is available for this instant pair.");
+        return await _liveRates.UseFreshRateAsync(
+            pair.SourceAssetCode, pair.DestinationAssetCode, FxRateUse.Instant,
+            async (rate, observationId, quoteCt) =>
+            {
+                pair = await RevalidateQuotePairAsync(pair, forBusiness: false, request.SourceAmount, quoteCt);
+                await RevalidateQuoteOwnerAccountsAsync(
+                    FinancialAccountOwnerType.User, userId, sourceAccount.Id, destinationAccount.Id,
+                    pair, request.SourceAmount, quoteCt);
+                // Provider latency must not consume the quote's validity window.
+                var now = DateTime.UtcNow;
+                var destinationAmount = decimal.Round(
+                    request.SourceAmount * rate.CustomerRate,
+                    pair.DestinationAsset.DecimalPlaces,
+                    MidpointRounding.ToZero);
 
-        if (rate.EffectiveFrom < staleBefore)
-            throw new InvalidOperationException("The current instant FX rate is stale.");
+                if (destinationAmount <= 0m)
+                    throw new InvalidOperationException("The calculated instant destination amount is invalid.");
 
-        var destinationAmount = decimal.Round(
-            request.SourceAmount * rate.CustomerRate,
-            pair.DestinationAsset.DecimalPlaces,
-            MidpointRounding.ToZero);
+                if (pair.HouseDestinationFinancialAccount.AvailableBalance < destinationAmount ||
+                    pair.HouseDestinationFinancialAccount.SettledBalance < destinationAmount)
+                    throw new InvalidOperationException($"House {pair.DestinationAssetCode} liquidity is insufficient.");
 
-        if (destinationAmount <= 0m)
-            throw new InvalidOperationException("The calculated instant destination amount is invalid.");
+                var quote = new InstantQuote
+                {
+                    Reference = GenerateReference("KXIQ"),
+                    InstantPairId = pair.Id,
+                    UserId = userId,
+                    OwnerType = FinancialAccountOwnerType.User,
+                    OwnerId = userId,
+                    UserSourceFinancialAccountId = sourceAccount.Id,
+                    UserDestinationFinancialAccountId = destinationAccount.Id,
+                    HouseSourceFinancialAccountId = pair.HouseSourceFinancialAccountId,
+                    HouseDestinationFinancialAccountId = pair.HouseDestinationFinancialAccountId,
+                    ExchangeRateId = rate.Id,
+                    FxRateObservationId = observationId,
+                    SourceAmount = request.SourceAmount,
+                    DestinationAmount = destinationAmount,
+                    ProviderRate = rate.ProviderRate,
+                    BaseCustomerRate = rate.CustomerRate,
+                    CustomerRate = rate.CustomerRate,
+                    Status = InstantQuoteStatus.Active,
+                    ExpiresAt = now.AddSeconds(pair.QuoteValiditySeconds),
+                    CreatedByUserId = userId
+                };
 
-        if (pair.HouseDestinationFinancialAccount.AvailableBalance < destinationAmount ||
-            pair.HouseDestinationFinancialAccount.SettledBalance < destinationAmount)
-            throw new InvalidOperationException($"House {pair.DestinationAssetCode} liquidity is insufficient.");
-
-        var quote = new InstantQuote
-        {
-            Reference = GenerateReference("KXIQ"),
-            InstantPairId = pair.Id,
-            UserId = userId,
-            OwnerType = FinancialAccountOwnerType.User,
-            OwnerId = userId,
-            UserSourceFinancialAccountId = sourceAccount.Id,
-            UserDestinationFinancialAccountId = destinationAccount.Id,
-            HouseSourceFinancialAccountId = pair.HouseSourceFinancialAccountId,
-            HouseDestinationFinancialAccountId = pair.HouseDestinationFinancialAccountId,
-            ExchangeRateId = rate.Id,
-            SourceAmount = request.SourceAmount,
-            DestinationAmount = destinationAmount,
-            ProviderRate = rate.ProviderRate,
-            BaseCustomerRate = rate.CustomerRate,
-            CustomerRate = rate.CustomerRate,
-            Status = InstantQuoteStatus.Active,
-            ExpiresAt = now.AddSeconds(pair.QuoteValiditySeconds),
-            CreatedByUserId = userId
-        };
-
-        _db.InstantQuotes.Add(quote);
-        await _db.SaveChangesAsync(ct);
-
-        return ToQuoteDto(quote, pair);
+                _db.InstantQuotes.Add(quote);
+                await _db.SaveChangesAsync(quoteCt);
+                return ToQuoteDto(quote, pair);
+            }, ct);
     }
 
     public async Task<InstantQuoteDto> CreateQuoteForOwnerAsync(
@@ -239,7 +230,6 @@ public sealed class InstantTradingService : IInstantTradingService
         Guid? actionedByUserId = null,
         CancellationToken ct = default)
     {
-        var now = DateTime.UtcNow;
         var normalizedCountry = (countryCode ?? "").Trim().ToUpperInvariant();
 
         var pair = await _db.InstantPairs
@@ -297,92 +287,154 @@ public sealed class InstantTradingService : IInstantTradingService
         if (sourceAccount.AvailableBalance < request.SourceAmount)
             throw new InvalidOperationException($"Insufficient {pair.SourceAssetCode} available balance.");
 
-        var staleBefore = now.AddMinutes(-_treasuryOptions.FxRateStaleMinutes);
-        var rate = await _db.ExchangeRates
+        return await _liveRates.UseFreshRateAsync(
+            pair.SourceAssetCode, pair.DestinationAssetCode, FxRateUse.Instant,
+            async (rate, observationId, quoteCt) =>
+            {
+                pair = await RevalidateQuotePairAsync(pair, forBusiness: true, request.SourceAmount, quoteCt);
+                await RevalidateQuoteOwnerAccountsAsync(
+                    ownerType, ownerId, sourceAccount.Id, destinationAccount.Id,
+                    pair, request.SourceAmount, quoteCt);
+                var now = DateTime.UtcNow;
+                var pricing = businessProfileId.HasValue
+                    ? await _businessPricing.ResolveAsync(
+                        businessProfileId.Value,
+                        pair.SourceAssetCode,
+                        pair.DestinationAssetCode,
+                        rate.CustomerRate,
+                        now,
+                        quoteCt)
+                    : new KorridorX.Dtos.EmbeddedFinance.BusinessPricingResolutionDto(
+                        rate.CustomerRate,
+                        rate.CustomerRate,
+                        null,
+                        null);
+
+                var baseDestinationAmount = decimal.Round(
+                    request.SourceAmount * pricing.BaseCustomerRate,
+                    pair.DestinationAsset.DecimalPlaces,
+                    MidpointRounding.ToZero);
+
+                var destinationAmount = decimal.Round(
+                    request.SourceAmount * pricing.CustomerRate,
+                    pair.DestinationAsset.DecimalPlaces,
+                    MidpointRounding.ToZero);
+
+                if (destinationAmount <= 0m || baseDestinationAmount <= 0m)
+                    throw new InvalidOperationException("The calculated instant destination amount is invalid.");
+
+                var businessRevenueAmount = baseDestinationAmount - destinationAmount;
+                if (businessRevenueAmount < 0m)
+                    throw new InvalidOperationException("Business pricing cannot produce a negative realized spread.");
+
+                if (pair.HouseDestinationFinancialAccount.AvailableBalance < baseDestinationAmount ||
+                    pair.HouseDestinationFinancialAccount.SettledBalance < baseDestinationAmount)
+                    throw new InvalidOperationException($"House {pair.DestinationAssetCode} liquidity is insufficient.");
+
+                var quote = new InstantQuote
+                {
+                    Reference = GenerateReference("KXIQ"),
+                    InstantPairId = pair.Id,
+                    UserId = ownerType == FinancialAccountOwnerType.User ? ownerId : Guid.Empty,
+                    OwnerType = ownerType,
+                    OwnerId = ownerId,
+                    UserSourceFinancialAccountId = sourceAccount.Id,
+                    UserDestinationFinancialAccountId = destinationAccount.Id,
+                    HouseSourceFinancialAccountId = pair.HouseSourceFinancialAccountId,
+                    HouseDestinationFinancialAccountId = pair.HouseDestinationFinancialAccountId,
+                    ExchangeRateId = rate.Id,
+                    FxRateObservationId = observationId,
+                    SourceAmount = request.SourceAmount,
+                    DestinationAmount = destinationAmount,
+                    ProviderRate = rate.ProviderRate,
+                    BaseCustomerRate = pricing.BaseCustomerRate,
+                    CustomerRate = pricing.CustomerRate,
+                    BaseDestinationAmount = baseDestinationAmount,
+                    BusinessProfileId = businessProfileId,
+                    BusinessPricingPolicyId = pricing.BusinessPricingPolicyId,
+                    BusinessMarkupPercentage = pricing.BusinessMarkupPercentage,
+                    BusinessPricingAdjustmentType = pricing.AdjustmentType,
+                    BusinessPricingAdjustmentValue = pricing.AdjustmentValue,
+                    BusinessRevenueRate = pricing.BusinessRevenueRate,
+                    BusinessRevenueAmount = businessRevenueAmount,
+                    Status = InstantQuoteStatus.Active,
+                    ExpiresAt = now.AddSeconds(pair.QuoteValiditySeconds),
+                    CreatedByUserId = actionedByUserId
+                };
+
+                _db.InstantQuotes.Add(quote);
+                await _db.SaveChangesAsync(quoteCt);
+                return ToQuoteDto(quote, pair);
+            }, ct);
+    }
+
+    private async Task<InstantPair> RevalidateQuotePairAsync(
+        InstantPair snapshot,
+        bool forBusiness,
+        decimal sourceAmount,
+        CancellationToken ct)
+    {
+        // The provider call has completed. Lock this requested pair, which may differ
+        // from the master pair selected by the active FX configuration for the direction.
+        var current = await _db.InstantPairs
+            .FromSqlInterpolated($"SELECT * FROM \"InstantPairs\" WHERE \"Id\" = {snapshot.Id} FOR SHARE")
             .AsNoTracking()
-            .Where(x =>
-                !x.IsDeleted &&
-                x.IsActive &&
-                x.SourceCurrencyCode == pair.SourceAssetCode &&
-                x.DestinationCurrencyCode == pair.DestinationAssetCode &&
-                x.EffectiveFrom <= now &&
-                (!x.EffectiveTo.HasValue || x.EffectiveTo > now))
-            .OrderByDescending(x => x.EffectiveFrom)
-            .FirstOrDefaultAsync(ct)
-            ?? throw new InvalidOperationException("No active FX rate is available for this instant pair.");
+            .Include(x => x.SourceAsset)
+            .Include(x => x.DestinationAsset)
+            .Include(x => x.HouseSourceFinancialAccount)
+            .Include(x => x.HouseDestinationFinancialAccount)
+            .SingleOrDefaultAsync(ct)
+            ?? throw new InvalidOperationException("Instant trading pair not found.");
 
-        if (rate.EffectiveFrom < staleBefore)
-            throw new InvalidOperationException("The current instant FX rate is stale.");
+        if (current.IsDeleted || current.Status != InstantPairStatus.Active ||
+            current.Status != snapshot.Status ||
+            current.SourceAssetCode != snapshot.SourceAssetCode ||
+            current.DestinationAssetCode != snapshot.DestinationAssetCode ||
+            current.HouseSourceFinancialAccountId != snapshot.HouseSourceFinancialAccountId ||
+            current.HouseDestinationFinancialAccountId != snapshot.HouseDestinationFinancialAccountId ||
+            current.MinimumSourceAmount != snapshot.MinimumSourceAmount ||
+            current.MaximumSourceAmount != snapshot.MaximumSourceAmount ||
+            current.SourceAmountIncrement != snapshot.SourceAmountIncrement ||
+            current.QuoteValiditySeconds != snapshot.QuoteValiditySeconds ||
+            current.SourceAsset.DecimalPlaces != snapshot.SourceAsset.DecimalPlaces ||
+            current.DestinationAsset.DecimalPlaces != snapshot.DestinationAsset.DecimalPlaces)
+            throw new InvalidOperationException("The instant trading pair changed during the FX check. Request a new quote.");
 
-        var pricing = businessProfileId.HasValue
-            ? await _businessPricing.ResolveAsync(
-                businessProfileId.Value,
-                pair.SourceAssetCode,
-                pair.DestinationAssetCode,
-                rate.CustomerRate,
-                now,
-                ct)
-            : new KorridorX.Dtos.EmbeddedFinance.BusinessPricingResolutionDto(
-                rate.CustomerRate,
-                rate.CustomerRate,
-                null,
-                null);
+        if (!current.SourceAsset.IsSupported || !current.SourceAsset.InstantEnabled ||
+            !current.DestinationAsset.IsSupported || !current.DestinationAsset.InstantEnabled ||
+            (forBusiness
+                ? !current.SourceAsset.BusinessEnabled || !current.DestinationAsset.BusinessEnabled
+                : !current.SourceAsset.IndividualEnabled || !current.DestinationAsset.IndividualEnabled))
+            throw new InvalidOperationException("One or more assets are no longer enabled for instant trading.");
 
-        var baseDestinationAmount = decimal.Round(
-            request.SourceAmount * pricing.BaseCustomerRate,
-            pair.DestinationAsset.DecimalPlaces,
-            MidpointRounding.ToZero);
+        ValidateSourceAmount(current, sourceAmount);
+        if (current.HouseSourceFinancialAccount.IsDeleted || current.HouseDestinationFinancialAccount.IsDeleted)
+            throw new InvalidOperationException("One or more configured house accounts are no longer available.");
+        ValidateHouseAccount(current.HouseSourceFinancialAccount, current.SourceAssetCode, "source");
+        ValidateHouseAccount(current.HouseDestinationFinancialAccount, current.DestinationAssetCode, "destination");
+        return current;
+    }
 
-        var destinationAmount = decimal.Round(
-            request.SourceAmount * pricing.CustomerRate,
-            pair.DestinationAsset.DecimalPlaces,
-            MidpointRounding.ToZero);
-
-        if (destinationAmount <= 0m || baseDestinationAmount <= 0m)
-            throw new InvalidOperationException("The calculated instant destination amount is invalid.");
-
-        var businessRevenueAmount = baseDestinationAmount - destinationAmount;
-        if (businessRevenueAmount < 0m)
-            throw new InvalidOperationException("Business pricing cannot produce a negative realized spread.");
-
-        if (pair.HouseDestinationFinancialAccount.AvailableBalance < baseDestinationAmount ||
-            pair.HouseDestinationFinancialAccount.SettledBalance < baseDestinationAmount)
-            throw new InvalidOperationException($"House {pair.DestinationAssetCode} liquidity is insufficient.");
-
-        var quote = new InstantQuote
-        {
-            Reference = GenerateReference("KXIQ"),
-            InstantPairId = pair.Id,
-            UserId = ownerType == FinancialAccountOwnerType.User ? ownerId : Guid.Empty,
-            OwnerType = ownerType,
-            OwnerId = ownerId,
-            UserSourceFinancialAccountId = sourceAccount.Id,
-            UserDestinationFinancialAccountId = destinationAccount.Id,
-            HouseSourceFinancialAccountId = pair.HouseSourceFinancialAccountId,
-            HouseDestinationFinancialAccountId = pair.HouseDestinationFinancialAccountId,
-            ExchangeRateId = rate.Id,
-            SourceAmount = request.SourceAmount,
-            DestinationAmount = destinationAmount,
-            ProviderRate = rate.ProviderRate,
-            BaseCustomerRate = pricing.BaseCustomerRate,
-            CustomerRate = pricing.CustomerRate,
-            BaseDestinationAmount = baseDestinationAmount,
-            BusinessProfileId = businessProfileId,
-            BusinessPricingPolicyId = pricing.BusinessPricingPolicyId,
-            BusinessMarkupPercentage = pricing.BusinessMarkupPercentage,
-            BusinessPricingAdjustmentType = pricing.AdjustmentType,
-            BusinessPricingAdjustmentValue = pricing.AdjustmentValue,
-            BusinessRevenueRate = pricing.BusinessRevenueRate,
-            BusinessRevenueAmount = businessRevenueAmount,
-            Status = InstantQuoteStatus.Active,
-            ExpiresAt = now.AddSeconds(pair.QuoteValiditySeconds),
-            CreatedByUserId = actionedByUserId
-        };
-
-        _db.InstantQuotes.Add(quote);
-        await _db.SaveChangesAsync(ct);
-
-        return ToQuoteDto(quote, pair);
+    private async Task RevalidateQuoteOwnerAccountsAsync(
+        FinancialAccountOwnerType ownerType,
+        Guid ownerId,
+        Guid sourceAccountId,
+        Guid destinationAccountId,
+        InstantPair pair,
+        decimal sourceAmount,
+        CancellationToken ct)
+    {
+        var accounts = await _db.FinancialAccounts.AsNoTracking()
+            .Where(x => !x.IsDeleted && (x.Id == sourceAccountId || x.Id == destinationAccountId))
+            .ToListAsync(ct);
+        var source = accounts.SingleOrDefault(x => x.Id == sourceAccountId)
+            ?? throw new InvalidOperationException("Source financial account no longer exists.");
+        var destination = accounts.SingleOrDefault(x => x.Id == destinationAccountId)
+            ?? throw new InvalidOperationException("Destination financial account no longer exists.");
+        ValidateOwnerAccount(source, ownerType, ownerId, pair.SourceAssetCode, "source");
+        ValidateOwnerAccount(destination, ownerType, ownerId, pair.DestinationAssetCode, "destination");
+        if (source.AvailableBalance < sourceAmount)
+            throw new InvalidOperationException($"Insufficient {pair.SourceAssetCode} available balance.");
     }
 
     public async Task<InstantTradeDto> ExecuteQuoteAsync(

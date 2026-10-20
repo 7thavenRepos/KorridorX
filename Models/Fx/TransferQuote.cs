@@ -37,6 +37,7 @@ public class TransferQuote : AuditableEntity
 
     public string ProviderCode { get; set; } = "Blaaiz";
     public string? ProviderQuoteId { get; set; }
+    public Guid? FxRateObservationId { get; set; }
 
     public DateTime ExpiresAt { get; set; }
 

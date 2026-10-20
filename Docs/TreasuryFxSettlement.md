@@ -12,11 +12,11 @@ Operations can define minimum, target and optional maximum balances by provider 
 
 ## FX controls
 
-Operations can maintain provider rates and markup rules without changing the customer quote flow. Creating a managed rate deactivates the previous active rate for the same pair. New consumer and business quotes automatically use the current active rate through their existing quote services.
+Operations select an existing Instant or Marketplace pair, configure a provider and customer markup, fetch a live preview, then save and activate a provider configuration. Only one configuration can be active per source/destination direction across both catalogs. Manual rate creation and legacy markup writes are retired; existing history remains readable.
 
-Markup rules reduce the provider rate by the configured percentage and can additionally impose minimum or maximum customer-rate bounds.
+The server applies the configured markup once as `providerRate × (1 − markup / 100)`, followed by optional customer-rate bounds. Each new provider-priced quote or preview requires a fresh provider read. Nonzero cross-currency wallet valuation components also require a live check. A failed check does not use an older snapshot; existing saved quotes retain their own economics and expiry.
 
-Provider rate ingestion is deliberately not automated in this milestone because the current Blaaiz rate documentation uses a different authentication header from the OAuth-protected wallet APIs. Rate entry therefore remains controlled by operations until the account-specific rate authentication contract is confirmed.
+Scheduled refresh defaults to 180 minutes and supports interval, daily timezone-based or disabled schedules. Disabling the schedule does not skip live quote checks. Blaaiz FX uses a separate `rates:read` OAuth token and requires the actual grant on the configured provider account. See [Provider-managed FX rates and support guide](ProviderManagedFxRates.md) for activation, schedules, connection rotation, capability checks and troubleshooting.
 
 ## Settlement batches
 

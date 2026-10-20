@@ -55,6 +55,13 @@ public sealed class HelpCatalog
         var interacGuides = JsonSerializer.Deserialize<HelpEntry[]>(interacStream, new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
             ?? throw new InvalidOperationException("The Interac funding guides are empty.");
         Entries = Entries.Concat(interacGuides).ToArray();
+        using var fxStream = typeof(HelpCatalog).Assembly.GetManifestResourceStream("KorridorX.Content.SearchHelp.fx-provider-rates-20261020.json")
+            ?? throw new InvalidOperationException("The provider FX guides are missing.");
+        var fxGuides = JsonSerializer.Deserialize<HelpEntry[]>(fxStream, new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
+            ?? throw new InvalidOperationException("The provider FX guides are empty.");
+        // Replace obsolete manual-rate instructions while preserving existing help links.
+        var fxKeys = fxGuides.Select(x => (x.Portal, x.Slug)).ToHashSet();
+        Entries = Entries.Where(x => !fxKeys.Contains((x.Portal, x.Slug))).Concat(fxGuides).ToArray();
         var unique = new HashSet<string>();
         foreach (var e in Entries)
         {

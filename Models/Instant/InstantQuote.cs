@@ -34,6 +34,7 @@ public class InstantQuote : AuditableEntity
 
     public Guid ExchangeRateId { get; set; }
     public ExchangeRate ExchangeRate { get; set; } = null!;
+    public Guid? FxRateObservationId { get; set; }
     public BusinessPricingPolicy? BusinessPricingPolicy { get; set; }
 
     public decimal SourceAmount { get; set; }

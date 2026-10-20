@@ -181,7 +181,7 @@ public sealed class OperationalHealthService : IOperationalHealthService
             .Where(x => !x.IsDeleted)
             .ToListAsync(ct);
         var providerWalletStaleBefore = now.AddMinutes(-_treasuryOptions.ProviderWalletStaleMinutes);
-        var fxRateStaleBefore = now.AddMinutes(-_treasuryOptions.FxRateStaleMinutes);
+        var fxRefreshOverdueBefore = now.AddMinutes(-2);
         var lowLiquidityWallets = providerWallets.Count(wallet =>
         {
             var threshold = walletThresholds.FirstOrDefault(x =>
@@ -193,8 +193,9 @@ public sealed class OperationalHealthService : IOperationalHealthService
         var treasury = new TreasuryOperationsHealthDto(
             lowLiquidityWallets,
             providerWallets.Count(x => x.LastSyncedAt < providerWalletStaleBefore),
-            await _db.ExchangeRates.CountAsync(x =>
-                !x.IsDeleted && x.IsActive && x.EffectiveFrom < fxRateStaleBefore, ct),
+            await _db.FxProviderRateConfigurations.CountAsync(x =>
+                !x.IsDeleted && x.IsActive && (x.LastError != null ||
+                    (x.ScheduleMode != "Disabled" && x.NextRefreshAtUtc < fxRefreshOverdueBefore)), ct),
             await _db.SettlementBatches.CountAsync(x =>
                 !x.IsDeleted && x.Status == KorridorX.Models.Enums.SettlementBatchStatus.Variance, ct));
 

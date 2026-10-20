@@ -5510,6 +5510,12 @@ namespace KorridorX.Migrations
                     b.Property<DateTime?>("EffectiveTo")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<Guid?>("FxProviderRateConfigurationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("FxRateObservationId")
+                        .HasColumnType("uuid");
+
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean");
 
@@ -5546,9 +5552,251 @@ namespace KorridorX.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("FxProviderRateConfigurationId");
+
+                    b.HasIndex("FxRateObservationId");
+
                     b.HasIndex("SourceCurrencyCode", "DestinationCurrencyCode", "IsActive");
 
                     b.ToTable("ExchangeRates");
+                });
+
+            modelBuilder.Entity("KorridorX.Models.Fx.FxProviderRateConfiguration", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ActivatedConnectionKey")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CreatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("DailyTimes")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("DeletedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("DestinationCurrencyCode")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<Guid?>("InstantPairId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("IntervalMinutes")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime?>("LastAttemptAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<decimal?>("LastCustomerRate")
+                        .HasPrecision(18, 8)
+                        .HasColumnType("numeric(18,8)");
+
+                    b.Property<string>("LastError")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<DateTime?>("LastObservationStartedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<decimal?>("LastProviderRate")
+                        .HasPrecision(18, 8)
+                        .HasColumnType("numeric(18,8)");
+
+                    b.Property<DateTime?>("LastProviderTimestampUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("LastSuccessAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("LastUpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("LastUpdatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("MarketplacePairId")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("MarkupPercentage")
+                        .HasPrecision(9, 6)
+                        .HasColumnType("numeric(9,6)");
+
+                    b.Property<decimal?>("MaximumCustomerRate")
+                        .HasPrecision(18, 8)
+                        .HasColumnType("numeric(18,8)");
+
+                    b.Property<decimal?>("MinimumCustomerRate")
+                        .HasPrecision(18, 8)
+                        .HasColumnType("numeric(18,8)");
+
+                    b.Property<DateTime?>("NextRefreshAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ProviderCode")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<string>("ProviderRateId")
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
+
+                    b.Property<Guid?>("RefreshLeaseId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("RefreshLeaseUntilUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<long>("Revision")
+                        .IsConcurrencyToken()
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("ScheduleMode")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("SourceCurrencyCode")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("TimeZoneId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("InstantPairId");
+
+                    b.HasIndex("MarketplacePairId");
+
+                    b.HasIndex("IsActive", "NextRefreshAtUtc");
+
+                    b.HasIndex("SourceCurrencyCode", "DestinationCurrencyCode")
+                        .IsUnique()
+                        .HasDatabaseName("UX_FxProviderRateConfigurations_ActiveDirection")
+                        .HasFilter("\"IsActive\" = TRUE AND \"IsDeleted\" = FALSE");
+
+                    b.ToTable("FxProviderRateConfigurations", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_FxProviderRateConfigurations_Markup", "\"MarkupPercentage\" >= 0 AND \"MarkupPercentage\" < 100");
+
+                            t.HasCheckConstraint("CK_FxProviderRateConfigurations_Pair", "(\"InstantPairId\" IS NOT NULL) <> (\"MarketplacePairId\" IS NOT NULL)");
+                        });
+                });
+
+            modelBuilder.Entity("KorridorX.Models.Fx.FxRateObservation", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ConfigurationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<long>("ConfigurationRevision")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("ConnectionKey")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<decimal>("CustomerRate")
+                        .HasPrecision(18, 8)
+                        .HasColumnType("numeric(18,8)");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DestinationCurrencyCode")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime?>("LastUpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<decimal>("MarkupPercentage")
+                        .HasPrecision(9, 6)
+                        .HasColumnType("numeric(9,6)");
+
+                    b.Property<string>("ProviderCode")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<decimal>("ProviderRate")
+                        .HasPrecision(18, 8)
+                        .HasColumnType("numeric(18,8)");
+
+                    b.Property<string>("ProviderRateId")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
+
+                    b.Property<Guid?>("ProviderRequestLogId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("ProviderTimestampUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Purpose")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<DateTime>("ReceivedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("RequestedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("SendEnabled")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("SourceCurrencyCode")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<bool>("SwapEnabled")
+                        .HasColumnType("boolean");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ConfigurationId", "ReceivedAtUtc");
+
+                    b.ToTable("FxRateObservations");
                 });
 
             modelBuilder.Entity("KorridorX.Models.Fx.TransferFee", b =>
@@ -5689,6 +5937,9 @@ namespace KorridorX.Migrations
                         .HasMaxLength(20)
                         .HasColumnType("character varying(20)");
 
+                    b.Property<Guid?>("FxRateObservationId")
+                        .HasColumnType("uuid");
+
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("boolean");
 
@@ -5751,6 +6002,8 @@ namespace KorridorX.Migrations
                     b.HasIndex("CustomerProfileId");
 
                     b.HasIndex("ExpiresAt");
+
+                    b.HasIndex("FxRateObservationId");
 
                     b.HasIndex("ProviderQuoteId");
 
@@ -6179,6 +6432,9 @@ namespace KorridorX.Migrations
                     b.Property<DateTime>("ExpiresAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<Guid?>("FxRateObservationId")
+                        .HasColumnType("uuid");
+
                     b.Property<Guid>("HouseDestinationFinancialAccountId")
                         .HasColumnType("uuid");
 
@@ -6234,6 +6490,8 @@ namespace KorridorX.Migrations
                     b.HasIndex("BusinessPricingPolicyId");
 
                     b.HasIndex("ExchangeRateId");
+
+                    b.HasIndex("FxRateObservationId");
 
                     b.HasIndex("HouseDestinationFinancialAccountId");
 
@@ -12195,6 +12453,41 @@ namespace KorridorX.Migrations
                     b.Navigation("ReversedByTransaction");
                 });
 
+            modelBuilder.Entity("KorridorX.Models.Fx.ExchangeRate", b =>
+                {
+                    b.HasOne("KorridorX.Models.Fx.FxProviderRateConfiguration", null)
+                        .WithMany()
+                        .HasForeignKey("FxProviderRateConfigurationId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("KorridorX.Models.Fx.FxRateObservation", null)
+                        .WithMany()
+                        .HasForeignKey("FxRateObservationId")
+                        .OnDelete(DeleteBehavior.Restrict);
+                });
+
+            modelBuilder.Entity("KorridorX.Models.Fx.FxProviderRateConfiguration", b =>
+                {
+                    b.HasOne("KorridorX.Models.Instant.InstantPair", null)
+                        .WithMany()
+                        .HasForeignKey("InstantPairId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("KorridorX.Models.Marketplace.MarketplacePair", null)
+                        .WithMany()
+                        .HasForeignKey("MarketplacePairId")
+                        .OnDelete(DeleteBehavior.Restrict);
+                });
+
+            modelBuilder.Entity("KorridorX.Models.Fx.FxRateObservation", b =>
+                {
+                    b.HasOne("KorridorX.Models.Fx.FxProviderRateConfiguration", null)
+                        .WithMany()
+                        .HasForeignKey("ConfigurationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("KorridorX.Models.Fx.TransferQuote", b =>
                 {
                     b.HasOne("KorridorX.Models.EmbeddedFinance.BusinessCustomer", "BusinessCustomer")
@@ -12210,6 +12503,11 @@ namespace KorridorX.Migrations
                     b.HasOne("KorridorX.Models.Customers.CustomerProfile", "CustomerProfile")
                         .WithMany()
                         .HasForeignKey("CustomerProfileId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("KorridorX.Models.Fx.FxRateObservation", null)
+                        .WithMany()
+                        .HasForeignKey("FxRateObservationId")
                         .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("KorridorX.Models.FinancialCore.FinancialAccount", "SourceFinancialAccount")
@@ -12295,6 +12593,11 @@ namespace KorridorX.Migrations
                         .HasForeignKey("ExchangeRateId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+
+                    b.HasOne("KorridorX.Models.Fx.FxRateObservation", null)
+                        .WithMany()
+                        .HasForeignKey("FxRateObservationId")
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("KorridorX.Models.FinancialCore.FinancialAccount", "HouseDestinationFinancialAccount")
                         .WithMany()

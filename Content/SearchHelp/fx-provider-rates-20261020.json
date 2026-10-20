@@ -1,0 +1,211 @@
+[
+  {
+    "slug": "page-fx",
+    "portal": "admin",
+    "title": "FX rates and pricing",
+    "summary": "Configure live provider pricing, customer markup and scheduled refreshes for existing trading pairs.",
+    "category": "Finance",
+    "pageRoute": "/admin/fx",
+    "keywords": ["FX", "Blaaiz", "provider rates", "markup", "live quote", "refresh schedule"],
+    "adminRoles": ["Operations", "Admin", "SuperAdmin"],
+    "permissions": [],
+    "businessRoles": [],
+    "allowNoBusiness": false,
+    "isPage": true,
+    "reviewedOn": "2026-10-20"
+  },
+  {
+    "slug": "manage-fx-rates-and-markup",
+    "portal": "admin",
+    "title": "Manage provider FX rates and markup",
+    "summary": "Select an existing pair, check a live provider rate, preview customer pricing and activate a reviewed configuration.",
+    "category": "Finance",
+    "pageRoute": "/admin/fx",
+    "keywords": ["FX", "Blaaiz", "rates:read", "provider rate", "markup", "schedule", "Instant", "Marketplace", "activation"],
+    "adminRoles": ["Operations", "Admin", "SuperAdmin"],
+    "permissions": [],
+    "businessRoles": [],
+    "allowNoBusiness": false,
+    "isPage": false,
+    "reviewedOn": "2026-10-20",
+    "prerequisites": [
+      "Operations, Admin or SuperAdmin access to FX rates and pricing.",
+      "An existing Instant or Marketplace pair in Trading & business wallets, supported assets and a provider connection with rates:read access. The pair must be active before activation."
+    ],
+    "steps": [
+      {
+        "title": "Choose the existing direction and provider",
+        "instruction": "Open FX rates and pricing. Under New provider configuration, select Existing pair and Provider. The direction is destination currency per one source currency; the reverse direction needs its own configuration. Pairs are reused from Trading & business wallets."
+      },
+      {
+        "title": "Set customer pricing",
+        "instruction": "Enter Markup %. The server calculates provider rate × (1 − markup ÷ 100), applies optional Minimum customer rate and Maximum customer rate, then rounds to eight decimal places. Markup must be at least zero and below 100%. The provider rate is read-only. Leave Provider rate ID blank unless an exact rate selection is required."
+      },
+      {
+        "title": "Choose the background schedule",
+        "instruction": "Scheduled refresh defaults to At an interval every 180 minutes. Choose a whole interval from 1 to 10,080 minutes, At daily times with 1 to 24 distinct times and a UTC or IANA time zone, or Off. Off stops scheduled snapshots; every new quote still checks the provider live."
+      },
+      {
+        "title": "Fetch and inspect the live preview",
+        "instruction": "Choose Fetch live preview. Review provider rate, customer rate, markup value, provider rate ID, Send money and Instant conversion availability. Requested and Received show the fetch times; Provider updated is the separate provider timestamp and may be absent. Editing any setting clears the preview."
+      },
+      {
+        "title": "Save and activate the reviewed draft",
+        "instruction": "Choose Save draft, then Activate on the saved configuration. Activation fetches again and replaces the active configuration for that direction only after a successful check. Only one configuration can be active for a direction across both pair catalogs. A saved draft alone does not enable quoting."
+      },
+      {
+        "title": "Review checks and maintain configuration",
+        "instruction": "Use Reload configurations to inspect status, latest pricing, next scheduled time, last attempt, last success and any error. To change an active configuration, create and activate a replacement draft or deactivate it before editing. After provider connection or credential rotation, activate again to verify the new connection."
+      }
+    ],
+    "expectedResult": "New quotes use a fresh provider observation and the active server pricing policy. Existing quotes retain their saved amounts and expiry. Rate and markup history remains available.",
+    "warnings": [
+      "A preview checks pricing; it does not reserve a rate, create a transfer, execute a conversion or change balances.",
+      "Failed provider checks do not fall back to earlier snapshots. Deactivating the only configuration stops new quotes for that direction.",
+      "Transfer fees and any existing business pricing adjustment remain separate from the provider configuration markup."
+    ],
+    "troubleshooting": [
+      "For an unavailable provider or rates:read error, confirm the effective provider host, credentials, actual OAuth scope grant and API/IP access. A local setting cannot grant permission at Blaaiz.",
+      "For multiple usable provider rates, supply the intended Provider rate ID for the exact direction and fetch again. Do not invert a reverse rate.",
+      "For a changed revision or pair, reload configurations and review current settings before retrying. An inactive or unsupported pair must be corrected in Trading & business wallets.",
+      "A recent Last success does not guarantee the next quote will succeed. Record the pair, configuration, UTC time, displayed error and support reference for investigation; never include tokens or secrets."
+    ]
+  },
+  {
+    "slug": "troubleshoot-live-fx-provider-checks",
+    "portal": "admin",
+    "title": "Investigate an unavailable live FX quote",
+    "summary": "Check provider access, active configuration, rate capability and observation times without using an old rate as a substitute.",
+    "category": "Finance",
+    "pageRoute": "/admin/fx",
+    "keywords": ["FX unavailable", "rates:read", "connection changed", "scope", "provider timestamp", "missing rate", "wallet valuation"],
+    "adminRoles": ["Operations", "Admin", "SuperAdmin"],
+    "permissions": [],
+    "businessRoles": [],
+    "allowNoBusiness": false,
+    "isPage": false,
+    "reviewedOn": "2026-10-20",
+    "prerequisites": [
+      "Operations, Admin or SuperAdmin access, the affected direction and a redacted error or support reference."
+    ],
+    "steps": [
+      {
+        "title": "Locate the active configuration",
+        "instruction": "Open FX rates and pricing and reload configurations. Match source and destination exactly. Confirm there is an active configuration and that its selected trading pair and assets remain available. A reverse-direction configuration does not price this direction."
+      },
+      {
+        "title": "Review current provider access",
+        "instruction": "Read the last error and inspect the effective connection through the authorized operational process. FX uses a separate rates:read OAuth token. Collection, payout or wallet access does not prove rate-read access. After a connection change, reactivate the configuration."
+      },
+      {
+        "title": "Check the selected rate and its capability",
+        "instruction": "Fetch a new preview for the intended pair and provider. Transfers and public transfer previews require Send money support; Instant conversions require Instant conversion support. If multiple usable rates match, select the provider-approved rate ID."
+      },
+      {
+        "title": "Record evidence and retry the read",
+        "instruction": "Record configuration identity, provider rate ID, request/receipt time, provider timestamp when present and the redacted support reference. Once access or configuration is corrected, request a new quote or refresh the wallet estimate. Use the existing record when investigating an already-created transfer."
+      }
+    ],
+    "expectedResult": "Support can identify whether the failure concerns configuration, provider access, direction, capability or a concurrent change, with a traceable fresh check.",
+    "warnings": [
+      "Do not copy an old or guessed rate into the database. Legacy manual rate and markup creation is retired.",
+      "Wallet estimates are informational. If a nonzero foreign-currency component cannot be freshly priced, the combined estimate is unavailable; the wallet balances remain unchanged."
+    ],
+    "troubleshooting": [
+      "Requested/Received timestamps prove when KorridorX fetched the rate. They do not replace Provider updated or prove that the provider changed its price at that moment.",
+      "Off disables the background schedule only. It does not skip the live check required by a new quote, preview or nonzero cross-currency wallet estimate.",
+      "If an earlier check finishes after a newer one, reload and retry. Concurrent changes are rejected instead of overwriting newer pricing."
+    ]
+  },
+  {
+    "slug": "understand-live-transfer-quotes",
+    "portal": "business",
+    "title": "Review a live transfer quote",
+    "summary": "Understand fresh provider checks, the quoted customer rate, separate fees and quote expiry before creating a business transfer.",
+    "category": "Payments",
+    "pageRoute": "/business/transfers",
+    "keywords": ["live FX", "provider rate", "quote unavailable", "markup", "fees", "expiry"],
+    "adminRoles": [],
+    "permissions": ["ViewTransfers", "CreateTransfers"],
+    "businessRoles": [],
+    "allowNoBusiness": false,
+    "isPage": false,
+    "reviewedOn": "2026-10-20",
+    "prerequisites": [
+      "Permission to view and create transfers for the selected business, with an eligible corridor and beneficiary."
+    ],
+    "steps": [
+      {
+        "title": "Choose the transfer inputs",
+        "instruction": "Open Transfers and prepare the intended source, destination and amount. Request Get quote after the inputs are correct. Each new quote requires a live provider check through the server."
+      },
+      {
+        "title": "Read the complete quoted amounts",
+        "instruction": "Review source amount, destination amount, customer rate, fee, total payable and expiry. The customer rate includes the configured server markup. The displayed transfer fee is calculated separately under the existing corridor rules."
+      },
+      {
+        "title": "Use the quote's saved validity",
+        "instruction": "A successful quote keeps its saved pricing until expiry or use. A later provider refresh does not reprice that quote or an already-created transfer. Changing the amount or corridor requires a new quote."
+      },
+      {
+        "title": "Handle an unavailable new quote",
+        "instruction": "If the fresh check fails, request again when the service is available. An earlier preview is not a substitute for the failed request. Give support the direction, amount, time and displayed reference if the problem persists."
+      }
+    ],
+    "expectedResult": "A successful new quote shows the server-authoritative amounts and expiry; a failed check leaves no new usable preview.",
+    "warnings": [
+      "Getting a quote does not create or fund a transfer. Creating, approving and funding a transfer remain separate actions with their existing controls."
+    ],
+    "troubleshooting": [
+      "The administrator may need to activate a provider configuration for the exact direction or correct provider access. You cannot resolve this by entering your own rate.",
+      "A previous successful quote or scheduled refresh does not guarantee current provider availability.",
+      "If creation was already submitted and its response is uncertain, inspect the existing transfer before retrying creation."
+    ]
+  },
+  {
+    "slug": "understand-live-instant-quotes",
+    "portal": "business",
+    "title": "Review a live Instant conversion quote",
+    "summary": "Request current server pricing, review any business pricing adjustment and keep each conversion within its own quote expiry.",
+    "category": "Trading",
+    "pageRoute": "/business/trading",
+    "keywords": ["Instant", "live FX", "conversion quote", "business pricing", "provider unavailable", "expiry"],
+    "adminRoles": [],
+    "permissions": ["ViewTrading", "Trade"],
+    "businessRoles": [],
+    "allowNoBusiness": false,
+    "isPage": false,
+    "reviewedOn": "2026-10-20",
+    "prerequisites": [
+      "Permission to view trading and trade for the selected business, an active Instant pair and eligible funded source accounts."
+    ],
+    "steps": [
+      {
+        "title": "Request the intended conversion",
+        "instruction": "Open Trading. In Convert assets, choose the Pair and Source amount, then Get quote. The server checks the provider for each new Instant quote and confirms the pair, assets, accounts and available liquidity."
+      },
+      {
+        "title": "Review the returned rate and amounts",
+        "instruction": "Read the customer rate, source and destination amounts and expiry. The server applies the provider configuration markup once, then any existing business pricing policy. The client does not add another provider markup."
+      },
+      {
+        "title": "Observe the quote's expiry",
+        "instruction": "Validity starts after the live provider check. The quote retains its saved economics until expiry or use; a later market check does not update it. If it expires or the inputs change, request a new quote and review the new amounts."
+      },
+      {
+        "title": "Resolve an unavailable quote",
+        "instruction": "If the provider check fails or the pair changes during the request, there is no new usable quote. Retry with current inputs after the issue is resolved. Give support the exact direction, amount, UTC time and displayed error or reference."
+      }
+    ],
+    "expectedResult": "The conversion preview comes from a fresh provider observation and records its own amounts and expiry without executing the conversion.",
+    "warnings": [
+      "Execute conversion moves funds and is a separate action. Quoting alone does not reserve or settle the conversion.",
+      "Marketplace orders and counterparty RFQs keep their existing order and offered-price workflows. This guide concerns Instant provider-priced quotes."
+    ],
+    "troubleshooting": [
+      "The provider must enable Instant conversion for the selected rate. Send money availability alone does not enable a conversion.",
+      "A paused pair, unavailable asset, inactive account or insufficient house liquidity can prevent a quote even when the provider is reachable.",
+      "The background refresh schedule does not control how old a new quote may be: every new quote still needs a successful live check."
+    ]
+  }
+]

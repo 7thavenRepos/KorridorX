@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using KorridorX.Services.Compliance;
+using KorridorX.Services.Fx;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -59,6 +60,11 @@ public sealed class KorridorXWebApplicationFactory : WebApplicationFactory<Progr
             // is covered by dedicated provider/parser/unit tests.
             services.RemoveAll<IComplianceScreeningService>();
             services.AddScoped<IComplianceScreeningService, NoOpComplianceScreeningService>();
+
+            // Existing money-movement fixtures seed prices explicitly. Provider-rate tests
+            // construct the real service separately; no test workflow makes a live FX call.
+            services.RemoveAll<ILiveFxRateService>();
+            services.AddScoped<ILiveFxRateService, SeededWorkflowFxRateService>();
         });
     }
 }

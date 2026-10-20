@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using KorridorX.Dtos.Treasury;
+using KorridorX.Dtos.Fx;
 using KorridorX.Infrastructure;
 using KorridorX.Services.Fx;
 using Microsoft.AspNetCore.Authorization;
@@ -13,7 +14,42 @@ namespace KorridorX.Controllers;
 public sealed class AdminFxOperationsController : ControllerBase
 {
     private readonly IFxOperationsService _service;
-    public AdminFxOperationsController(IFxOperationsService service) => _service = service;
+    private readonly IFxProviderRateService _providers;
+    public AdminFxOperationsController(IFxOperationsService service, IFxProviderRateService providers)
+    { _service = service; _providers = providers; }
+
+    [HttpGet("options")]
+    public async Task<IActionResult> Options(CancellationToken ct) =>
+        Ok(ApiResponses.Ok(await _providers.GetOptionsAsync(ct), "FX pair and provider options retrieved."));
+
+    [HttpGet("configurations")]
+    public async Task<IActionResult> Configurations(CancellationToken ct) =>
+        Ok(ApiResponses.Ok(await _providers.GetConfigurationsAsync(ct), "FX provider configurations retrieved."));
+
+    [HttpPost("preview")]
+    [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
+    public async Task<IActionResult> Preview([FromBody] SaveFxProviderConfigurationRequestDto request, CancellationToken ct) =>
+        Ok(ApiResponses.Ok(await _providers.PreviewAsync(request, ct), "Live provider rate checked. This preview is not an executable quote."));
+
+    [HttpPost("configurations")]
+    public async Task<IActionResult> CreateConfiguration([FromBody] SaveFxProviderConfigurationRequestDto request, CancellationToken ct) =>
+        Ok(ApiResponses.Ok(await _providers.SaveAsync(GetUserId(), null, request, ct), "FX provider draft saved."));
+
+    [HttpPut("configurations/{id:guid}")]
+    public async Task<IActionResult> UpdateConfiguration(Guid id, [FromBody] SaveFxProviderConfigurationRequestDto request, CancellationToken ct) =>
+        Ok(ApiResponses.Ok(await _providers.SaveAsync(GetUserId(), id, request, ct), "FX provider draft updated."));
+
+    [HttpPost("configurations/{id:guid}/activate")]
+    public async Task<IActionResult> ActivateConfiguration(Guid id, [FromBody] FxConfigurationRevisionRequestDto request, CancellationToken ct) =>
+        Ok(ApiResponses.Ok(await _providers.ActivateAsync(GetUserId(), id, request.Revision, ct), "FX provider configuration activated with a fresh rate."));
+
+    [HttpPost("configurations/{id:guid}/deactivate")]
+    public async Task<IActionResult> DeactivateConfiguration(Guid id, [FromBody] FxConfigurationRevisionRequestDto request, CancellationToken ct) =>
+        Ok(ApiResponses.Ok(await _providers.DeactivateAsync(GetUserId(), id, request.Revision, ct), "FX provider configuration deactivated."));
+
+    [HttpPost("configurations/{id:guid}/refresh")]
+    public async Task<IActionResult> RefreshConfiguration(Guid id, [FromBody] FxConfigurationRevisionRequestDto request, CancellationToken ct) =>
+        Ok(ApiResponses.Ok(await _providers.RefreshAsync(GetUserId(), id, request.Revision, ct), "FX provider rate checked successfully."));
 
     [HttpGet("dashboard")]
     public async Task<IActionResult> Dashboard(CancellationToken ct) =>

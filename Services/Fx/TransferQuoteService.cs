@@ -1,6 +1,7 @@
 using KorridorX.Data;
 using KorridorX.Dtos.Fx;
 using KorridorX.Models.Fx;
+using KorridorX.Providers.Remittance;
 using Microsoft.EntityFrameworkCore;
 
 namespace KorridorX.Services.Fx;
@@ -8,10 +9,14 @@ namespace KorridorX.Services.Fx;
 public class TransferQuoteService : ITransferQuoteService
 {
     private readonly AppDbContext _db;
+    private readonly ILiveFxRateService _liveRates;
+    private readonly IRemittanceProvider _remittanceProvider;
 
-    public TransferQuoteService(AppDbContext db)
+    public TransferQuoteService(AppDbContext db, ILiveFxRateService liveRates, IRemittanceProvider remittanceProvider)
     {
         _db = db;
+        _liveRates = liveRates;
+        _remittanceProvider = remittanceProvider;
     }
 
     public async Task<TransferQuoteDto> CreateQuoteAsync(
@@ -56,22 +61,6 @@ public class TransferQuoteService : ITransferQuoteService
         await EnsureSendingCorridorAsync(sourceCountryCode, sourceCurrencyCode, ct);
         await EnsureReceivingCorridorAsync(destinationCountryCode, destinationCurrencyCode, ct);
 
-        var exchangeRate = await _db.ExchangeRates
-            .AsNoTracking()
-            .Where(x =>
-                x.SourceCurrencyCode == sourceCurrencyCode &&
-                x.DestinationCurrencyCode == destinationCurrencyCode &&
-                x.IsActive &&
-                x.EffectiveFrom <= DateTime.UtcNow &&
-                (x.EffectiveTo == null || x.EffectiveTo > DateTime.UtcNow))
-            .OrderByDescending(x => x.EffectiveFrom)
-            .FirstOrDefaultAsync(ct);
-
-        if (exchangeRate is null)
-        {
-            throw new InvalidOperationException("Exchange rate is not available for this currency pair.");
-        }
-
         var fee = await _db.TransferFees
             .AsNoTracking()
             .Where(x =>
@@ -91,35 +80,40 @@ public class TransferQuoteService : ITransferQuoteService
             throw new InvalidOperationException("Transfer fee is not configured for this corridor.");
         }
 
-        var feeAmount = fee.FixedFee + Math.Round(request.SourceAmount * fee.PercentageFee / 100m, 2);
-        var totalPayableAmount = request.SourceAmount + feeAmount;
-        var destinationAmount = Math.Round(request.SourceAmount * exchangeRate.CustomerRate, 2);
+        return await _liveRates.UseFreshRateAsync(
+            sourceCurrencyCode, destinationCurrencyCode, FxRateUse.Transfer,
+            async (exchangeRate, observationId, quoteCt) =>
+            {
+                var feeAmount = fee.FixedFee + Math.Round(request.SourceAmount * fee.PercentageFee / 100m, 2);
+                var totalPayableAmount = request.SourceAmount + feeAmount;
+                var destinationAmount = Math.Round(request.SourceAmount * exchangeRate.CustomerRate, 2);
 
-        var quote = new TransferQuote
-        {
-            CustomerProfileId = customerProfile.Id,
-            SourceCountryCode = sourceCountryCode,
-            DestinationCountryCode = destinationCountryCode,
-            SourceCurrencyCode = sourceCurrencyCode,
-            DestinationCurrencyCode = destinationCurrencyCode,
-            TransferType = request.TransferType,
-            SourceAmount = request.SourceAmount,
-            DestinationAmount = destinationAmount,
-            ProviderRate = exchangeRate.ProviderRate,
-            CustomerRate = exchangeRate.CustomerRate,
-            FeeAmount = feeAmount,
-            FeeCurrencyCode = fee.FeeCurrencyCode,
-            TotalPayableAmount = totalPayableAmount,
-            ProviderCode = exchangeRate.ProviderCode,
-            ProviderQuoteId = null,
-            ExpiresAt = DateTime.UtcNow.AddMinutes(10),
-            IsUsed = false
-        };
+                var quote = new TransferQuote
+                {
+                    CustomerProfileId = customerProfile.Id,
+                    SourceCountryCode = sourceCountryCode,
+                    DestinationCountryCode = destinationCountryCode,
+                    SourceCurrencyCode = sourceCurrencyCode,
+                    DestinationCurrencyCode = destinationCurrencyCode,
+                    TransferType = request.TransferType,
+                    SourceAmount = request.SourceAmount,
+                    DestinationAmount = destinationAmount,
+                    ProviderRate = exchangeRate.ProviderRate,
+                    CustomerRate = exchangeRate.CustomerRate,
+                    FxRateObservationId = observationId,
+                    FeeAmount = feeAmount,
+                    FeeCurrencyCode = fee.FeeCurrencyCode,
+                    TotalPayableAmount = totalPayableAmount,
+                    ProviderCode = _remittanceProvider.ProviderCode.ToString(),
+                    ProviderQuoteId = null,
+                    ExpiresAt = DateTime.UtcNow.AddMinutes(10),
+                    IsUsed = false
+                };
 
-        _db.TransferQuotes.Add(quote);
-        await _db.SaveChangesAsync(ct);
-
-        return ToDto(quote);
+                _db.TransferQuotes.Add(quote);
+                await _db.SaveChangesAsync(quoteCt);
+                return ToDto(quote);
+            }, ct);
     }
 
     public async Task<TransferQuoteDto> GetQuoteByIdAsync(

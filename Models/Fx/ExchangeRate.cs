@@ -1,4 +1,4 @@
-﻿using KorridorX.Models.Common;
+using KorridorX.Models.Common;
 
 namespace KorridorX.Models.Fx;
 
@@ -14,6 +14,8 @@ public class ExchangeRate : AuditableEntity
 
     public string ProviderCode { get; set; } = "Blaaiz";
     public string? ProviderRateId { get; set; }
+    public Guid? FxProviderRateConfigurationId { get; set; }
+    public Guid? FxRateObservationId { get; set; }
 
     public DateTime EffectiveFrom { get; set; } = DateTime.UtcNow;
     public DateTime? EffectiveTo { get; set; }

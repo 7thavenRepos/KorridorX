@@ -400,6 +400,23 @@ builder.Services.AddScoped<IOperationalHealthService, OperationalHealthService>(
 builder.Services.AddScoped<IBusinessContextAccessor, HttpBusinessContextAccessor>();
 builder.Services.AddScoped<ITransferQuoteService, TransferQuoteService>();
 builder.Services.AddScoped<IFxOperationsService, FxOperationsService>();
+builder.Services.AddScoped<KorridorX.Services.Fx.FxProviderRateService>();
+builder.Services.AddScoped<KorridorX.Services.Fx.IFxProviderRateService>(sp => sp.GetRequiredService<KorridorX.Services.Fx.FxProviderRateService>());
+builder.Services.AddScoped<KorridorX.Services.Fx.ILiveFxRateService>(sp => sp.GetRequiredService<KorridorX.Services.Fx.FxProviderRateService>());
+builder.Services.AddSingleton<KorridorX.Providers.Fx.IBlaaizFxRateTokenService, KorridorX.Providers.Fx.BlaaizFxRateTokenService>();
+builder.Services.AddHttpClient(KorridorX.Providers.Fx.BlaaizFxRateTokenService.HttpClientName, (sp, client) =>
+{
+    var options = sp.GetRequiredService<IOptions<BlaaizOptions>>().Value;
+    client.Timeout = TimeSpan.FromSeconds(Math.Clamp(options.TimeoutSeconds, 1, 60));
+    client.DefaultRequestHeaders.UserAgent.ParseAdd("KorridorX/1.0");
+}).ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
+builder.Services.AddHttpClient<KorridorX.Providers.Fx.IFxRateProvider, KorridorX.Providers.Fx.BlaaizFxRateProvider>((sp, client) =>
+{
+    var options = sp.GetRequiredService<IOptions<BlaaizOptions>>().Value;
+    client.Timeout = TimeSpan.FromSeconds(Math.Clamp(options.TimeoutSeconds, 1, 60));
+    client.DefaultRequestHeaders.UserAgent.ParseAdd("KorridorX/1.0");
+}).ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
+builder.Services.AddHostedService<KorridorX.BackgroundJobs.FxRateRefreshWorker>();
 builder.Services.AddScoped<IFinanceReportingService, FinanceReportingService>();
 builder.Services.AddScoped<IAccountingService, AccountingService>();
 builder.Services.AddScoped<IFinancialCloseService, FinancialCloseService>();

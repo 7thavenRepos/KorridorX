@@ -2,6 +2,7 @@ using KorridorX.Data;
 using KorridorX.Configuration;
 using KorridorX.Infrastructure;
 using KorridorX.Models.Enums;
+using KorridorX.Services.Fx;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
@@ -20,16 +21,19 @@ namespace KorridorX.Controllers;
 public sealed class MarketingQuotesController : ControllerBase
 {
     private readonly AppDbContext _db;
+    private readonly ILiveFxRateService _liveRates;
 
-    public MarketingQuotesController(AppDbContext db) => _db = db;
+    public MarketingQuotesController(AppDbContext db, ILiveFxRateService liveRates)
+    {
+        _db = db;
+        _liveRates = liveRates;
+    }
 
     [HttpGet("quote-options")]
     public async Task<IActionResult> GetOptions(CancellationToken ct)
     {
-        var now = DateTime.UtcNow;
-        var ratePairs = (await _db.ExchangeRates.AsNoTracking()
-            .Where(x => !x.IsDeleted && x.IsActive && x.CustomerRate > 0 &&
-                x.EffectiveFrom <= now && (x.EffectiveTo == null || x.EffectiveTo > now))
+        var ratePairs = (await _db.FxProviderRateConfigurations.AsNoTracking()
+            .Where(x => !x.IsDeleted && x.IsActive)
             .Select(x => new { x.SourceCurrencyCode, x.DestinationCurrencyCode })
             .Distinct().ToListAsync(ct))
             .Select(x => (x.SourceCurrencyCode, x.DestinationCurrencyCode)).ToHashSet();
@@ -118,13 +122,6 @@ public sealed class MarketingQuotesController : ControllerBase
         if (!sourceAvailable || !destinationAvailable)
             return NotFound(ApiResponses.Fail("This corridor is unavailable.", "QUOTE_UNAVAILABLE"));
 
-        var now = DateTime.UtcNow;
-        var rate = await _db.ExchangeRates.AsNoTracking()
-            .Where(x => !x.IsDeleted && x.IsActive && x.CustomerRate > 0 &&
-                x.SourceCurrencyCode == fromAsset && x.DestinationCurrencyCode == toAsset &&
-                x.EffectiveFrom <= now && (x.EffectiveTo == null || x.EffectiveTo > now))
-            .OrderByDescending(x => x.EffectiveFrom)
-            .FirstOrDefaultAsync(ct);
         var fee = await _db.TransferFees.AsNoTracking()
             .Where(x => !x.IsDeleted && x.IsActive &&
                 x.TransferType == TransferType.ConsumerToConsumer &&
@@ -134,26 +131,31 @@ public sealed class MarketingQuotesController : ControllerBase
                 sourceAmount >= x.MinAmount && (x.MaxAmount == null || sourceAmount <= x.MaxAmount))
             .OrderByDescending(x => x.MinAmount)
             .FirstOrDefaultAsync(ct);
-        if (rate == null || fee == null)
+        if (fee == null)
             return NotFound(ApiResponses.Fail("A quote is unavailable for this amount.", "QUOTE_UNAVAILABLE"));
 
-        // Same arithmetic and fee selection as TransferQuoteService.CreateQuoteAsync.
-        var feeAmount = fee.FixedFee + Math.Round(sourceAmount * fee.PercentageFee / 100m, 2);
-        var destinationAmount = Math.Round(sourceAmount * rate.CustomerRate, 2);
-        return Ok(ApiResponses.Ok(new
-        {
-            SourceCountryCode = fromCountry,
-            DestinationCountryCode = toCountry,
-            SourceCurrencyCode = fromAsset,
-            DestinationCurrencyCode = toAsset,
-            SourceAmount = sourceAmount,
-            DestinationAmount = destinationAmount,
-            CustomerRate = rate.CustomerRate,
-            FeeAmount = feeAmount,
-            FeeCurrencyCode = fee.FeeCurrencyCode,
-            TotalPayableAmount = sourceAmount + feeAmount,
-            AsOfUtc = rate.EffectiveFrom
-        }, "Indicative quote only; confirm the final quote in the authenticated app."));
+        return await _liveRates.UseFreshRateAsync<IActionResult>(
+            fromAsset, toAsset, FxRateUse.Preview,
+            (rate, observationId, quoteCt) =>
+            {
+                // Same arithmetic and fee selection as TransferQuoteService.CreateQuoteAsync.
+                var feeAmount = fee.FixedFee + Math.Round(sourceAmount * fee.PercentageFee / 100m, 2);
+                var destinationAmount = Math.Round(sourceAmount * rate.CustomerRate, 2);
+                return Task.FromResult<IActionResult>(Ok(ApiResponses.Ok(new
+                {
+                    SourceCountryCode = fromCountry,
+                    DestinationCountryCode = toCountry,
+                    SourceCurrencyCode = fromAsset,
+                    DestinationCurrencyCode = toAsset,
+                    SourceAmount = sourceAmount,
+                    DestinationAmount = destinationAmount,
+                    CustomerRate = rate.CustomerRate,
+                    FeeAmount = feeAmount,
+                    FeeCurrencyCode = fee.FeeCurrencyCode,
+                    TotalPayableAmount = sourceAmount + feeAmount,
+                    AsOfUtc = rate.EffectiveFrom
+                }, "Indicative quote only; confirm the final quote in the authenticated app.")));
+            }, ct);
     }
 
     private static bool Valid(string code, int maxLength) =>
