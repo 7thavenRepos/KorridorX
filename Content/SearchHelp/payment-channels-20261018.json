@@ -171,7 +171,7 @@
     "businessRoles": [],
     "allowNoBusiness": false,
     "isPage": false,
-    "reviewedOn": "2026-10-20",
+    "reviewedOn": "2026-10-21",
     "slug": "automatic-wallet-receiving-accounts",
     "title": "Enable automatic personal receiving accounts",
     "summary": "Prepare provider-backed deposit routes so adding a personal wallet can open its dedicated receiving account.",
@@ -207,6 +207,10 @@
         "instruction": "Adding a personal wallet automatically requests its receiving account when eligible. Existing wallets request setup when the user opens Add money. Pending results expose Check account status; only provider-confirmed Active details can be used. Opening a wallet or creating receiving details does not create a transfer or credit a balance."
       },
       {
+        "title": "Confirm the account-ready security notice",
+        "instruction": "When the provider confirms an Active receiving account, KorridorX records one branded email and in-app notice containing the available bank details. Registered permitted devices receive a generic push without account numbers. Pending setup does not announce that the account is ready. For an existing Active account created before these notices were introduced, an explicit setup or status check can queue its one missing notice."
+      },
+      {
         "title": "Resolve a blocked account",
         "instruction": "VerificationRequired means complete identity approval and check again. Unavailable means review the route, country and currency capabilities. An uncertain creation is looked up before another creation is allowed. Existing accounts remain tied to their saved provider connection and route."
       }
@@ -219,7 +223,8 @@
     "troubleshooting": [
       "No payment method: inspect active Payment channels, the individual audience, profile country, country-asset Deposit permission and verified provider wallet. Adding a wallet does not create these admin settings.",
       "A previous-connection receiving account requires operational reconciliation; it must not silently move to a new provider connection.",
-      "USD showing zero decimal places is asset configuration; correct Master data deliberately before further amount testing."
+      "USD showing zero decimal places: review Master data and the wallet API decimalPlaces value, then refresh the wallet. A missing or unreadable value can also display as zero.",
+      "Invalid scopes: check the failed provider request and the token scope list. Dedicated accounts require virtual-account:read and virtual-account:create to be assigned to the current provider credentials and requested by the backend. Preserve the production connection and existing payment permissions."
     ]
   },
   {
@@ -229,10 +234,10 @@
     "businessRoles": [],
     "allowNoBusiness": false,
     "isPage": false,
-    "reviewedOn": "2026-10-20",
+    "reviewedOn": "2026-10-21",
     "slug": "wallet-security-and-funding-notifications",
     "title": "Check wallet, PIN and funding notifications",
-    "summary": "Understand automatic device registration, confirmed-credit receipts and branded email delivery.",
+    "summary": "Check account-ready security notices, verified wallet-credit receipts and branded email delivery.",
     "pageRoute": "/admin/monitoring",
     "keywords": [
       "push",
@@ -242,7 +247,10 @@
       "funding",
       "wallet",
       "Firebase",
-      "SMTP"
+      "SMTP",
+      "receiving account",
+      "bank details",
+      "Ignored webhook"
     ],
     "adminRoles": [
       "Operations",
@@ -260,7 +268,11 @@
       },
       {
         "title": "Review the event",
-        "instruction": "New personal wallet creation and successful PIN setup/change queue account notices. Verified incoming wallet credits queue the actual amount credited and transaction reference. Existing transfer, support and account-security notification flows remain in place. Viewing a balance or checking account status is not a new funding event."
+        "instruction": "New personal wallet creation and successful PIN setup/change queue account notices. Provider-confirmed Active receiving accounts queue one account-ready email and in-app notice with the available bank details; their push body is generic. Business bank details are sent to the owner and active members permitted to view wallets. Verified incoming wallet credits queue the actual amount credited and transaction reference. Checking a balance or account status never credits a wallet."
+      },
+      {
+        "title": "Distinguish provider receipt from wallet credit",
+        "instruction": "In Provider operations, inspect the collection webhook and matching wallet activity before diagnosing delivery. A provider SUCCESSFUL payload retained as Ignored has not been handled through that event. Dedicated-bank payloads may identify the receiving account inside virtual_bank_account.id; source_information belongs to the sender and is not an ownership key. Credit still requires the current receiving-account connection and independent provider transaction verification."
       },
       {
         "title": "Review delivery",
@@ -279,7 +291,8 @@
     "troubleshooting": [
       "After a database reset, signing in registers the device again; older erased notification history is not recreated.",
       "Check NotificationDelivery WorkerEnabled, Smtp IsEnabled and Firebase IsEnabled plus existing sender/project credentials through the authorized server configuration process. Do not paste secrets into support messages.",
-      "Queued email with no delivery: review worker and SMTP state. Push failure with phone permission: review device registration, matching Firebase project, server credentials and delivery status."
+      "Queued email with no delivery: review worker and SMTP state. Push failure with phone permission: review device registration, matching Firebase project, server credentials and delivery status.",
+      "An Ignored dedicated-bank event has no funding receipt until it is successfully verified and credited. After the mapping fix is deployed, a controlled provider resend with a valid current signature and timestamp can retry the identical retained successful bank-deposit payload. Failed verification retains the event for review; duplicate delivery cannot credit the same provider transaction twice. Deployment does not automatically resend or replay payments."
     ]
   }
 ]

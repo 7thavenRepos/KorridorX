@@ -12,6 +12,7 @@ using KorridorX.Models.Providers;
 using KorridorX.Providers.Remittance.Blaaiz;
 using KorridorX.Providers.Remittance.Blaaiz.Models;
 using KorridorX.Services.Compliance;
+using KorridorX.Services.Notifications;
 using KorridorX.Services.PaymentChannels;
 using KorridorX.Services.Payments;
 using KorridorX.Services.Providers;
@@ -25,7 +26,7 @@ using Microsoft.Extensions.Options;
 namespace KorridorX.Tests;
 
 [Collection(ReleaseCandidateDatabaseCollection.Name)]
-public sealed class ConsumerWalletReceivingAccountWorkflowTests(ReleaseCandidateDatabaseFixture fixture)
+public sealed partial class ConsumerWalletReceivingAccountWorkflowTests(ReleaseCandidateDatabaseFixture fixture)
 {
     [DatabaseIntegrationFact]
     public async Task Setup_requests_once_then_recovers_readiness_without_another_creation_or_financial_change()
@@ -39,6 +40,8 @@ public sealed class ConsumerWalletReceivingAccountWorkflowTests(ReleaseCandidate
         var first = await service.SetupAsync(s.UserId, s.Wallet.Id);
         Assert.Equal("Pending", first.Status);
         Assert.Empty(first.Account!.Instructions.Fields);
+        Assert.False(await db.NotificationMessages.AnyAsync(x => x.UserId == s.UserId &&
+            x.RelatedEntityType == WalletActivityNotificationFactory.ReceivingAccountEntityType));
         Assert.Equal(1, s.Api.Creates);
         Assert.Equal("Pending", (await service.GetAsync(s.UserId, s.Wallet.Id)).Status);
         Assert.Equal(0, s.Api.Lookups);
@@ -49,6 +52,8 @@ public sealed class ConsumerWalletReceivingAccountWorkflowTests(ReleaseCandidate
         Assert.Equal(first.Account.Id, second.Account.Id);
         Assert.Equal(1, s.Api.Creates);
         Assert.Equal(1, s.Api.Lookups);
+        Assert.Single(await db.NotificationMessages.Where(x => x.UserId == s.UserId &&
+            x.RelatedEntityType == WalletActivityNotificationFactory.ReceivingAccountEntityType).ToListAsync());
         Assert.Equal("Ready", (await service.SetupAsync(s.UserId, s.Wallet.Id)).Status);
         Assert.Equal(1, s.Api.Lookups);
         Assert.Single(await db.WalletDepositAccounts.Where(x => x.FinancialAccountId == s.Wallet.Id).ToListAsync());
@@ -152,8 +157,19 @@ public sealed class ConsumerWalletReceivingAccountWorkflowTests(ReleaseCandidate
         var contexts = new WalletFundingContextService(db, null!, new ComplianceGateService(db));
         var channels = new PaymentChannelService(db, s.Resolver,
             Options.Create(new BlaaizOptions { IsEnabled = true, BaseUrl = "https://api-prod.blaaiz.com" }), new CollectionPaymentMethodPolicy());
-        var accounts = new WalletDepositAccountService(db, channels, contexts, s.Resolver, s.Client, null!, null!);
+        var accounts = new WalletDepositAccountService(db, channels, contexts, s.Resolver, s.Client, null!, null!, Notifications(db));
         return new(db, contexts, channels, accounts, s.Resolver, NullLogger<ConsumerWalletReceivingAccountService>.Instance);
+    }
+
+    private static NotificationQueueService Notifications(AppDbContext db) => new(db,
+        Options.Create(new NotificationDeliveryOptions { Firebase = new FirebasePushDeliveryOptions { IsEnabled = true } }));
+
+    private static WalletDepositAccountService Accounts(AppDbContext db, Scenario s, INotificationQueueService? notifications = null)
+    {
+        var contexts = new WalletFundingContextService(db, null!, new ComplianceGateService(db));
+        var channels = new PaymentChannelService(db, s.Resolver,
+            Options.Create(new BlaaizOptions { IsEnabled = true, BaseUrl = "https://api-prod.blaaiz.com" }), new CollectionPaymentMethodPolicy());
+        return new(db, channels, contexts, s.Resolver, s.Client, null!, null!, notifications ?? Notifications(db));
     }
 
     private static async Task<Scenario> Seed(AppDbContext db, bool approved = true, bool enabled = true)

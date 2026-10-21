@@ -28,7 +28,10 @@ public sealed class ConsumerWalletReceivingAccountService(
     public async Task<ConsumerWalletReceivingAccountDto> SetupAsync(Guid userId, Guid walletId, CancellationToken ct = default)
     {
         var inspection = await InspectAsync(userId, walletId, ct);
-        if (!inspection.CanSetup || inspection.ChannelId is not { } channelId) return inspection.Status;
+        // POST setup also ensures one notice for a previously ready account.
+        // The ordinary GET remains read-only and does not send notifications.
+        if (inspection.ChannelId is not { } channelId ||
+            (!inspection.CanSetup && inspection.Status.Status != "Ready")) return inspection.Status;
 
         try
         {

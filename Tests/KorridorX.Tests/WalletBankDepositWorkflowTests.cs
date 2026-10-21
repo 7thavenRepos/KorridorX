@@ -42,7 +42,7 @@ public sealed class WalletBankDepositWorkflowTests(ReleaseCandidateDatabaseFixtu
     }
     private sealed record Fixture(WalletDepositAccountService Service, WalletDepositAccount Bank, FinancialAccount Wallet,
         ProviderProxy Provider, EmbeddedInboundCollectionRequest Request, Guid UserId);
-    private static async Task<Fixture> Setup(AppDbContext db)
+    private static async Task<Fixture> Setup(AppDbContext db, bool failAfterNotification = false)
     {
         var resolver = new Resolver(); var suffix = Guid.NewGuid().ToString("N"); var userId = Guid.NewGuid();
         db.Users.Add(new ApplicationUser { Id = userId, UserName = "bank-" + suffix, NormalizedUserName = "BANK-" + suffix,
@@ -66,8 +66,14 @@ public sealed class WalletBankDepositWorkflowTests(ReleaseCandidateDatabaseFixtu
             null, null, null, bank.ProviderAccountId, bank.ProviderCustomerId, null, bank.AccountNumber, "{}", DateTime.UtcNow);
         proxy.Result = new(request.ProviderTransactionId, null, "collection", "SUCCESSFUL", "NGN", 100m, null, null, "{}", Guid.NewGuid());
         var channels = new PaymentChannelService(db, resolver, Options.Create(new BlaaizOptions()), new CollectionPaymentMethodPolicy());
-        var notifications = new NotificationQueueService(db, Options.Create(new NotificationDeliveryOptions()));
-        return new(new WalletDepositAccountService(db, channels, null!, resolver, null!, provider, new ConsumerWalletFundingCreditService(db, notifications)), bank, wallet, proxy, request, userId);
+        INotificationQueueService notifications = new NotificationQueueService(db, Options.Create(new NotificationDeliveryOptions()));
+        if (failAfterNotification)
+        {
+            var failing = DispatchProxy.Create<INotificationQueueService, ConsumerWalletReceivingAccountWorkflowTests.QueueThenFail>();
+            ((ConsumerWalletReceivingAccountWorkflowTests.QueueThenFail)(object)failing).Inner = notifications;
+            notifications = failing;
+        }
+        return new(new WalletDepositAccountService(db, channels, null!, resolver, null!, provider, new ConsumerWalletFundingCreditService(db, notifications), notifications), bank, wallet, proxy, request, userId);
     }
     [DatabaseIntegrationFact] public async Task Verified_deposit_posts_once_even_when_channel_was_paused_after_account_creation()
     {
@@ -92,6 +98,22 @@ public sealed class WalletBankDepositWorkflowTests(ReleaseCandidateDatabaseFixtu
         Assert.Empty(await db.Collections.Where(x => x.FinancialAccountId == f.Wallet.Id).ToListAsync());
         Assert.False(await db.NotificationMessages.AnyAsync(x => x.UserId == f.UserId &&
             x.RelatedEntityType == WalletActivityNotificationFactory.FundingEntityType));
+    }
+
+    [DatabaseIntegrationFact] public async Task Rolled_back_bank_credit_does_not_leak_a_funding_email_during_outer_webhook_save()
+    {
+        await using var scope = fixture.Factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>(); var f = await Setup(db, failAfterNotification: true);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => f.Service.TryProcessDepositAsync(f.Request, default));
+        await db.SaveChangesAsync(); // The webhook handler saves only its failed receipt.
+        var wallet = await db.FinancialAccounts.AsNoTracking().SingleAsync(x => x.Id == f.Wallet.Id);
+        Assert.Equal(0m, wallet.AvailableBalance); Assert.Equal(0m, wallet.SettledBalance);
+        Assert.Empty(await db.Collections.Where(x => x.FinancialAccountId == f.Wallet.Id).ToListAsync());
+        Assert.Empty(await db.LedgerPostings.Where(x => x.FinancialAccountId == f.Wallet.Id).ToListAsync());
+        Assert.False(await db.ProviderTransactions.AnyAsync(x => x.ProviderTransactionId == f.Request.ProviderTransactionId));
+        Assert.False(await db.NotificationMessages.AnyAsync(x => x.UserId == f.UserId &&
+            x.RelatedEntityType == WalletActivityNotificationFactory.FundingEntityType));
+        Assert.DoesNotContain(db.NotificationMessages.Local, x => x.RelatedEntityType == WalletActivityNotificationFactory.FundingEntityType);
     }
     [DatabaseIntegrationFact] public async Task Unverified_owner_leaves_no_tracked_money_for_outer_webhook_save()
     {

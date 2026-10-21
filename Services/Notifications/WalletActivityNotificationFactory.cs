@@ -1,11 +1,44 @@
 using System.Globalization;
 using System.Text.Encodings.Web;
+using KorridorX.Models.Payments;
 
 namespace KorridorX.Services.Notifications;
 
 public static class WalletActivityNotificationFactory
 {
     public const string FundingEntityType = "WalletFunding";
+    // The AccountSecurity prefix keeps full bank details out of push previews.
+    // The dedicated type retains the useful account copy in authenticated notification history.
+    public const string ReceivingAccountEntityType = "AccountSecurity.ReceivingAccountReady";
+
+    public static (string Subject, string Body) ReceivingAccountReady(WalletDepositAccount account)
+    {
+        if (account.Status != "Active" ||
+            (string.IsNullOrWhiteSpace(account.AccountNumber) && string.IsNullOrWhiteSpace(account.Iban)))
+            throw new InvalidOperationException("A receiving-account notice requires confirmed bank details.");
+
+        var currency = HtmlEncoder.Default.Encode(account.AssetCode);
+        var details = new List<string>();
+        void Add(string label, string? value)
+        {
+            if (!string.IsNullOrWhiteSpace(value))
+                details.Add($"<p><strong>{label}:</strong> {HtmlEncoder.Default.Encode(value)}</p>");
+        }
+        Add("Currency", account.AssetCode);
+        Add("Bank", account.BankName);
+        Add("Account name", account.AccountName);
+        Add("Account number", account.AccountNumber);
+        Add("IBAN", account.Iban);
+        Add("Sort code", account.SortCode);
+        Add("Routing number", account.RoutingNumber);
+
+        return ($"Your {account.AssetCode} receiving bank account is ready",
+            $"<p>Your {currency} receiving bank account is ready to use with your KorridorX wallet.</p>" +
+            string.Concat(details) +
+            $"<p>Send only {currency} using these bank details. Your wallet is credited after the deposit is confirmed.</p>" +
+            "<p>If you did not request this receiving account, contact KorridorX support immediately.</p>" +
+            "<p>KorridorX will never ask you to share your password, transaction PIN or verification code.</p>");
+    }
 
     public static (string Subject, string Body) WalletAdded(string currencyCode)
     {

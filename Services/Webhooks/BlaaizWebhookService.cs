@@ -124,9 +124,19 @@ public class BlaaizWebhookService : IBlaaizWebhookService
         if (existing is not null && retryableEvent && existing.RawPayloadJson != rawPayload)
             throw new InvalidOperationException("A webhook event ID cannot be reused with a different payload.");
 
+        // A provider may redeliver an older, retained bank deposit after its
+        // schema/mapping was corrected. Only a fresh, valid signature reaches
+        // this point, and the exact saved payload must still match. Do not turn
+        // ignored events generally into a background financial replay queue.
+        var retryIgnoredBankDeposit = existing is not null &&
+            existing.ProcessingStatus == WebhookProcessingStatus.Ignored &&
+            string.Equals(existing.EventType, eventType, StringComparison.OrdinalIgnoreCase) &&
+            eventType.Equals("collection.completed", StringComparison.OrdinalIgnoreCase) &&
+            ((providerStatus ?? EventStatus(eventType)).Trim().ToUpperInvariant() is "SUCCESSFUL" or "COMPLETED") &&
+            !string.IsNullOrWhiteSpace(ReadTransactionId(data, root, "transaction_id", "provider_transaction_id", "collection_id")) &&
+            !string.IsNullOrWhiteSpace(ReadVirtualBankAccountId(data, root));
         var retryEvent = existing is not null &&
-            existing.ProcessingStatus == WebhookProcessingStatus.Failed &&
-            retryableEvent;
+            (existing.ProcessingStatus == WebhookProcessingStatus.Failed && retryableEvent || retryIgnoredBankDeposit);
         if (existing is not null && !retryEvent)
         {
             return new BlaaizWebhookResult(
@@ -140,8 +150,9 @@ public class BlaaizWebhookService : IBlaaizWebhookService
         {
             if (existing!.RawPayloadJson != rawPayload)
                 throw new InvalidOperationException("A webhook event ID cannot be reused with a different payload.");
+            var previousStatus = existing.ProcessingStatus;
             var claimed = await _db.WebhookEvents.Where(x => x.Id == existing.Id &&
-                    x.ProcessingStatus == WebhookProcessingStatus.Failed)
+                    x.ProcessingStatus == previousStatus)
                 .ExecuteUpdateAsync(setters => setters.SetProperty(x => x.ProcessingStatus, WebhookProcessingStatus.Processing), ct);
             if (claimed == 0)
                 return new BlaaizWebhookResult(existing.Id, existing.EventType, WebhookProcessingStatus.Processing.ToString(), true);
@@ -374,10 +385,10 @@ public class BlaaizWebhookService : IBlaaizWebhookService
                     ReadOptionalDecimal(data, root, "transaction_amount_without_fee", "amount_without_fee"),
                     ReadOptionalDecimal(data, root, "fee", "transaction_fee"),
                     ReadOptionalString(data, root, "fee_currency", "transaction_currency", "currency"),
-                    ReadOptionalString(data, root, "virtual_bank_account_id", "virtual_account_id", "bank_account_id", "account_id", "business_bank_account_id"),
+                    ReadVirtualBankAccountId(data, root),
                     ReadOptionalString(data, root, "customer_id"),
                     ReadOptionalString(data, root, "account_reference", "reservation_reference", "virtual_account_reference"),
-                    ReadOptionalString(data, root, "account_number", "virtual_account_number", "bank_account_number"),
+                    ReadVirtualBankAccountNumber(data, root),
                     rawPayload, ReadOptionalDateTime(data, root, "updated_at", "date", "timestamp") ?? DateTime.UtcNow), ct)) return true;
         }
 
@@ -393,9 +404,9 @@ public class BlaaizWebhookService : IBlaaizWebhookService
                 collectionTransactionId, collectionReference, ReadOptionalString(data, root, "transaction_status", "status") ?? EventStatus(eventType),
                 "CAD", embeddedAmount.Value, ReadOptionalDecimal(data, root, "transaction_amount_without_fee", "amount_without_fee"),
                 ReadOptionalDecimal(data, root, "fee", "transaction_fee"), "CAD",
-                ReadOptionalString(data, root, "virtual_bank_account_id", "virtual_account_id", "bank_account_id", "account_id", "business_bank_account_id"),
+                ReadVirtualBankAccountId(data, root),
                 ReadOptionalString(data, root, "customer_id"), ReadOptionalString(data, root, "account_reference", "reservation_reference", "virtual_account_reference"),
-                ReadOptionalString(data, root, "account_number", "virtual_account_number", "bank_account_number"), rawPayload,
+                ReadVirtualBankAccountNumber(data, root), rawPayload,
                 ReadOptionalDateTime(data, root, "updated_at", "date", "timestamp") ?? DateTime.UtcNow), ct)) return true;
         }
         if (!isRefund && await _interacDeposits.TryProcessAsync(rawPayload, ct)) return true;
@@ -431,10 +442,10 @@ public class BlaaizWebhookService : IBlaaizWebhookService
                         ReadOptionalDecimal(data, root, "transaction_amount_without_fee", "amount_without_fee"),
                         ReadOptionalDecimal(data, root, "fee", "transaction_fee"),
                         ReadOptionalString(data, root, "fee_currency", "transaction_currency", "currency"),
-                        ReadOptionalString(data, root, "virtual_bank_account_id", "virtual_account_id", "bank_account_id", "account_id", "business_bank_account_id"),
+                        ReadVirtualBankAccountId(data, root),
                         ReadOptionalString(data, root, "customer_id"),
                         ReadOptionalString(data, root, "account_reference", "reservation_reference", "virtual_account_reference"),
-                        ReadOptionalString(data, root, "account_number", "virtual_account_number", "bank_account_number"),
+                        ReadVirtualBankAccountNumber(data, root),
                         rawPayload,
                         ReadOptionalDateTime(data, root, "updated_at", "date", "timestamp") ?? DateTime.UtcNow),
                     ct);
@@ -1202,6 +1213,58 @@ public class BlaaizWebhookService : IBlaaizWebhookService
         }
 
         return null;
+    }
+
+    private static string? ReadVirtualBankAccountId(JsonElement primary, JsonElement fallback) =>
+        ReadVirtualBankAccountIdentity(primary, fallback, "account ID",
+            ["virtual_bank_account_id", "virtual_account_id", "bank_account_id", "account_id", "business_bank_account_id"],
+            ["id"]);
+
+    private static string? ReadVirtualBankAccountNumber(JsonElement primary, JsonElement fallback) =>
+        ReadVirtualBankAccountIdentity(primary, fallback, "account number",
+            ["account_number", "virtual_account_number", "bank_account_number"], ["account_number"], allowNullNested: true);
+
+    private static string? ReadVirtualBankAccountIdentity(JsonElement primary, JsonElement fallback,
+        string identityName, string[] flatNames, string[] nestedNames, bool allowNullNested = false)
+    {
+        string? identity = null;
+
+        void Include(JsonElement element, string propertyName, bool requireString = false)
+        {
+            if (!element.TryGetProperty(propertyName, out var value))
+                return;
+            // An IBAN-only account may explicitly omit its optional local number.
+            // A supplied receiving-account ID must always be meaningful text.
+            if (value.ValueKind == JsonValueKind.Null && (!requireString || allowNullNested)) return;
+            if (requireString && (value.ValueKind != JsonValueKind.String || string.IsNullOrWhiteSpace(value.GetString())))
+                throw new InvalidOperationException($"Blaaiz virtual-bank {identityName} must be a nonempty string.");
+            // Preserve the existing scalar handling for legacy flat aliases.
+            var candidate = value.ValueKind switch
+            {
+                JsonValueKind.String => value.GetString()?.Trim(),
+                JsonValueKind.Number or JsonValueKind.True or JsonValueKind.False => value.GetRawText(),
+                _ => throw new InvalidOperationException($"Blaaiz virtual-bank {identityName} must be a scalar value.")
+            };
+            if (string.IsNullOrWhiteSpace(candidate)) return;
+            if (identity is not null && !string.Equals(identity, candidate, StringComparison.Ordinal))
+                throw new InvalidOperationException($"Blaaiz webhook contains conflicting virtual-bank {identityName} values.");
+            identity = candidate;
+        }
+
+        // Only the explicitly named receiving-account object may supply ownership
+        // evidence. Never traverse source_information or add account objects to the
+        // generic reader, where their id could be mistaken for a transaction ID.
+        foreach (var element in EnumerateObjectCandidates(primary, fallback))
+        {
+            foreach (var name in flatNames) Include(element, name);
+            if (!element.TryGetProperty("virtual_bank_account", out var account) || account.ValueKind == JsonValueKind.Null)
+                continue;
+            if (account.ValueKind != JsonValueKind.Object)
+                throw new InvalidOperationException("Blaaiz virtual_bank_account must be an object.");
+            foreach (var name in nestedNames) Include(account, name, requireString: true);
+        }
+
+        return identity;
     }
 
     private static string? ReadTransactionId(

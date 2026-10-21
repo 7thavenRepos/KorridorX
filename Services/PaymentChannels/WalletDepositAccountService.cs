@@ -6,12 +6,15 @@ using KorridorX.Dtos.Payments;
 using KorridorX.Exceptions;
 using KorridorX.Models.Enums;
 using KorridorX.Models.FinancialCore;
+using KorridorX.Models.Notifications;
 using KorridorX.Models.Payments;
 using KorridorX.Models.Providers;
 using KorridorX.Providers.Remittance;
 using KorridorX.Providers.Remittance.Blaaiz;
 using KorridorX.Providers.Remittance.Blaaiz.Models;
 using KorridorX.Services.EmbeddedFinance;
+using KorridorX.Services.BusinessTransfers;
+using KorridorX.Services.Notifications;
 using KorridorX.Services.Providers;
 using KorridorX.Services.Wallets;
 using Microsoft.EntityFrameworkCore;
@@ -21,7 +24,7 @@ namespace KorridorX.Services.PaymentChannels;
 /// <summary>Dedicated receiving accounts. Provisioning never credits a wallet.</summary>
 public sealed class WalletDepositAccountService(AppDbContext db, PaymentChannelService channels,
     WalletFundingContextService contexts, IProviderWalletResolver wallets, IBlaaizApiClient api,
-    IRemittanceProvider provider, IConsumerWalletFundingCreditService credits)
+    IRemittanceProvider provider, IConsumerWalletFundingCreditService credits, INotificationQueueService notifications)
 {
     public async Task<WalletDepositAccountDto?> GetAsync(Guid user, Guid walletId, Guid channelId, bool business,
         bool refresh, CancellationToken ct)
@@ -36,7 +39,9 @@ public sealed class WalletDepositAccountService(AppDbContext db, PaymentChannelS
         if (refresh)
         {
             var found = await FetchStateAsync(row, ct);
-            if (found is not null) { ApplyState(row, found); await db.SaveChangesAsync(ct); }
+            // An explicit status check can also recover the notice for an account
+            // that became ready before ready notifications were introduced.
+            if (found is not null || row.Status == "Active") await SaveStateAndNotifyAsync(row, found, ct);
         }
         return ToDto(row, channelId);
     }
@@ -60,8 +65,7 @@ public sealed class WalletDepositAccountService(AppDbContext db, PaymentChannelS
             {
                 if (existing.IsDeleted || existing.FinancialAccountId != walletId) throw new InvalidOperationException("This provider customer/wallet already belongs to another deposit account. Contact support; it will not be reassigned.");
                 EnsureConnection(existing); row = existing;
-                if (row.Status == "Active") { await tx.CommitAsync(ct); return ToDto(row, channelId); }
-                if (row.CanRetryCreation)
+                if (row.Status != "Active" && row.CanRetryCreation)
                 {
                     row.CanRetryCreation = false; row.Status = "Creating"; row.FailureReason = null;
                     row.LastUpdatedAt = DateTime.UtcNow; newRequest = true;
@@ -79,12 +83,17 @@ public sealed class WalletDepositAccountService(AppDbContext db, PaymentChannelS
             }
             await db.SaveChangesAsync(ct); await tx.CommitAsync(ct);
         }
+        if (row.Status == "Active")
+        {
+            await SaveStateAndNotifyAsync(row, null, ct);
+            return ToDto(row, channelId);
+        }
         // Route is committed BEFORE external submission. A timeout only permits a lookup,
         // not a second creation. Explicit provider rejections may be retried after lookup.
         if (!newRequest)
         {
             var current = await FetchStateAsync(row, ct);
-            if (current is not null) { ApplyState(row, current); await db.SaveChangesAsync(ct); }
+            if (current is not null) await SaveStateAndNotifyAsync(row, current, ct);
             return ToDto(row, channelId);
         }
         try
@@ -108,12 +117,13 @@ public sealed class WalletDepositAccountService(AppDbContext db, PaymentChannelS
             if (row.LastCheckedAt.HasValue)
             {
                 var previous = await FetchStateAsync(row, ct);
-                if (previous is not null) { ApplyState(row, previous); await db.SaveChangesAsync(ct); return ToDto(row, channelId); }
+                if (previous is not null) { await SaveStateAndNotifyAsync(row, previous, ct); return ToDto(row, channelId); }
             }
             var response = await api.CreateVirtualBankAccountAsync(new BlaaizVirtualBankAccountRequest
                 { WalletId = row.ProviderWalletId, CustomerId = row.ProviderCustomerId }, context.CustomerProfileId ?? context.OwnerId, ct);
-            ApplyState(row, BlaaizVirtualAccountState.ParseResponse(response.RawResponseJson, row.ProviderWalletId, row.ProviderCustomerId, row.AssetCode));
-            await db.SaveChangesAsync(ct); return ToDto(row, channelId);
+            await SaveStateAndNotifyAsync(row,
+                BlaaizVirtualAccountState.ParseResponse(response.RawResponseJson, row.ProviderWalletId, row.ProviderCustomerId, row.AssetCode), ct);
+            return ToDto(row, channelId);
         }
         catch (ProviderIntegrationException ex)
         {
@@ -121,7 +131,7 @@ public sealed class WalletDepositAccountService(AppDbContext db, PaymentChannelS
             if (ex.Message.Contains("already exists", StringComparison.OrdinalIgnoreCase))
             {
                 var current = await FetchStateAsync(row, ct);
-                if (current is not null) { ApplyState(row, current); await db.SaveChangesAsync(ct); return ToDto(row, channelId); }
+                if (current is not null) { await SaveStateAndNotifyAsync(row, current, ct); return ToDto(row, channelId); }
             }
             row.CanRetryCreation = ex.ProviderStatusCode is 400 or 401 or 403 or 404 or 422;
             row.Status = row.CanRetryCreation ? "Failed" : "Creating";
@@ -139,6 +149,73 @@ public sealed class WalletDepositAccountService(AppDbContext db, PaymentChannelS
         var data = doc.RootElement.TryGetProperty("data", out var d) ? d : doc.RootElement;
         if (data.ValueKind == JsonValueKind.Array && data.GetArrayLength() == 0) return null;
         return BlaaizVirtualAccountState.ParseResponse(response.RawResponseJson, row.ProviderWalletId, row.ProviderCustomerId, row.AssetCode);
+    }
+
+    private async Task SaveStateAndNotifyAsync(WalletDepositAccount row, BlaaizVirtualAccountState? state, CancellationToken ct)
+    {
+        // Creation, explicit lookups and ready webhooks share one durable notice.
+        // Save the verified account state and notification intent atomically, and
+        // serialize competing contexts before checking whether the notice exists.
+        var previouslyTrackedNotices = db.ChangeTracker.Entries<NotificationMessage>()
+            .Select(x => x.Entity.Id).ToHashSet();
+        await using var tx = await db.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, ct);
+        try
+        {
+            var key = "WalletReceivingAccountNotice:" + row.Id.ToString("N");
+            await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({key}, 0))", ct);
+            await db.Entry(row).ReloadAsync(ct);
+            EnsureConnection(row);
+            if (row.IsDeleted) throw new InvalidOperationException("This receiving account is unavailable.");
+            if (state is not null) ApplyState(row, state);
+
+            var accountId = row.Id.ToString();
+            // Soft-deleted messages still prove that the event was already queued.
+            if (row.Status == "Active" && !await db.NotificationMessages.AsNoTracking().AnyAsync(x =>
+                    x.RelatedEntityType == WalletActivityNotificationFactory.ReceivingAccountEntityType &&
+                    x.RelatedEntityId == accountId, ct))
+            {
+                var owner = await db.FinancialAccounts.AsNoTracking().SingleAsync(x => x.Id == row.FinancialAccountId, ct);
+                if (owner.IsDeleted || owner.AccountType != FinancialAccountType.Customer || owner.AssetCode != row.AssetCode ||
+                    owner.OwnerType is not (FinancialAccountOwnerType.User or FinancialAccountOwnerType.Business))
+                    throw new InvalidOperationException("The receiving-account owner is unavailable.");
+
+                var notice = WalletActivityNotificationFactory.ReceivingAccountReady(row);
+                if (owner.OwnerType == FinancialAccountOwnerType.Business)
+                {
+                    var businessOwner = await db.BusinessProfiles.AsNoTracking()
+                        .Where(x => x.Id == owner.OwnerId && !x.IsDeleted)
+                        .Select(x => x.OwnerUserId).SingleAsync(ct);
+                    var members = await db.BusinessUsers.AsNoTracking().Where(x =>
+                            x.BusinessProfileId == owner.OwnerId && x.IsActive && !x.IsDeleted)
+                        .Select(x => new { x.UserId, x.Role, x.Permissions }).ToListAsync(ct);
+                    var recipients = members.Where(x =>
+                            ((x.Permissions == BusinessPermission.None ? BusinessAccessService.DefaultPermissions(x.Role) : x.Permissions)
+                                & BusinessPermission.ViewWallets) == BusinessPermission.ViewWallets)
+                        .Select(x => x.UserId).Append(businessOwner).Distinct();
+                    foreach (var recipient in recipients)
+                        await notifications.QueueUserAsync(recipient, notice.Subject, notice.Body,
+                            WalletActivityNotificationFactory.ReceivingAccountEntityType, row.Id, ct);
+                }
+                else
+                    await notifications.QueueUserAsync(owner.OwnerId, notice.Subject, notice.Body,
+                        WalletActivityNotificationFactory.ReceivingAccountEntityType, row.Id, ct);
+            }
+            await db.SaveChangesAsync(ct);
+            await tx.CommitAsync(ct);
+        }
+        catch
+        {
+            await tx.RollbackAsync(CancellationToken.None);
+            // The outer webhook handler may save a failed receipt after this
+            // rollback. Never let that save persist an uncommitted ready notice.
+            foreach (var entry in db.ChangeTracker.Entries<NotificationMessage>()
+                         .Where(x => !previouslyTrackedNotices.Contains(x.Entity.Id) &&
+                             x.Entity.RelatedEntityType == WalletActivityNotificationFactory.ReceivingAccountEntityType &&
+                             x.Entity.RelatedEntityId == row.Id.ToString()).ToArray())
+                entry.State = EntityState.Detached;
+            await db.Entry(row).ReloadAsync(CancellationToken.None);
+            throw;
+        }
     }
 
     private void EnsureConnection(WalletDepositAccount row)
@@ -176,7 +253,7 @@ public sealed class WalletDepositAccountService(AppDbContext db, PaymentChannelS
             x.ConnectionKey == wallets.ConnectionKey && !x.IsDeleted && x.ProviderWalletId == state.WalletId &&
             x.ProviderCustomerId == state.CustomerId && x.AssetCode == state.Currency, ct);
         if (row is null) return false;
-        ApplyState(row, state); await db.SaveChangesAsync(ct); return true;
+        await SaveStateAndNotifyAsync(row, state, ct); return true;
     }
 
     // Called ONLY by the signature-verified webhook processor. Exact account ID is
@@ -246,11 +323,7 @@ public sealed class WalletDepositAccountService(AppDbContext db, PaymentChannelS
             await tx.RollbackAsync(CancellationToken.None);
             // The outer webhook handler will save its FAILED receipt. Do not allow
             // that SaveChanges to accidentally persist our rolled-back tracked money.
-            foreach (var entry in db.ChangeTracker.Entries().Where(x => x.Entity is Collection or LedgerTransaction or LedgerPosting or ProviderTransaction or FinancialAccount or ProviderCollectionCreditClaim).ToArray())
-            {
-                if (entry.State == EntityState.Added) entry.State = EntityState.Detached;
-                else if (entry.State != EntityState.Detached) await entry.ReloadAsync(CancellationToken.None);
-            }
+            await ProviderCollectionCreditGuard.RestoreMoneyTrackingAsync(db);
             throw;
         }
     }
@@ -270,6 +343,22 @@ public sealed class WalletDepositAccountService(AppDbContext db, PaymentChannelS
                      ("business_wallet_id", account.ProviderWalletId), ("virtual_account_id", account.ProviderAccountId), ("virtual_bank_account_id", account.ProviderAccountId) })
             if (data.TryGetProperty(pair.Item1, out var value) && value.ValueKind == JsonValueKind.String && value.GetString() != pair.Item2)
                 throw new InvalidOperationException("Verified provider transaction identifies a different receiving account.");
+        // The provider can return the receiving identity as a nested object. This
+        // is deliberately separate from source_information (the sender's bank).
+        if (data.TryGetProperty("virtual_bank_account", out var bank) && bank.ValueKind != JsonValueKind.Null)
+        {
+            if (bank.ValueKind != JsonValueKind.Object)
+                throw new InvalidOperationException("Verified provider transaction contains invalid receiving-account details.");
+            foreach (var pair in new[] { ("id", account.ProviderAccountId), ("account_number", account.AccountNumber) })
+            {
+                if (!bank.TryGetProperty(pair.Item1, out var value)) continue;
+                // IBAN-only accounts can explicitly omit the optional number.
+                if (pair.Item1 == "account_number" && value.ValueKind == JsonValueKind.Null) continue;
+                if (value.ValueKind != JsonValueKind.String || string.IsNullOrWhiteSpace(value.GetString()) ||
+                    value.GetString() != pair.Item2)
+                    throw new InvalidOperationException("Verified provider transaction identifies a different receiving account.");
+            }
+        }
     }
 
     public static WalletDepositAccountDto ToDto(WalletDepositAccount row, Guid? requestedChannel = null)
