@@ -75,10 +75,13 @@ public sealed class BlaaizFxRateProvider : IFxRateProvider
                     ? "Blaaiz denied the FX rate read. Confirm rates:read and API/IP access for this provider connection."
                     : "Blaaiz rejected the live FX rate read.");
             var selected = BlaaizFxRateParser.Parse(raw, source, destination, selectedId);
+            // Normalize the quote unit at the provider boundary, before applying markup.
+            // The complete unmodified response remains in the provider request audit.
+            var multiplier = BlaaizFxRateParser.DestinationUnitsPerSource(selected);
             EnsureSameTokenConnection();
             operationCt.ThrowIfCancellationRequested();
             await _audit.CompleteAsync(requestLogId.Value, status.Value, auditResponse, timer.ElapsedMilliseconds, operationCt);
-            return new FxProviderRate(source, destination, selected.Rate, selected.ProviderRateId,
+            return new FxProviderRate(source, destination, multiplier, selected.ProviderRateId,
                 selected.ProviderTimestampUtc, requestedAt, receivedAt, ConnectionKey, requestLogId.Value,
                 selected.SendEnabled, selected.SwapEnabled)
             { ProviderCategory = selected.Category, ProviderRateType = selected.RateType };

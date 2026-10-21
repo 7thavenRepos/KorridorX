@@ -61,6 +61,26 @@ public static class BlaaizFxRateParser
         }
     }
 
+    // The NGN -> major-fiat rates in Blaaiz's current NGN quote convention
+    // are prices in NGN per one unit of the destination fiat currency.
+    // Every KorridorX customer rate must instead be destination units per
+    // one source unit, because quote and valuation consumers multiply.
+    // Never infer a reciprocal from rate magnitude alone on other pairs.
+    public static decimal DestinationUnitsPerSource(BlaaizSelectedFxRate selected)
+    {
+        if (selected.SourceCurrencyCode == "NGN" &&
+            (selected.DestinationCurrencyCode is "CAD" or "EUR" or "GBP" or "USD"))
+        {
+            if (selected.Rate <= 1m)
+                throw InvalidResponse("The Blaaiz NGN-to-foreign quote does not match the configured NGN-per-destination-unit convention.");
+            var normalized = decimal.Round(1m / selected.Rate, 8, MidpointRounding.AwayFromZero);
+            if (normalized <= 0m)
+                throw InvalidResponse("The Blaaiz NGN-to-foreign quote cannot be represented as a positive conversion rate.");
+            return normalized;
+        }
+        return selected.Rate;
+    }
+
     public static string NormalizeCurrency(string value)
     {
         var code = value?.Trim().ToUpperInvariant() ?? "";
