@@ -107,8 +107,6 @@ public class BusinessTransferService : IBusinessTransferService
         await EnsureCorridorAsync(destinationCountry, destinationCurrency, false, ct);
 
         var fee = await GetFeeAsync(
-            sourceCountry,
-            destinationCountry,
             sourceCurrency,
             destinationCurrency,
             request.TransferType,
@@ -687,26 +685,15 @@ public class BusinessTransferService : IBusinessTransferService
             x.LastUpdatedAt);
 
     private async Task<TransferFee> GetFeeAsync(
-        string sourceCountry,
-        string destinationCountry,
         string sourceCurrency,
         string destinationCurrency,
         TransferType transferType,
         decimal amount,
         CancellationToken ct) =>
-        await _db.TransferFees.AsNoTracking()
-            .Where(x =>
-                x.SourceCountryCode == sourceCountry &&
-                x.DestinationCountryCode == destinationCountry &&
-                x.SourceCurrencyCode == sourceCurrency &&
-                x.DestinationCurrencyCode == destinationCurrency &&
-                x.TransferType == transferType &&
-                x.IsActive &&
-                amount >= x.MinAmount &&
-                (x.MaxAmount == null || amount <= x.MaxAmount))
-            .OrderByDescending(x => x.MinAmount)
-            .FirstOrDefaultAsync(ct)
-        ?? throw new InvalidOperationException("Transfer fee is not configured for this business corridor.");
+        await TransferFeePolicy.MatchingRules(
+                _db.TransferFees.AsNoTracking(), sourceCurrency, destinationCurrency, transferType, amount)
+            .SingleOrDefaultAsync(ct)
+        ?? throw new InvalidOperationException("Transfer fee is not configured for this business currency direction and amount.");
 
     private async Task EnsureCorridorAsync(string countryCode, string currencyCode, bool sending, CancellationToken ct)
     {

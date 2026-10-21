@@ -66,10 +66,10 @@ public sealed class AdminTransferFeeDatabaseTests(TransferFeeDatabaseFixture fix
         var row = await service.SaveAsync(Guid.NewGuid(), null, request);
         row = await service.SetActiveAsync(Guid.NewGuid(), row.Id, row.Revision, true);
         // Same matching predicate as the consumer quote path; no transfer is created.
-        var fee = await db.TransferFees.AsNoTracking().SingleAsync(x => x.SourceCountryCode == request.SourceCountryCode &&
-            x.DestinationCountryCode == request.DestinationCountryCode && x.SourceCurrencyCode == request.SourceCurrencyCode &&
-            x.DestinationCurrencyCode == request.DestinationCurrencyCode && x.TransferType == request.TransferType &&
-            x.IsActive && 5 >= x.MinAmount && (x.MaxAmount == null || 5 <= x.MaxAmount));
+        var fee = await TransferFeePolicy.MatchingRules(db.TransferFees.AsNoTracking(),
+            request.SourceCurrencyCode, request.DestinationCurrencyCode, request.TransferType, 5).SingleAsync();
+        Assert.Equal("*", fee.SourceCountryCode);
+        Assert.Equal("*", fee.DestinationCountryCode);
         Assert.Equal(1.05m, fee.FixedFee + decimal.Round(5 * fee.PercentageFee / 100, 2));
         await service.SetActiveAsync(Guid.NewGuid(), row.Id, row.Revision, false);
         Assert.False(await db.TransferFees.AnyAsync(x => x.Id == row.Id && x.IsActive));
@@ -122,13 +122,13 @@ public sealed class AdminTransferFeeDatabaseTests(TransferFeeDatabaseFixture fix
     }
 
     [DatabaseIntegrationFact]
-    public async Task Unsupported_country_mapping_or_missing_direction_cannot_be_saved()
+    public async Task No_country_selection_is_needed_but_the_currency_direction_must_exist()
     {
         var request = await ScenarioAsync();
         await using var db = fixture.CreateDb(); var service = Service(db);
-        var original = request.SourceCountryCode; request.SourceCountryCode = request.DestinationCountryCode;
-        await Assert.ThrowsAsync<InvalidOperationException>(() => service.SaveAsync(Guid.NewGuid(), null, request));
-        request.SourceCountryCode = original;
+        var fee = await service.SaveAsync(Guid.NewGuid(), null, request);
+        Assert.Equal("*", fee.SourceCountryCode);
+        Assert.Equal("*", fee.DestinationCountryCode);
         var pair = await db.MarketplacePairs.SingleAsync(x => x.BaseAssetCode == request.SourceCurrencyCode);
         pair.IsDeleted = true; await db.SaveChangesAsync();
         await Assert.ThrowsAsync<InvalidOperationException>(() => service.SaveAsync(Guid.NewGuid(), null, request));
@@ -163,6 +163,23 @@ public sealed class AdminTransferFeeDatabaseTests(TransferFeeDatabaseFixture fix
     }
 
     [DatabaseIntegrationFact]
+    public async Task Legacy_country_scoped_active_rule_blocks_an_overlapping_new_wallet_scoped_rule()
+    {
+        var request = await ScenarioAsync();
+        await using var db = fixture.CreateDb(); var service = Service(db);
+        var legacy = await service.SaveAsync(Guid.NewGuid(), null, request);
+        var legacyRow = await db.TransferFees.SingleAsync(x => x.Id == legacy.Id);
+        legacyRow.SourceCountryCode = "CA";
+        legacyRow.DestinationCountryCode = "NG";
+        await db.SaveChangesAsync();
+        legacy = await service.SetActiveAsync(Guid.NewGuid(), legacy.Id, legacy.Revision, true);
+        var another = await service.SaveAsync(Guid.NewGuid(), null, request);
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            service.SetActiveAsync(Guid.NewGuid(), another.Id, another.Revision, true));
+        Assert.Equal(1, await db.TransferFees.CountAsync(x => x.IsActive && x.SourceCurrencyCode == request.SourceCurrencyCode));
+    }
+
+    [DatabaseIntegrationFact]
     public async Task Options_show_one_direction_when_it_exists_in_both_pair_catalogs()
     {
         var request = await ScenarioAsync();
@@ -192,7 +209,7 @@ public sealed class AdminTransferFeeDatabaseTests(TransferFeeDatabaseFixture fix
         db.MarketplacePairs.Add(new MarketplacePair { Code = from + "/" + to, BaseAssetCode = from, QuoteAssetCode = to,
             MinimumOrderQuantity = 1, QuantityIncrement = 1, PriceIncrement = 0.01m });
         await db.SaveChangesAsync();
-        return new() { SourceCountryCode = from, DestinationCountryCode = to, SourceCurrencyCode = from, DestinationCurrencyCode = to,
+        return new() { SourceCurrencyCode = from, DestinationCurrencyCode = to,
             TransferType = TransferType.ConsumerToConsumer, MinAmount = 0, FixedFee = 0, PercentageFee = 0 };
     }
 }

@@ -741,19 +741,11 @@ public class BusinessPaymentBatchService : IBusinessPaymentBatchService
         var quoteDb = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         var liveRates = scope.ServiceProvider.GetRequiredService<ILiveFxRateService>();
         var remittanceProvider = scope.ServiceProvider.GetRequiredService<IRemittanceProvider>();
-        var fee = await quoteDb.TransferFees.AsNoTracking()
-            .Where(x =>
-                x.SourceCountryCode == batch.SourceCountryCode &&
-                x.DestinationCountryCode == item.DestinationCountryCode &&
-                x.SourceCurrencyCode == batch.SourceCurrencyCode &&
-                x.DestinationCurrencyCode == item.DestinationCurrencyCode &&
-                x.TransferType == transferType &&
-                x.IsActive &&
-                item.SourceAmount >= x.MinAmount &&
-                (x.MaxAmount == null || item.SourceAmount <= x.MaxAmount))
-            .OrderByDescending(x => x.MinAmount)
-            .FirstOrDefaultAsync(ct)
-            ?? throw new InvalidOperationException("Transfer fee is not configured for this batch item corridor.");
+        var fee = await TransferFeePolicy.MatchingRules(
+                quoteDb.TransferFees.AsNoTracking(), batch.SourceCurrencyCode, item.DestinationCurrencyCode,
+                transferType, item.SourceAmount)
+            .SingleOrDefaultAsync(ct)
+            ?? throw new InvalidOperationException("Transfer fee is not configured for this batch item currency direction and amount.");
 
         var savedQuote = await liveRates.UseFreshRateAsync(
             batch.SourceCurrencyCode, item.DestinationCurrencyCode, FxRateUse.Transfer,

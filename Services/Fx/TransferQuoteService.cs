@@ -61,19 +61,10 @@ public class TransferQuoteService : ITransferQuoteService
         await EnsureSendingCorridorAsync(sourceCountryCode, sourceCurrencyCode, ct);
         await EnsureReceivingCorridorAsync(destinationCountryCode, destinationCurrencyCode, ct);
 
-        var fee = await _db.TransferFees
-            .AsNoTracking()
-            .Where(x =>
-                x.SourceCountryCode == sourceCountryCode &&
-                x.DestinationCountryCode == destinationCountryCode &&
-                x.SourceCurrencyCode == sourceCurrencyCode &&
-                x.DestinationCurrencyCode == destinationCurrencyCode &&
-                x.TransferType == request.TransferType &&
-                x.IsActive &&
-                request.SourceAmount >= x.MinAmount &&
-                (x.MaxAmount == null || request.SourceAmount <= x.MaxAmount))
-            .OrderByDescending(x => x.MinAmount)
-            .FirstOrDefaultAsync(ct);
+        var fee = await TransferFeePolicy.MatchingRules(
+                _db.TransferFees.AsNoTracking(), sourceCurrencyCode, destinationCurrencyCode,
+                request.TransferType, request.SourceAmount)
+            .SingleOrDefaultAsync(ct);
 
         if (fee is null)
         {

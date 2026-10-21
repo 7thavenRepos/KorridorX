@@ -39,6 +39,30 @@ public sealed class TransferFeePolicyTests
     }
 
     [Fact]
+    public void Same_wallet_currency_pair_fee_applies_to_different_countries_and_amount_ranges()
+    {
+        var rows = new[]
+        {
+            new TransferFee { SourceCountryCode = "CA", DestinationCountryCode = "NG", SourceCurrencyCode = "CAD",
+                DestinationCurrencyCode = "NGN", TransferType = TransferType.ConsumerToConsumer,
+                IsActive = true, MinAmount = 0m, MaxAmount = 100m, FixedFee = 2m },
+            new TransferFee { SourceCountryCode = "*", DestinationCountryCode = "*", SourceCurrencyCode = "CAD",
+                DestinationCurrencyCode = "NGN", TransferType = TransferType.ConsumerToConsumer,
+                IsActive = true, MinAmount = 100.01m, MaxAmount = null, FixedFee = 3m },
+            new TransferFee { SourceCountryCode = "US", DestinationCountryCode = "NG", SourceCurrencyCode = "USD",
+                DestinationCurrencyCode = "NGN", TransferType = TransferType.ConsumerToConsumer,
+                IsActive = true, MinAmount = 0m, FixedFee = 99m },
+            new TransferFee { SourceCountryCode = "CA", DestinationCountryCode = "NG", SourceCurrencyCode = "CAD",
+                DestinationCurrencyCode = "NGN", TransferType = TransferType.BusinessToConsumer,
+                IsActive = true, MinAmount = 0m, FixedFee = 77m },
+        }.AsQueryable();
+        Assert.Equal(2m, TransferFeePolicy.MatchingRules(rows, "CAD", "NGN", TransferType.ConsumerToConsumer, 50m).Single().FixedFee);
+        Assert.Equal(3m, TransferFeePolicy.MatchingRules(rows, "CAD", "NGN", TransferType.ConsumerToConsumer, 101m).Single().FixedFee);
+        Assert.Empty(TransferFeePolicy.MatchingRules(rows, "CAD", "USD", TransferType.ConsumerToConsumer, 50m));
+        Assert.Equal(77m, TransferFeePolicy.MatchingRules(rows, "CAD", "NGN", TransferType.BusinessToConsumer, 50m).Single().FixedFee);
+    }
+
+    [Fact]
     public void Active_ranges_include_both_endpoints_and_an_unbounded_range_overlaps_later_ranges()
     {
         Assert.True(TransferFeePolicy.Overlaps(0, 100, 100, 200));

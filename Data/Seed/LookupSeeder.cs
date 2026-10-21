@@ -122,7 +122,7 @@ public static class LookupSeeder
 
         foreach (var fee in fees)
         {
-            if (!await db.TransferFees.AnyAsync(x => x.SourceCountryCode == fee.SourceCountryCode && x.DestinationCountryCode == fee.DestinationCountryCode && x.SourceCurrencyCode == fee.SourceCurrencyCode && x.DestinationCurrencyCode == fee.DestinationCurrencyCode && x.TransferType == fee.TransferType && x.IsActive))
+            if (!await db.TransferFees.AnyAsync(x => x.SourceCurrencyCode == fee.SourceCurrencyCode && x.DestinationCurrencyCode == fee.DestinationCurrencyCode && x.TransferType == fee.TransferType && x.IsActive))
                 db.TransferFees.Add(fee);
         }
 

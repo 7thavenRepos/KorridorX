@@ -12,8 +12,8 @@ public sealed record TransferFeeOptionsDto(IReadOnlyList<TransferFeePairOptionDt
 
 public sealed class SaveTransferFeeRequestDto
 {
-    [Required, MaxLength(10)] public string SourceCountryCode { get; set; } = "";
-    [Required, MaxLength(10)] public string DestinationCountryCode { get; set; } = "";
+    // Pricing follows the sending wallet currency and the selected currency pair.
+    // Sending and receiving country are intentionally not part of the fee request.
     [Required, MaxLength(20)] public string SourceCurrencyCode { get; set; } = "";
     [Required, MaxLength(20)] public string DestinationCurrencyCode { get; set; } = "";
     public TransferType TransferType { get; set; }

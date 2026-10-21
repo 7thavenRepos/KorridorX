@@ -21,7 +21,10 @@ public sealed class AdminTransferFeeService(AppDbContext db, IAuditService audit
             .Select(x => new TransferFeeCountryOptionDto(x.CountryCode, x.Country.Name, x.AssetCode,
                 x.CanSend && x.Country.IsSendCountry, x.CanReceive && x.Country.IsReceiveCountry,
                 x.Asset.IndividualEnabled, x.Asset.BusinessEnabled, x.Asset.DecimalPlaces)).ToListAsync(ct);
-        var supportedAssets = countries.Select(x => x.AssetCode).ToHashSet(StringComparer.Ordinal);
+        // Fee rules follow supported wallet currencies, not a specific country mapping.
+        // Country eligibility remains enforced by the consumer/business quote services.
+        var supportedAssets = (await db.Assets.AsNoTracking().Where(x => x.IsSupported)
+            .Select(x => x.Code).ToListAsync(ct)).ToHashSet(StringComparer.Ordinal);
         var pairs = instant.Concat(marketplace)
             .Where(x => supportedAssets.Contains(x.SourceCurrencyCode) && supportedAssets.Contains(x.DestinationCurrencyCode))
             .GroupBy(x => (x.SourceCurrencyCode, x.DestinationCurrencyCode))
@@ -32,19 +35,16 @@ public sealed class AdminTransferFeeService(AppDbContext db, IAuditService audit
 
     public async Task<IReadOnlyList<AdminTransferFeeDto>> GetAsync(CancellationToken ct = default) =>
         (await db.TransferFees.AsNoTracking().Where(x => !x.IsDeleted)
-            .OrderBy(x => x.SourceCurrencyCode).ThenBy(x => x.DestinationCurrencyCode).ThenBy(x => x.SourceCountryCode)
-            .ThenBy(x => x.DestinationCountryCode).ThenBy(x => x.TransferType).ThenBy(x => x.MinAmount).ToListAsync(ct))
+            .OrderBy(x => x.SourceCurrencyCode).ThenBy(x => x.DestinationCurrencyCode)
+            .ThenBy(x => x.TransferType).ThenBy(x => x.MinAmount).ToListAsync(ct))
             .Select(ToDto).ToArray();
 
     public Task<AdminTransferFeeDto> SaveAsync(Guid actor, Guid? id, SaveTransferFeeRequestDto request, CancellationToken ct = default) =>
         MutateAsync(async () =>
         {
-            var sourceCountry = Normalize(request.SourceCountryCode, 10);
-            var destinationCountry = Normalize(request.DestinationCountryCode, 10);
             var source = Normalize(request.SourceCurrencyCode, 20);
             var destination = Normalize(request.DestinationCurrencyCode, 20);
-            var options = await GetOptionsAsync(ct);
-            var precision = ValidateCorridor(options, sourceCountry, destinationCountry, source, destination, request.TransferType, false);
+            var precision = await ValidatePairAsync(source, destination, request.TransferType, false, ct);
             TransferFeePolicy.Validate(request, precision);
             TransferFee? fee = null;
             AdminTransferFeeDto? old = null;
@@ -59,7 +59,9 @@ public sealed class AdminTransferFeeService(AppDbContext db, IAuditService audit
                 throw new InvalidOperationException("A new fee rule must not contain an existing revision.");
             fee ??= new TransferFee { CreatedByUserId = actor, IsActive = false };
             if (!id.HasValue) db.TransferFees.Add(fee);
-            fee.SourceCountryCode = sourceCountry; fee.DestinationCountryCode = destinationCountry;
+            // Legacy schema fields remain for historical audit; new rules are global
+            // across eligible countries for this currency direction and transfer type.
+            fee.SourceCountryCode = "*"; fee.DestinationCountryCode = "*";
             fee.SourceCurrencyCode = source; fee.DestinationCurrencyCode = destination;
             fee.TransferType = request.TransferType; fee.MinAmount = request.MinAmount; fee.MaxAmount = request.MaxAmount;
             fee.FixedFee = request.FixedFee; fee.PercentageFee = request.PercentageFee;
@@ -82,18 +84,17 @@ public sealed class AdminTransferFeeService(AppDbContext db, IAuditService audit
             if (fee.IsActive == active) return ToDto(fee);
             if (active)
             {
-                var precision = ValidateCorridor(await GetOptionsAsync(ct), fee.SourceCountryCode, fee.DestinationCountryCode,
-                    fee.SourceCurrencyCode, fee.DestinationCurrencyCode, fee.TransferType, true);
+                var precision = await ValidatePairAsync(
+                    fee.SourceCurrencyCode, fee.DestinationCurrencyCode, fee.TransferType, true, ct);
                 TransferFeePolicy.Validate(new SaveTransferFeeRequestDto { TransferType = fee.TransferType, MinAmount = fee.MinAmount,
                     MaxAmount = fee.MaxAmount, FixedFee = fee.FixedFee, PercentageFee = fee.PercentageFee }, precision);
                 if (fee.FeeCurrencyCode != fee.SourceCurrencyCode)
                     throw new InvalidOperationException("Edit this fee rule so its fee currency matches the source currency before activation.");
                 var others = await db.TransferFees.AsNoTracking().Where(x => !x.IsDeleted && x.Id != id && x.IsActive &&
-                    x.SourceCountryCode == fee.SourceCountryCode && x.DestinationCountryCode == fee.DestinationCountryCode &&
                     x.SourceCurrencyCode == fee.SourceCurrencyCode && x.DestinationCurrencyCode == fee.DestinationCurrencyCode &&
                     x.TransferType == fee.TransferType).ToListAsync(ct);
                 if (others.Any(x => TransferFeePolicy.Overlaps(fee.MinAmount, fee.MaxAmount, x.MinAmount, x.MaxAmount)))
-                    throw new InvalidOperationException("An active fee rule already covers part of this amount range for this corridor and transfer type. Deactivate it or use a non-overlapping range.");
+                    throw new InvalidOperationException("An active fee rule already covers part of this amount range for this currency direction and transfer type. Deactivate it or use a non-overlapping range.");
             }
             var old = ToDto(fee);
             fee.IsActive = active; fee.LastUpdatedAt = TransferFeePolicy.NextUpdate(fee); fee.LastUpdatedByUserId = actor;
@@ -104,20 +105,23 @@ public sealed class AdminTransferFeeService(AppDbContext db, IAuditService audit
             return result;
         }, ct);
 
-    private static int ValidateCorridor(TransferFeeOptionsDto options, string sourceCountry, string destinationCountry,
-        string source, string destination, TransferType type, bool activating)
+    private async Task<int> ValidatePairAsync(string source, string destination, TransferType type,
+        bool activating, CancellationToken ct)
     {
         if (!Enum.IsDefined(type)) throw new InvalidOperationException("Choose a supported transfer type.");
+        var options = await GetOptionsAsync(ct);
         var pair = options.Pairs.SingleOrDefault(x => x.SourceCurrencyCode == source && x.DestinationCurrencyCode == destination)
             ?? throw new InvalidOperationException("Select an existing currency direction from Trading & business wallets.");
-        if (activating && !pair.IsActive) throw new InvalidOperationException("Enable this currency direction in Trading & business wallets before activating its fee rule.");
+        if (activating && !pair.IsActive)
+            throw new InvalidOperationException("Enable this currency direction in Trading & business wallets before activating its fee rule.");
+        var assets = await db.Assets.AsNoTracking().Where(x => x.IsSupported && (x.Code == source || x.Code == destination))
+            .Select(x => new { x.Code, x.IndividualEnabled, x.BusinessEnabled, x.DecimalPlaces }).ToListAsync(ct);
+        var from = assets.SingleOrDefault(x => x.Code == source);
+        var to = assets.SingleOrDefault(x => x.Code == destination);
         var personal = type == TransferType.ConsumerToConsumer;
-        var from = options.Countries.SingleOrDefault(x => x.CountryCode == sourceCountry && x.AssetCode == source &&
-            x.CanSend && (personal ? x.IndividualEnabled : x.BusinessEnabled));
-        var to = options.Countries.SingleOrDefault(x => x.CountryCode == destinationCountry && x.AssetCode == destination &&
-            x.CanReceive && (personal ? x.IndividualEnabled : x.BusinessEnabled));
-        if (from is null || to is null)
-            throw new InvalidOperationException("Select supported sending and receiving country/currency mappings for this transfer type in Master data.");
+        if (from is null || to is null ||
+            !(personal ? from.IndividualEnabled && to.IndividualEnabled : from.BusinessEnabled && to.BusinessEnabled))
+            throw new InvalidOperationException("Both currencies must be supported for the selected transfer type in Master data.");
         return from.DecimalPlaces;
     }
 

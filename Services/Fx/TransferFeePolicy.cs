@@ -28,6 +28,17 @@ public static class TransferFeePolicy
             throw new InvalidOperationException("The percentage fee supports at most 6 decimal places.");
     }
 
+    // The fee belongs to the funding wallet's currency direction, transfer type
+    // and amount band. Country of residence and recipient country remain separate
+    // eligibility/compliance inputs and must not participate in fee selection.
+    public static IQueryable<TransferFee> MatchingRules(
+        IQueryable<TransferFee> fees, string sourceCurrency, string destinationCurrency,
+        TransferType transferType, decimal amount) =>
+        fees.Where(x => !x.IsDeleted && x.IsActive &&
+            x.SourceCurrencyCode == sourceCurrency && x.DestinationCurrencyCode == destinationCurrency &&
+            x.TransferType == transferType && amount >= x.MinAmount &&
+            (x.MaxAmount == null || amount <= x.MaxAmount));
+
     public static bool Overlaps(decimal minimum, decimal? maximum, decimal otherMinimum, decimal? otherMaximum) =>
         (!maximum.HasValue || otherMinimum <= maximum.Value) && (!otherMaximum.HasValue || minimum <= otherMaximum.Value);
 
