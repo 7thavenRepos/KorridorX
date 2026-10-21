@@ -256,9 +256,15 @@ public sealed class WalletDepositAccountService(AppDbContext db, PaymentChannelS
         await SaveStateAndNotifyAsync(row, state, ct); return true;
     }
 
-    // Called ONLY by the signature-verified webhook processor. Exact account ID is
-    // required; a customer's email/name or a pooled wallet is never an ownership key.
-    public async Task<bool> TryProcessDepositAsync(EmbeddedInboundCollectionRequest request, CancellationToken ct)
+    // Called by signature-verified webhooks, or authenticated recovery of a retained
+    // signed receipt. Exact account ID is required; email/name never establishes ownership.
+    public Task<bool> TryProcessDepositAsync(EmbeddedInboundCollectionRequest request, CancellationToken ct) =>
+        TryProcessDepositAsync(request, null, ct);
+
+    // Recovery only contributes receipt validation/audit inside the existing money
+    // transaction. It cannot replace provider verification or the collection credit guard.
+    internal async Task<bool> TryProcessDepositAsync(EmbeddedInboundCollectionRequest request,
+        BankDepositRecoveryCallbacks? recovery, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(request.ProviderAccountId) || string.IsNullOrWhiteSpace(request.ProviderTransactionId)) return false;
         var row = await db.WalletDepositAccounts.AsNoTracking().SingleOrDefaultAsync(x => x.Environment == channels.EnvironmentName &&
@@ -279,6 +285,12 @@ public sealed class WalletDepositAccountService(AppDbContext db, PaymentChannelS
         {
             var key = ProviderCollectionCreditGuard.LockKey(wallets.ConnectionKey, request.ProviderTransactionId);
             await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({key}, 0))", ct);
+            row = await db.WalletDepositAccounts.FromSqlInterpolated($"SELECT * FROM \"WalletDepositAccounts\" WHERE \"Id\" = {row.Id} FOR UPDATE").SingleAsync(ct);
+            await db.Entry(row).ReloadAsync(ct);
+            if (row.IsDeleted || row.Status != "Active" || row.Environment != channels.EnvironmentName ||
+                row.ConnectionKey != wallets.ConnectionKey || row.ProviderAccountId != request.ProviderAccountId)
+                throw new InvalidOperationException("The receiving account or provider connection changed; review the retained deposit again.");
+            ValidateVerifiedDeposit(row, request, verified);
             var account = await db.FinancialAccounts.FromSqlInterpolated($"SELECT * FROM \"FinancialAccounts\" WHERE \"Id\" = {row.FinancialAccountId} FOR UPDATE").SingleAsync(ct);
             // Reload an already tracked entity; the SQL row lock alone does not refresh EF's identity map.
             await db.Entry(account).ReloadAsync(ct);
@@ -289,6 +301,7 @@ public sealed class WalletDepositAccountService(AppDbContext db, PaymentChannelS
                 ? await db.CustomerProfiles.AsNoTracking().AnyAsync(x => x.UserId == account.OwnerId && !x.IsDeleted && x.KycStatus == KycStatus.Approved, ct)
                 : await db.BusinessProfiles.AsNoTracking().AnyAsync(x => x.Id == account.OwnerId && !x.IsDeleted && x.KybStatus == KybStatus.Approved, ct);
             if (!ownerApproved) throw new InvalidOperationException("Receiving owner requires compliance review. The webhook is retained; no balance was changed.");
+            if (recovery is not null) await recovery.ValidateAndStart(row, account, verified, ct);
             var existing = await db.ProviderTransactions.AsNoTracking().SingleOrDefaultAsync(x => x.ProviderCode == ProviderCode.Blaaiz && x.ProviderTransactionId == request.ProviderTransactionId, ct);
             if (existing?.CollectionId is not null)
             {
@@ -296,6 +309,11 @@ public sealed class WalletDepositAccountService(AppDbContext db, PaymentChannelS
                 if (replay.FinancialAccountId != row.FinancialAccountId || replay.Amount != verified.Amount || replay.CurrencyCode != row.AssetCode ||
                     replay.RelatedEntityType != nameof(WalletDepositAccount) || replay.RelatedEntityId != row.Id)
                     throw new InvalidOperationException("The provider transaction already belongs to a different collection.");
+                if (recovery is not null)
+                {
+                    await recovery.Complete(replay, true, ct);
+                    await db.SaveChangesAsync(ct);
+                }
                 await tx.CommitAsync(ct); return true;
             }
             if (existing is not null) throw new InvalidOperationException("Provider transaction exists without a completed wallet deposit; reconciliation is required.");
@@ -316,6 +334,7 @@ public sealed class WalletDepositAccountService(AppDbContext db, PaymentChannelS
                 CurrencyCode = row.AssetCode, Amount = verified.Amount, AmountWithoutFee = request.AmountWithoutFee,
                 ProviderFeeAmount = request.ProviderFeeAmount, ProviderFeeCurrencyCode = request.ProviderFeeCurrencyCode,
                 RawPayloadJson = verified.RawResponseJson, LastSyncedAt = DateTime.UtcNow });
+            if (recovery is not null) await recovery.Complete(collection, false, ct);
             await db.SaveChangesAsync(ct); await tx.CommitAsync(ct); return true;
         }
         catch
@@ -377,3 +396,7 @@ public sealed class WalletDepositAccountService(AppDbContext db, PaymentChannelS
     }
     private static string Clean(string value, int max) => value.Length <= max ? value : value[..max];
 }
+
+internal sealed record BankDepositRecoveryCallbacks(
+    Func<WalletDepositAccount, FinancialAccount, RemittanceTransactionStatusResult, CancellationToken, Task> ValidateAndStart,
+    Func<Collection, bool, CancellationToken, Task> Complete);

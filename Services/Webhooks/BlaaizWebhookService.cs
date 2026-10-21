@@ -1042,6 +1042,38 @@ public class BlaaizWebhookService : IBlaaizWebhookService
         transaction.LastUpdatedAt = DateTime.UtcNow;
     }
 
+    // This parser accepts no external request. Administrative recovery first authenticates
+    // the retained signature and uses the same receiving-identity readers as live delivery.
+    internal static EmbeddedInboundCollectionRequest ReadRetainedBankDeposit(WebhookEvent receipt)
+    {
+        using var document = JsonDocument.Parse(receipt.RawPayloadJson);
+        var root = document.RootElement;
+        var data = GetDataNode(root);
+        var type = ReadOptionalString(data, root, "type", "transaction_type");
+        var explicitEvent = ReadOptionalString(root, data, "event_type", "event");
+        var status = ReadOptionalString(data, root, "transaction_status", "status") ?? EventStatus(receipt.EventType);
+        if (!receipt.EventType.Equals("collection.completed", StringComparison.OrdinalIgnoreCase) ||
+            (!string.IsNullOrWhiteSpace(explicitEvent) && !explicitEvent.Equals("collection.completed", StringComparison.OrdinalIgnoreCase)) ||
+            (!string.IsNullOrWhiteSpace(type) && !type.Equals("collection", StringComparison.OrdinalIgnoreCase)) ||
+            status.Trim().ToUpperInvariant() is not ("SUCCESSFUL" or "COMPLETED"))
+            throw new InvalidOperationException("Only retained successful dedicated-bank collection events can be recovered here.");
+        var transactionId = ReadTransactionId(data, root, "transaction_id", "provider_transaction_id", "collection_id");
+        var accountId = ReadVirtualBankAccountId(data, root);
+        var currency = ReadOptionalString(data, root, "transaction_currency", "currency");
+        var amount = ReadOptionalDecimal(data, root, "transaction_amount", "amount");
+        if (string.IsNullOrWhiteSpace(transactionId) || string.IsNullOrWhiteSpace(accountId) ||
+            string.IsNullOrWhiteSpace(currency) || amount is null or <= 0)
+            throw new InvalidOperationException("The retained event needs an explicit receiving bank account, transaction, currency and positive amount.");
+        return new(transactionId, ReadOptionalString(data, root, "transaction_reference", "reference"), status,
+            currency, amount.Value, ReadOptionalDecimal(data, root, "transaction_amount_without_fee", "amount_without_fee"),
+            ReadOptionalDecimal(data, root, "fee", "transaction_fee"),
+            ReadOptionalString(data, root, "fee_currency", "transaction_currency", "currency"), accountId,
+            ReadOptionalString(data, root, "customer_id"),
+            ReadOptionalString(data, root, "account_reference", "reservation_reference", "virtual_account_reference"),
+            ReadVirtualBankAccountNumber(data, root), receipt.RawPayloadJson,
+            ReadOptionalDateTime(data, root, "updated_at", "date", "timestamp") ?? receipt.ReceivedAt);
+    }
+
     private void ValidateSignature(string rawPayload, string? receivedSignature, string? timestamp)
     {
         if (string.IsNullOrWhiteSpace(_options.WebhookSigningSecret) ||

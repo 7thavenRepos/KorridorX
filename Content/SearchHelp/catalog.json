@@ -3057,11 +3057,17 @@
   {
     "slug": "provider-webhooks-banks",
     "portal": "admin",
-    "title": "Inspect provider webhooks and synchronize the bank directory",
-    "summary": "Use replay and synchronization controls deliberately.",
+    "title": "Inspect webhooks, recover retained bank deposits and synchronize banks",
+    "summary": "Review retained deposits, verify the provider transaction and recover the correct wallet with an audit reason.",
     "category": "Providers",
     "pageRoute": "/admin/providers",
-    "keywords": [],
+    "keywords": [
+      "ignored bank deposit",
+      "retained webhook",
+      "missing wallet credit",
+      "bank deposit recovery",
+      "Blaaiz"
+    ],
     "adminRoles": [
       "Operations",
       "Admin",
@@ -3071,7 +3077,7 @@
     "businessRoles": [],
     "allowNoBusiness": false,
     "isPage": false,
-    "reviewedOn": "2026-10-13",
+    "reviewedOn": "2026-10-21",
     "prerequisites": [
       "Sign in to the admin portal with permission to open Provider operations and reconciliation.",
       "Use your assigned operational role; documentation does not grant additional authority."
@@ -3082,8 +3088,12 @@
         "instruction": "In Webhooks apply filters and Inspect the event."
       },
       {
-        "title": "Review processing history",
-        "instruction": "Check state and prior attempts before Replay webhook; provide the required reason."
+        "title": "Review the retained bank deposit",
+        "instruction": "For an Ignored or Failed successful dedicated-bank deposit, enter an audit reason and choose Verify retained bank deposit. Review the provider transaction ID, verified amount and currency, receiving account and destination wallet. Verification does not credit funds."
+      },
+      {
+        "title": "Recover the verified deposit",
+        "instruction": "Choose Recover verified deposit only after checking the original transaction. Recovery verifies the transaction again, credits the assigned wallet through normal settlement and records the operator, reason and processing attempt. The provider does not need to resend a webhook. A different later deposit has a different transaction ID and is handled separately."
       },
       {
         "title": "Inspect related logs safely",
@@ -3094,13 +3104,15 @@
         "instruction": "In Bank directory choose Synchronize only when an approved refresh is needed, then verify the event/directory result."
       }
     ],
-    "expectedResult": "Webhook processing and bank-directory synchronization outcomes are explicit.",
+    "expectedResult": "A verified retained bank deposit is credited once with its collection, ledger, provider receipt and funding notifications; the original webhook and prior attempts remain available for audit. Bank-directory synchronization remains a separate action.",
     "warnings": [
-      "Replay may re-run processing. Never put raw provider headers or payloads into search or broadly visible documentation."
+      "Recover verified deposit changes the verified destination wallet balance. Repeated recovery or a later delivery of the same transaction cannot credit it again. Do not use a manual balance adjustment for the same provider transaction.",
+      "Never put raw provider headers, payloads or credentials into search or broadly visible documentation. Provider webhook replay is a separate action on an existing provider transaction and is not required for retained bank-deposit recovery."
     ],
     "troubleshooting": [
-      "A missing or disabled action can indicate insufficient permission, unavailable configuration or an incompatible record status. Check the current account and selected record; do not bypass the restriction.",
-      "Correct the field errors shown. After an uncertain submission, refresh the record before trying again to avoid duplicate operations."
+      "If verification is blocked, retain the event and investigate the specific error. The account must belong to the current provider connection and environment, the wallet must be active, and its owner must meet KYC/KYB requirements. Do not substitute another account, amount or currency.",
+      "An expired preview or changed deposit requires Verify retained bank deposit again. After an uncertain recovery response, refresh the event and review its processing attempts and linked transaction before retrying. Existing duplicate protection still applies.",
+      "A missing action can mean insufficient permission or an ineligible event. Recovery is for retained dedicated-bank collection events; Interac Money Requests, unsolicited Interac review and payouts keep their own workflows."
     ]
   },
   {

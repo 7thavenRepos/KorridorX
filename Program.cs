@@ -257,6 +257,7 @@ builder.Services.AddScoped<IRemittanceProvider, BlaaizRemittanceProvider>();
 builder.Services.AddScoped<IProviderCustomerService, ProviderCustomerService>();
 builder.Services.AddScoped<IBankDirectoryService, BankDirectoryService>();
 builder.Services.AddScoped<IProviderOperationsQueryService, ProviderOperationsQueryService>();
+builder.Services.AddScoped<RetainedBankDepositRecoveryService>();
 builder.Services.AddScoped<IKycService, KycService>();
 builder.Services.AddScoped<IBusinessKybService, BusinessKybService>();
 builder.Services.AddScoped<BusinessKybNotificationService>();
