@@ -73,6 +73,24 @@ public class BlaaizApiClient : IBlaaizApiClient
         _auditService = auditService;
     }
 
+    // POST is a quote-only provider operation: no payout, debit or reservation.
+    public Task<BlaaizApiResult<BlaaizFeeBreakdownResponse>> GetFeeBreakdownAsync(
+        BlaaizFeeBreakdownRequest request, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        if (string.IsNullOrWhiteSpace(request.FromCurrencyId) ||
+            !string.Equals(request.FromCurrencyId, request.ToCurrencyId, StringComparison.Ordinal) ||
+            request.FromAmount <= 0m || string.IsNullOrWhiteSpace(request.CustomerId))
+            throw new InvalidOperationException("A same-currency fee quote requires the source currency, positive amount and verified provider customer.");
+
+        return SendAsync<BlaaizFeeBreakdownRequest, BlaaizFeeBreakdownResponse>(
+            HttpMethod.Post,
+            "/api/external/fees/breakdown",
+            request,
+            JsonSerializer.Serialize(request, SerializerOptions),
+            null, null, null, null, ct, useFeeReadToken: true);
+    }
+
     public Task<BlaaizApiResult<BlaaizCryptoWalletListResponse>> ListCryptoWalletsAsync(
         CancellationToken ct = default)
     {
@@ -927,13 +945,19 @@ public class BlaaizApiClient : IBlaaizApiClient
         Func<string, string>? responseSanitizer,
         CancellationToken ct,
         IReadOnlyDictionary<string, string>? additionalHeaders = null,
-        bool useInteracRegistrationReadToken = false)
+        bool useInteracRegistrationReadToken = false,
+        bool useFeeReadToken = false)
     {
         if (useInteracRegistrationReadToken && method != HttpMethod.Get)
             throw new InvalidOperationException("The Interac registration read token can be used only for GET requests.");
-        var token = useInteracRegistrationReadToken
-            ? await _tokenService.GetInteracAutoDepositReadAccessTokenAsync(ct)
-            : await _tokenService.GetAccessTokenAsync(ct);
+        if (useFeeReadToken && (useInteracRegistrationReadToken || method != HttpMethod.Post ||
+            endpoint != "/api/external/fees/breakdown"))
+            throw new InvalidOperationException("The fee-read token is restricted to the Blaaiz fee-breakdown endpoint.");
+        var token = useFeeReadToken
+            ? await _tokenService.GetFeeReadAccessTokenAsync(ct)
+            : useInteracRegistrationReadToken
+                ? await _tokenService.GetInteracAutoDepositReadAccessTokenAsync(ct)
+                : await _tokenService.GetAccessTokenAsync(ct);
 
         var requestLogId = await _auditService.StartAsync(
             ProviderCode.Blaaiz,

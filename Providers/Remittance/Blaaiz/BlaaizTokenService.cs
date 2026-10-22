@@ -17,6 +17,7 @@ public class BlaaizTokenService : IBlaaizTokenService
 {
     private const string CacheKey = "Blaaiz:OAuthAccessToken";
     private const string InteracReadScope = "interac-auto-deposit-email:read";
+    private const string FeeReadScope = "fees:read";
     private static readonly SemaphoreSlim TokenLock = new(1, 1);
 
     private readonly IHttpClientFactory _httpClientFactory;
@@ -63,10 +64,17 @@ public class BlaaizTokenService : IBlaaizTokenService
         }
     }
 
-    public async Task<string> GetInteracAutoDepositReadAccessTokenAsync(CancellationToken ct = default)
+    public Task<string> GetInteracAutoDepositReadAccessTokenAsync(CancellationToken ct = default) =>
+        GetScopedReadAccessTokenAsync(InteracReadScope, "InteracRead", "Interac registration reads", ct);
+
+    public Task<string> GetFeeReadAccessTokenAsync(CancellationToken ct = default) =>
+        GetScopedReadAccessTokenAsync(FeeReadScope, "FeeRead", "withdrawal fee previews", ct);
+
+    private async Task<string> GetScopedReadAccessTokenAsync(string scope, string cacheCategory,
+        string purpose, CancellationToken ct)
     {
         EnsureEnabled();
-        var connection = CaptureInteracReadConnection();
+        var connection = CaptureInteracReadConnection(purpose);
         // Capture credentials/endpoints once so rotation cannot put a new connection's token under an old key.
         var identity = JsonSerializer.Serialize(new[]
         {
@@ -74,9 +82,9 @@ public class BlaaizTokenService : IBlaaizTokenService
             connection.TokenUri.AbsoluteUri,
             connection.ClientId,
             connection.ClientSecret,
-            InteracReadScope
+            scope
         });
-        var scopedKey = "Blaaiz:OAuth:InteracRead:" +
+        var scopedKey = "Blaaiz:OAuth:" + cacheCategory + ":" +
             Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(identity)));
 
         if (_cache.TryGetValue<string>(scopedKey, out var cached) && !string.IsNullOrWhiteSpace(cached))
@@ -88,7 +96,7 @@ public class BlaaizTokenService : IBlaaizTokenService
             if (_cache.TryGetValue<string>(scopedKey, out cached) && !string.IsNullOrWhiteSpace(cached))
                 return cached;
 
-            return await AcquireInteracReadTokenAsync(connection, scopedKey, ct);
+            return await AcquireInteracReadTokenAsync(connection, scopedKey, scope, purpose, ct);
         }
         finally
         {
@@ -96,7 +104,7 @@ public class BlaaizTokenService : IBlaaizTokenService
         }
     }
 
-    private InteracReadConnection CaptureInteracReadConnection()
+    private InteracReadConnection CaptureInteracReadConnection(string purpose)
     {
         if (!Uri.TryCreate((_options.BaseUrl ?? "").TrimEnd('/') + "/", UriKind.Absolute, out var apiBaseUri) ||
             apiBaseUri.Scheme != Uri.UriSchemeHttps ||
@@ -109,16 +117,17 @@ public class BlaaizTokenService : IBlaaizTokenService
             !string.IsNullOrEmpty(tokenUri.UserInfo) ||
             !string.IsNullOrEmpty(tokenUri.Fragment))
         {
-            throw new InvalidOperationException("Blaaiz Interac registration reads require a token endpoint on the configured HTTPS provider connection.");
+            throw new InvalidOperationException($"Blaaiz {purpose} require a token endpoint on the configured HTTPS provider connection.");
         }
 
         if (string.IsNullOrWhiteSpace(_options.ClientId) || string.IsNullOrWhiteSpace(_options.ClientSecret))
-            throw new InvalidOperationException("The current Blaaiz connection has no OAuth credentials for Interac registration reads.");
+            throw new InvalidOperationException($"The current Blaaiz connection has no OAuth credentials for {purpose}.");
 
         return new InteracReadConnection(apiBaseUri, tokenUri, _options.ClientId, _options.ClientSecret);
     }
 
-    private async Task<string> AcquireInteracReadTokenAsync(InteracReadConnection connection, string scopedKey, CancellationToken ct)
+    private async Task<string> AcquireInteracReadTokenAsync(InteracReadConnection connection, string scopedKey,
+        string scope, string purpose, CancellationToken ct)
     {
         var requestLogId = await _auditService.StartAsync(
             ProviderCode.Blaaiz,
@@ -130,7 +139,7 @@ public class BlaaizTokenService : IBlaaizTokenService
                 grant_type = "client_credentials",
                 client_id = Mask(connection.ClientId),
                 client_secret = "***REDACTED***",
-                scope = InteracReadScope
+                scope
             }),
             ct: ct);
 
@@ -142,7 +151,7 @@ public class BlaaizTokenService : IBlaaizTokenService
                 ["grant_type"] = "client_credentials",
                 ["client_id"] = connection.ClientId,
                 ["client_secret"] = connection.ClientSecret,
-                ["scope"] = InteracReadScope
+                ["scope"] = scope
             });
             var client = _httpClientFactory.CreateClient("BlaaizAuth");
             using var response = await client.PostAsync(connection.TokenUri, body, ct);
@@ -151,7 +160,7 @@ public class BlaaizTokenService : IBlaaizTokenService
 
             if (!response.IsSuccessStatusCode)
             {
-                const string message = "Blaaiz could not authorize Interac registration reads. Confirm the current connection is authorized for interac-auto-deposit-email:read. Existing credentials and configured scopes were not changed.";
+                var message = $"Blaaiz could not authorize {purpose}. Confirm the current connection is authorized for {scope}. Existing credentials and configured scopes were not changed.";
                 // OAuth errors can echo request secrets or token material; never retain their raw response.
                 var safeResponse = JsonSerializer.Serialize(new { message });
                 await _auditService.FailAsync(requestLogId, (int)response.StatusCode, safeResponse, message, stopwatch.ElapsedMilliseconds, ct);
@@ -164,16 +173,16 @@ public class BlaaizTokenService : IBlaaizTokenService
 
             if (token is null || string.IsNullOrWhiteSpace(token.AccessToken) || token.ExpiresIn <= 0 ||
                 !string.Equals(token.TokenType, "Bearer", StringComparison.OrdinalIgnoreCase) ||
-                (token.Scope is not null && !string.Equals(token.Scope.Trim(), InteracReadScope, StringComparison.Ordinal)))
+                (token.Scope is not null && !string.Equals(token.Scope.Trim(), scope, StringComparison.Ordinal)))
             {
-                const string message = "Blaaiz returned an invalid OAuth response for the Interac registration read scope.";
+                var message = $"Blaaiz returned an invalid OAuth response for the {scope} scope.";
                 var safeResponse = JsonSerializer.Serialize(new { message });
                 await _auditService.FailAsync(requestLogId, (int)response.StatusCode, safeResponse, message, stopwatch.ElapsedMilliseconds, ct);
                 throw new ProviderIntegrationException(message, (int)response.StatusCode, safeResponse, requestLogId);
             }
 
             await _auditService.CompleteAsync(requestLogId, (int)response.StatusCode,
-                JsonSerializer.Serialize(new { token_type = token.TokenType, expires_in = token.ExpiresIn, access_token = "***REDACTED***", scope = InteracReadScope }),
+                JsonSerializer.Serialize(new { token_type = token.TokenType, expires_in = token.ExpiresIn, access_token = "***REDACTED***", scope }),
                 stopwatch.ElapsedMilliseconds, ct);
 
             var cacheSeconds = Math.Max(1, token.ExpiresIn - Math.Max(0, _options.TokenRefreshBufferSeconds));
@@ -184,7 +193,7 @@ public class BlaaizTokenService : IBlaaizTokenService
         catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
         catch (Exception ex)
         {
-            const string message = "Unable to connect to Blaaiz authentication for Interac registration reads.";
+            var message = $"Unable to connect to Blaaiz authentication for {purpose}.";
             await _auditService.FailAsync(requestLogId, null, null, message, stopwatch.ElapsedMilliseconds, ct);
             throw new ProviderIntegrationException(message, requestLogId: requestLogId, innerException: ex);
         }
