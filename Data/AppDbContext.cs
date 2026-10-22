@@ -20,6 +20,7 @@ using KorridorX.Models.Support;
 using KorridorX.Models.Transfers;
 using KorridorX.Models.Treasury;
 using KorridorX.Models.Webhooks;
+using KorridorX.Models.WalletWithdrawals;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
@@ -71,6 +72,7 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<Guid
     public DbSet<LedgerTransaction> LedgerTransactions => Set<LedgerTransaction>();
     public DbSet<LedgerPosting> LedgerPostings => Set<LedgerPosting>();
     public DbSet<FinancialReservation> FinancialReservations => Set<FinancialReservation>();
+    public DbSet<FiatWalletWithdrawalDestination> FiatWalletWithdrawalDestinations => Set<FiatWalletWithdrawalDestination>();
 
     public DbSet<DigitalAssetDepositAddress> DigitalAssetDepositAddresses => Set<DigitalAssetDepositAddress>();
     public DbSet<DigitalAssetDepositIntent> DigitalAssetDepositIntents => Set<DigitalAssetDepositIntent>();
