@@ -11302,6 +11302,191 @@ namespace KorridorX.Migrations
                     b.ToTable("TreasuryRebalanceRequests");
                 });
 
+            modelBuilder.Entity("KorridorX.Models.WalletWithdrawals.FiatWalletWithdrawal", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("AccountNumberLast4")
+                        .HasMaxLength(4)
+                        .HasColumnType("character varying(4)");
+
+                    b.Property<string>("BankName")
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
+
+                    b.Property<Guid?>("BusinessProfileId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CreatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("CurrencyCode")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<int>("CurrencyDecimalPlaces")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid?>("CustomerProfileId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("DeletedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("DestinationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("ExpectedRecipientAmount")
+                        .HasPrecision(36, 18)
+                        .HasColumnType("numeric(36,18)");
+
+                    b.Property<DateTime>("FeeQuotedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("FinancialAccountId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("FinancialReservationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("IdempotencyKeyHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<decimal>("KorridorXFee")
+                        .HasPrecision(36, 18)
+                        .HasColumnType("numeric(36,18)");
+
+                    b.Property<string>("KorridorXFeePolicy")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<DateTime?>("LastUpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("LastUpdatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("OperationalHoldReason")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<Guid>("OwnerId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("OwnerType")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("PaymentChannelId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("PaymentMethod")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid?>("PayoutId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ProtectedAccountNumber")
+                        .HasMaxLength(2048)
+                        .HasColumnType("character varying(2048)");
+
+                    b.Property<string>("ProviderBankId")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<decimal>("ProviderFee")
+                        .HasPrecision(36, 18)
+                        .HasColumnType("numeric(36,18)");
+
+                    b.Property<string>("RecipientEmail")
+                        .HasMaxLength(254)
+                        .HasColumnType("character varying(254)");
+
+                    b.Property<string>("Reference")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<string>("RequestFingerprint")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<Guid>("RequestedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("SettledAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("SourceCountryCode")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
+
+                    b.Property<int>("Status")
+                        .IsConcurrencyToken()
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("SubmittedToProviderAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<decimal>("TotalWalletDebit")
+                        .HasPrecision(36, 18)
+                        .HasColumnType("numeric(36,18)");
+
+                    b.Property<string>("VerifiedAccountName")
+                        .HasMaxLength(250)
+                        .HasColumnType("character varying(250)");
+
+                    b.Property<decimal>("WithdrawalAmount")
+                        .HasPrecision(36, 18)
+                        .HasColumnType("numeric(36,18)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DestinationId");
+
+                    b.HasIndex("FinancialAccountId");
+
+                    b.HasIndex("FinancialReservationId")
+                        .IsUnique()
+                        .HasFilter("\"FinancialReservationId\" IS NOT NULL");
+
+                    b.HasIndex("PayoutId")
+                        .IsUnique()
+                        .HasFilter("\"PayoutId\" IS NOT NULL");
+
+                    b.HasIndex("Reference")
+                        .IsUnique();
+
+                    b.HasIndex("Status", "CreatedAt");
+
+                    b.HasIndex("OwnerType", "OwnerId", "CreatedAt");
+
+                    b.HasIndex("OwnerType", "OwnerId", "IdempotencyKeyHash")
+                        .IsUnique();
+
+                    b.HasIndex("BusinessProfileId", "SourceCountryCode", "CurrencyCode", "CreatedAt");
+
+                    b.HasIndex("CustomerProfileId", "SourceCountryCode", "CurrencyCode", "CreatedAt");
+
+                    b.ToTable("FiatWalletWithdrawals");
+                });
+
             modelBuilder.Entity("KorridorX.Models.WalletWithdrawals.FiatWalletWithdrawalDestination", b =>
                 {
                     b.Property<Guid>("Id")
@@ -13656,6 +13841,39 @@ namespace KorridorX.Migrations
                     b.Navigation("FromProviderWalletBalance");
 
                     b.Navigation("ToProviderWalletBalance");
+                });
+
+            modelBuilder.Entity("KorridorX.Models.WalletWithdrawals.FiatWalletWithdrawal", b =>
+                {
+                    b.HasOne("KorridorX.Models.WalletWithdrawals.FiatWalletWithdrawalDestination", "Destination")
+                        .WithMany()
+                        .HasForeignKey("DestinationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("KorridorX.Models.FinancialCore.FinancialAccount", "FinancialAccount")
+                        .WithMany()
+                        .HasForeignKey("FinancialAccountId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("KorridorX.Models.FinancialCore.FinancialReservation", "FinancialReservation")
+                        .WithMany()
+                        .HasForeignKey("FinancialReservationId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("KorridorX.Models.Payments.Payout", "Payout")
+                        .WithMany()
+                        .HasForeignKey("PayoutId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("Destination");
+
+                    b.Navigation("FinancialAccount");
+
+                    b.Navigation("FinancialReservation");
+
+                    b.Navigation("Payout");
                 });
 
             modelBuilder.Entity("KorridorX.Models.WalletWithdrawals.FiatWalletWithdrawalDestination", b =>

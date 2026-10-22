@@ -26,6 +26,17 @@ public sealed class ComplianceLimitService : IComplianceLimitService
         TransferStatus.RefundPending
     ];
 
+    // Held, dispatched and settled fiat withdrawals consume the same
+    // per-owner outbound limits as Send transfers. Released/cancelled
+    // withdrawals no longer consume exposure.
+    private static readonly FiatWalletWithdrawalStatus[] CountedWithdrawalStatuses =
+    [
+        FiatWalletWithdrawalStatus.AwaitingExecution,
+        FiatWalletWithdrawalStatus.Processing,
+        FiatWalletWithdrawalStatus.Succeeded,
+        FiatWalletWithdrawalStatus.RequiresReconciliation
+    ];
+
     private readonly AppDbContext _db;
     private readonly IAuditService _audit;
 
@@ -94,6 +105,18 @@ public sealed class ComplianceLimitService : IComplianceLimitService
             .Where(x => x.CreatedAt >= startOfMonth)
             .SumAsync(x => (decimal?)x.TotalPayableAmount, ct) ?? 0m;
 
+        var withdrawals = _db.FiatWalletWithdrawals.AsNoTracking().Where(x =>
+            !x.IsDeleted && x.SourceCountryCode == transfer.SourceCountryCode &&
+            x.CurrencyCode == transfer.SourceCurrencyCode &&
+            CountedWithdrawalStatuses.Contains(x.Status));
+        withdrawals = transfer.BusinessProfileId.HasValue
+            ? withdrawals.Where(x => x.BusinessProfileId == transfer.BusinessProfileId)
+            : withdrawals.Where(x => x.CustomerProfileId == transfer.CustomerProfileId);
+        dailyUsed += await withdrawals.Where(x => x.CreatedAt >= startOfDay)
+            .SumAsync(x => (decimal?)x.TotalWalletDebit, ct) ?? 0m;
+        monthlyUsed += await withdrawals.Where(x => x.CreatedAt >= startOfMonth)
+            .SumAsync(x => (decimal?)x.TotalWalletDebit, ct) ?? 0m;
+
         var trackedTransfers = _db.ChangeTracker.Entries<Transfer>()
             .Where(x =>
                 x.State == EntityState.Added &&
@@ -114,6 +137,21 @@ public sealed class ComplianceLimitService : IComplianceLimitService
         monthlyUsed += trackedTransfers
             .Where(x => x.CreatedAt >= startOfMonth)
             .Sum(x => x.TotalPayableAmount);
+
+        var trackedWithdrawals = _db.ChangeTracker.Entries<KorridorX.Models.WalletWithdrawals.FiatWalletWithdrawal>()
+            .Where(x => x.State == EntityState.Added && !x.Entity.IsDeleted &&
+                x.Entity.SourceCountryCode == transfer.SourceCountryCode &&
+                x.Entity.CurrencyCode == transfer.SourceCurrencyCode &&
+                CountedWithdrawalStatuses.Contains(x.Entity.Status) &&
+                (transfer.BusinessProfileId.HasValue
+                    ? x.Entity.BusinessProfileId == transfer.BusinessProfileId
+                    : x.Entity.CustomerProfileId == transfer.CustomerProfileId))
+            .Select(x => x.Entity)
+            .ToList();
+        dailyUsed += trackedWithdrawals.Where(x => x.CreatedAt >= startOfDay)
+            .Sum(x => x.TotalWalletDebit);
+        monthlyUsed += trackedWithdrawals.Where(x => x.CreatedAt >= startOfMonth)
+            .Sum(x => x.TotalWalletDebit);
 
         return ComplianceLimitPolicy.Evaluate(
             transfer.TotalPayableAmount,

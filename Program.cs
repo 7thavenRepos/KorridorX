@@ -146,6 +146,8 @@ builder.Services
     .Bind(builder.Configuration.GetSection(AccountingOptions.SectionName))
     .ValidateOnStart();
 builder.Services.AddSingleton<IValidateOptions<AccountingOptions>, AccountingOptionsValidator>();
+builder.Services.Configure<WalletWithdrawalProcessingOptions>(
+    builder.Configuration.GetSection(WalletWithdrawalProcessingOptions.SectionName));
 builder.Services.AddMemoryCache();
 
 var dataProtection = builder.Services
@@ -315,6 +317,7 @@ builder.Services.AddScoped<ICustomerProfileService, CustomerProfileService>();
 builder.Services.AddScoped<IConsumerWalletService, ConsumerWalletService>();
 builder.Services.AddScoped<IWalletWithdrawalSetupService, WalletWithdrawalSetupService>();
 builder.Services.AddScoped<IWalletWithdrawalFeePreviewService, WalletWithdrawalFeePreviewService>();
+builder.Services.AddScoped<IWalletWithdrawalInitiationService, WalletWithdrawalInitiationService>();
 builder.Services.AddScoped<IConsumerWalletReceivingAccountService, ConsumerWalletReceivingAccountService>();
 builder.Services.AddScoped<KorridorX.Services.Fx.IAdminTransferFeeService, KorridorX.Services.Fx.AdminTransferFeeService>();
 builder.Services.AddScoped<IConsumerWalletValuationService, ConsumerWalletValuationService>();

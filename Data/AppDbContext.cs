@@ -73,6 +73,7 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<Guid
     public DbSet<LedgerPosting> LedgerPostings => Set<LedgerPosting>();
     public DbSet<FinancialReservation> FinancialReservations => Set<FinancialReservation>();
     public DbSet<FiatWalletWithdrawalDestination> FiatWalletWithdrawalDestinations => Set<FiatWalletWithdrawalDestination>();
+    public DbSet<FiatWalletWithdrawal> FiatWalletWithdrawals => Set<FiatWalletWithdrawal>();
 
     public DbSet<DigitalAssetDepositAddress> DigitalAssetDepositAddresses => Set<DigitalAssetDepositAddress>();
     public DbSet<DigitalAssetDepositIntent> DigitalAssetDepositIntents => Set<DigitalAssetDepositIntent>();
