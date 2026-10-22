@@ -27,6 +27,10 @@ public sealed class BlaaizPayoutRequest
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public decimal? ToAmount { get; set; }
 
+    [JsonPropertyName("merchant_reference")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? MerchantReference { get; set; }
+
     [JsonPropertyName("type")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? RecipientType { get; set; }

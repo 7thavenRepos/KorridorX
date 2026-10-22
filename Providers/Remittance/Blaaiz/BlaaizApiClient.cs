@@ -812,6 +812,7 @@ public class BlaaizApiClient : IBlaaizApiClient
             to_currency_id = request.ToCurrencyId,
             from_amount = request.FromAmount,
             to_amount = request.ToAmount,
+            merchant_reference = request.MerchantReference,
             type = request.RecipientType,
             phone_number = request.PhoneNumber,
             email = request.Email,

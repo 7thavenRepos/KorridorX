@@ -737,9 +737,9 @@ public class BlaaizRemittanceProvider : IRemittanceProvider
             Method = MapPayoutMethod(request.PaymentMethod),
             FromCurrencyId = request.SourceCurrencyCode.ToUpperInvariant(),
             ToCurrencyId = request.DestinationCurrencyCode.ToUpperInvariant(),
-            ToAmount = request.DestinationAmount,
             Note = NormalizeOptional(request.Note)
         };
+        BlaaizPayoutAmountPolicy.Apply(request, providerRequest);
 
         switch (request.PaymentMethod)
         {
@@ -823,7 +823,8 @@ public class BlaaizRemittanceProvider : IRemittanceProvider
             response.RequestLogId,
             transaction.AmountWithoutFee,
             transaction.Fee,
-            transaction.Currency);
+            transaction.Currency,
+            transaction.MerchantReference);
     }
 
     private static string MapPayoutMethod(PaymentMethod paymentMethod) => paymentMethod switch

@@ -103,7 +103,11 @@ public sealed record RemittancePayoutRequest(
     string? SortCode,
     string? Iban,
     string? SwiftBic,
-    string? Note);
+    string? Note,
+    // Inclusive source-wallet debit mode used only by guarded fiat withdrawals.
+    // Existing transfer payouts keep DestinationAmount/to_amount unchanged.
+    decimal? FromAmount = null,
+    string? MerchantReference = null);
 
 public sealed record RemittancePayoutResult(
     string ProviderTransactionId,
@@ -130,7 +134,8 @@ public sealed record RemittanceTransactionStatusResult(
     Guid ProviderRequestLogId,
     decimal? AmountWithoutFee = null,
     decimal? ProviderFeeAmount = null,
-    string? ProviderFeeCurrencyCode = null);
+    string? ProviderFeeCurrencyCode = null,
+    string? MerchantReference = null);
 
 
 public sealed record RemittanceBank(
