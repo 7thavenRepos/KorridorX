@@ -10,6 +10,11 @@ namespace KorridorX.Services.WalletWithdrawals;
 // never accidentally point a withdrawal worker at a live Blaaiz endpoint.
 public static class WalletWithdrawalDispatchSafetyPolicy
 {
+    // Sandbox acceptance cannot be accidentally broadened into bulk payouts.
+    // These are wallet-currency units, not converted values.
+    public const decimal AbsoluteMaxNgnDebit = 50000m;
+    public const decimal AbsoluteMaxCadDebit = 100m;
+
     public static bool CanDispatch(string environment, WalletWithdrawalProcessingOptions settings,
         BlaaizOptions blaaiz) =>
         BaseAllowed(environment, settings, blaaiz) && settings.DispatchEnabled;
@@ -22,9 +27,36 @@ public static class WalletWithdrawalDispatchSafetyPolicy
         BlaaizOptions blaaiz) =>
         string.Equals(environment, Environments.Development, StringComparison.Ordinal) &&
         settings.Enabled && blaaiz.IsEnabled &&
+        HasExactSandboxAllowlist(settings) &&
         Uri.TryCreate(blaaiz.BaseUrl, UriKind.Absolute, out var uri) &&
         uri.Scheme == Uri.UriSchemeHttps &&
         uri.Host.Equals("api-dev.blaaiz.com", StringComparison.OrdinalIgnoreCase);
+
+    private static bool HasExactSandboxAllowlist(WalletWithdrawalProcessingOptions settings)
+    {
+        var ids = settings.SandboxAllowedWithdrawalIds;
+        return ids is { Count: 1 } && ids.All(x => x != Guid.Empty) &&
+            ids.Distinct().Count() == ids.Count;
+    }
+
+    public static bool IsSandboxAllowlisted(Guid withdrawalId, WalletWithdrawalProcessingOptions settings) =>
+        withdrawalId != Guid.Empty && HasExactSandboxAllowlist(settings) &&
+        settings.SandboxAllowedWithdrawalIds.Contains(withdrawalId);
+
+    public static bool IsWithinSandboxDebitCeiling(FiatWalletWithdrawal row,
+        WalletWithdrawalProcessingOptions settings)
+    {
+        if (row is null || !IsSandboxAllowlisted(row.Id, settings) || row.TotalWalletDebit <= 0m)
+            return false;
+
+        var (configured, hard) = row.CurrencyCode.ToUpperInvariant() switch
+        {
+            "NGN" => (settings.SandboxMaxNgnDebit, AbsoluteMaxNgnDebit),
+            "CAD" => (settings.SandboxMaxCadDebit, AbsoluteMaxCadDebit),
+            _ => (0m, 0m)
+        };
+        return configured > 0m && configured <= hard && row.TotalWalletDebit <= configured;
+    }
 
     public static bool CanClaim(FiatWalletWithdrawal row) =>
         !row.IsDeleted && row.Status == FiatWalletWithdrawalStatus.AwaitingExecution &&

@@ -37,6 +37,7 @@ public class PayoutService : IPayoutService
     private readonly IOutboundFundsRestrictionService _outboundFundsRestrictions;
     private readonly IProviderWalletResolver _wallets;
     private readonly PaymentChannelService _channels;
+    private readonly IProviderPayoutLiquidityService _liquidity;
 
     public PayoutService(
         AppDbContext db,
@@ -49,7 +50,8 @@ public class PayoutService : IPayoutService
         ITransferRiskService transferRiskService,
         IComplianceScreeningService screeningService,
         IOutboundFundsRestrictionService outboundFundsRestrictions,
-        IProviderWalletResolver wallets, PaymentChannelService channels)
+        IProviderWalletResolver wallets, PaymentChannelService channels,
+        IProviderPayoutLiquidityService liquidity)
     {
         _db = db;
         _referenceGenerator = referenceGenerator;
@@ -61,7 +63,7 @@ public class PayoutService : IPayoutService
         _transferRiskService = transferRiskService;
         _screeningService = screeningService;
         _outboundFundsRestrictions = outboundFundsRestrictions;
-        _wallets = wallets; _channels = channels;
+        _wallets = wallets; _channels = channels; _liquidity = liquidity;
     }
 
     public async Task<PayoutDetailsDto> DispatchForTransferAsync(
@@ -181,8 +183,19 @@ public class PayoutService : IPayoutService
             await _db.SaveChangesAsync(ct);
         }
 
+        if (!string.Equals(transfer.ProviderCode, _remittanceProvider.ProviderName, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("The selected transfer provider is not the active remittance adapter.");
+
+        // The Blaaiz payout payload still spends from the GBP/source wallet.
+        // Independently verify the NGN/destination provider wallet has sufficient
+        // payout liquidity before any provider POST (same-currency uses its selected wallet).
         var walletId = await _wallets.SelectAsync("Payout", payout.Id, _remittanceProvider.ProviderName,
             transfer.SourceCurrencyCode, null, ProviderWalletResolver.Payout, payout.Attempts.Count > 0, ct);
+        var sameCurrency = string.Equals(transfer.SourceCurrencyCode,
+            transfer.DestinationCurrencyCode, StringComparison.OrdinalIgnoreCase);
+        await _liquidity.EnsureAvailableAsync(transfer.ProviderCode,
+            transfer.DestinationCurrencyCode, transfer.DestinationAmount,
+            sameCurrency ? walletId : null, ct);
 
         var sanitizedRequest = JsonSerializer.Serialize(new
         {

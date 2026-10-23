@@ -29,7 +29,8 @@ public sealed class WalletWithdrawalExecutionService : IWalletWithdrawalExecutio
 {
     private readonly AppDbContext _db;
     private readonly IRemittanceProvider _provider;
-    private readonly IBlaaizApiClient _blaaiz;
+    private readonly IWalletWithdrawalQuoteGateway _quotes;
+    private readonly IProviderPayoutLiquidityService _liquidity;
     private readonly IComplianceGateService _compliance;
     private readonly IOutboundFundsRestrictionService _restrictions;
     private readonly IProviderWalletResolver _wallets;
@@ -44,7 +45,8 @@ public sealed class WalletWithdrawalExecutionService : IWalletWithdrawalExecutio
     private readonly ILogger<WalletWithdrawalExecutionService> _logger;
 
     public WalletWithdrawalExecutionService(AppDbContext db, IRemittanceProvider provider,
-        IBlaaizApiClient blaaiz, IComplianceGateService compliance,
+        IWalletWithdrawalQuoteGateway quotes, IProviderPayoutLiquidityService liquidity,
+        IComplianceGateService compliance,
         IOutboundFundsRestrictionService restrictions,
         IProviderWalletResolver wallets, PaymentChannelService channels,
         IFinancialReservationService reservations, INotificationQueueService notifications,
@@ -52,7 +54,8 @@ public sealed class WalletWithdrawalExecutionService : IWalletWithdrawalExecutio
         IOptions<WalletWithdrawalProcessingOptions> settings, IOptions<BlaaizOptions> blaaizSettings,
         IHostEnvironment environment, ILogger<WalletWithdrawalExecutionService> logger)
     {
-        _db = db; _provider = provider; _blaaiz = blaaiz; _compliance = compliance;
+        _db = db; _provider = provider; _quotes = quotes; _liquidity = liquidity;
+        _compliance = compliance;
         _restrictions = restrictions; _wallets = wallets;
         _channels = channels; _reservations = reservations; _notifications = notifications;
         _audit = audit; _settings = settings.Value; _blaaizSettings = blaaizSettings.Value;
@@ -69,9 +72,10 @@ public sealed class WalletWithdrawalExecutionService : IWalletWithdrawalExecutio
     public async Task<int> DispatchBatchAsync(int batchSize, CancellationToken ct = default)
     {
         if (!DispatchAllowed) return 0;
+        var allowedIds = _settings.SandboxAllowedWithdrawalIds;
         var ids = await _db.FiatWalletWithdrawals.AsNoTracking()
             .Where(x => !x.IsDeleted && x.Status == FiatWalletWithdrawalStatus.AwaitingExecution &&
-                x.PayoutId == null && x.OperationalHoldReason == null)
+                x.PayoutId == null && x.OperationalHoldReason == null && allowedIds.Contains(x.Id))
             .OrderBy(x => x.CreatedAt).Select(x => x.Id)
             .Take(Math.Clamp(batchSize, 1, 50)).ToListAsync(ct);
         var claimed = 0;
@@ -96,9 +100,10 @@ public sealed class WalletWithdrawalExecutionService : IWalletWithdrawalExecutio
     public async Task<int> RecoverBatchAsync(int batchSize, CancellationToken ct = default)
     {
         if (!RecoverAllowed) return 0;
+        var allowedIds = _settings.SandboxAllowedWithdrawalIds;
         var cutoff = DateTime.UtcNow.AddSeconds(-15);
         var ids = await _db.FiatWalletWithdrawals.AsNoTracking()
-            .Where(x => !x.IsDeleted && x.PayoutId != null &&
+            .Where(x => !x.IsDeleted && x.PayoutId != null && allowedIds.Contains(x.Id) &&
                 (x.Status == FiatWalletWithdrawalStatus.Processing ||
                  x.Status == FiatWalletWithdrawalStatus.RequiresReconciliation) &&
                 x.SubmittedToProviderAtUtc <= cutoff &&
@@ -125,11 +130,14 @@ public sealed class WalletWithdrawalExecutionService : IWalletWithdrawalExecutio
 
     private async Task<bool> DispatchOneAsync(Guid id, CancellationToken ct)
     {
-        if (!DispatchAllowed) return false;
+        if (!DispatchAllowed || !WalletWithdrawalDispatchSafetyPolicy.IsSandboxAllowlisted(id, _settings))
+            return false;
         var row = await _db.FiatWalletWithdrawals.AsNoTracking().SingleOrDefaultAsync(x =>
             x.Id == id && !x.IsDeleted && x.Status == FiatWalletWithdrawalStatus.AwaitingExecution &&
             x.PayoutId == null && x.OperationalHoldReason == null, ct);
         if (row is null) return false;
+        if (!WalletWithdrawalDispatchSafetyPolicy.IsWithinSandboxDebitCeiling(row, _settings))
+            return false;
         WalletWithdrawalDispatchSafetyPolicy.ValidateSnapshot(row);
         var business = row.BusinessProfileId.HasValue;
 
@@ -139,12 +147,12 @@ public sealed class WalletWithdrawalExecutionService : IWalletWithdrawalExecutio
 
         var customer = business
             ? await _compliance.EnsureBusinessCanInitiateMoneyMovementAsync(row.BusinessProfileId!.Value,
-                ProviderCode.Blaaiz, ct)
+                _provider.ProviderCode, ct)
             : await _compliance.EnsureCanInitiateMoneyMovementAsync(row.CustomerProfileId ??
                 throw new InvalidOperationException("Withdrawal customer profile is missing."),
-                ProviderCode.Blaaiz, ct);
-        if (!Guid.TryParse(customer.ProviderCustomerId, out var customerGuid) || customerGuid == Guid.Empty)
-            throw new InvalidOperationException("A verified Blaaiz customer ID is required.");
+                _provider.ProviderCode, ct);
+        if (string.IsNullOrWhiteSpace(customer.ProviderCustomerId))
+            throw new InvalidOperationException("A verified provider customer ID is required.");
 
         var destinationCountry = WalletWithdrawalSetupPolicy.DestinationCountry(row.CurrencyCode, row.PaymentMethod);
         var eligible = await _channels.EligibleAsync(destinationCountry, row.CurrencyCode,
@@ -152,19 +160,23 @@ public sealed class WalletWithdrawalExecutionService : IWalletWithdrawalExecutio
         var choice = eligible.SingleOrDefault(x => x.Channel.Id == row.PaymentChannelId &&
             x.Capability.PaymentMethod == row.PaymentMethod)
             ?? throw new InvalidOperationException("The selected payout channel is no longer enabled.");
+        if (!string.Equals(choice.Channel.ProviderCode, _provider.ProviderName,
+                StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("The withdrawal channel provider does not match the active remittance adapter.");
 
         // Re-price the original inclusive amount immediately before any
         // provider submission. A changed fee never silently reduces the net
         // amount the customer authorized.
-        var quoted = await _blaaiz.GetFeeBreakdownAsync(new BlaaizFeeBreakdownRequest
-        {
-            FromCurrencyId = row.CurrencyCode, ToCurrencyId = row.CurrencyCode,
-            FromAmount = row.TotalWalletDebit, CustomerId = customerGuid.ToString("D")
-        }, ct);
-        var fee = WalletWithdrawalFeePolicy.Evaluate(quoted.Data, row.PaymentMethod,
-            row.TotalWalletDebit, row.CurrencyDecimalPlaces);
+        var fee = await _quotes.QuoteAsync(choice.Channel.ProviderCode, row.CurrencyCode,
+            customer.ProviderCustomerId, row.TotalWalletDebit,
+            row.CurrencyDecimalPlaces, row.PaymentMethod, ct);
         if (fee.ProviderFee != row.ProviderFee || fee.RecipientAmount != row.ExpectedRecipientAmount)
             throw new InvalidOperationException("The payout price changed. A new withdrawal quotation is required; funds remain held.");
+
+        // Confirm actual provider liquidity before any irreversible claim or POST.
+        // A failed preflight leaves the withdrawal safely awaiting execution.
+        await _liquidity.EnsureAvailableAsync(choice.Channel.ProviderCode,
+            row.CurrencyCode, row.TotalWalletDebit, choice.Wallet.ProviderWalletId, ct);
 
         // Commit the unique payout, route and one-shot claim BEFORE POST.
         // A crash from this point can only reconcile; no worker can POST again.
@@ -349,7 +361,9 @@ public sealed class WalletWithdrawalExecutionService : IWalletWithdrawalExecutio
 
     public async Task<bool> RecoverOneAsync(Guid withdrawalId, CancellationToken ct = default)
     {
-        if (!RecoverAllowed && !DispatchAllowed) return false;
+        if ((!RecoverAllowed && !DispatchAllowed) ||
+            !WalletWithdrawalDispatchSafetyPolicy.IsSandboxAllowlisted(withdrawalId, _settings))
+            return false;
         var row = await _db.FiatWalletWithdrawals.AsNoTracking().SingleOrDefaultAsync(x =>
             x.Id == withdrawalId && !x.IsDeleted && x.PayoutId != null &&
             (x.Status == FiatWalletWithdrawalStatus.Processing ||
@@ -531,6 +545,8 @@ public sealed class WalletWithdrawalExecutionService : IWalletWithdrawalExecutio
     {
         if (!_environment.IsDevelopment() || !_settings.Enabled)
             throw new InvalidOperationException("Wallet withdrawal cancellation is not enabled outside Development.");
+        if (!WalletWithdrawalDispatchSafetyPolicy.IsSandboxAllowlisted(withdrawalId, _settings))
+            throw new InvalidOperationException("Withdrawal is not on the explicit Development sandbox allowlist.");
         if (adminUserId == Guid.Empty || string.IsNullOrWhiteSpace(reason) || reason.Trim().Length > 500)
             throw new InvalidOperationException("A valid admin and cancellation reason are required.");
 

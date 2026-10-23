@@ -20,7 +20,7 @@ public sealed class WalletWithdrawalFeePreviewService(
     PaymentChannelService channels,
     IComplianceLimitService complianceLimits,
     IOutboundFundsRestrictionService outboundRestrictions,
-    IBlaaizApiClient blaaiz) : IWalletWithdrawalFeePreviewService
+    IWalletWithdrawalQuoteGateway quotes) : IWalletWithdrawalFeePreviewService
 {
     public async Task<WalletWithdrawalFeePreviewDto> PreviewAsync(Guid userId, Guid walletId, bool business,
         WalletWithdrawalFeePreviewRequestDto request, CancellationToken ct = default)
@@ -47,8 +47,8 @@ public sealed class WalletWithdrawalFeePreviewService(
         await outboundRestrictions.EnsureFinancialAccountOwnerOutboundAllowedAsync(
             wallet.OwnerType, context.OwnerId, "FiatWalletWithdrawalFeePreview", ct);
         var verifiedCustomer = await contexts.EnsureComplianceAsync(context, ct);
-        if (!Guid.TryParse(verifiedCustomer.ProviderCustomerId, out var providerId) || providerId == Guid.Empty)
-            throw new InvalidOperationException("A valid verified Blaaiz customer is required to quote a withdrawal.");
+        if (string.IsNullOrWhiteSpace(verifiedCustomer.ProviderCustomerId))
+            throw new InvalidOperationException("A verified provider customer is required to quote a withdrawal.");
 
         var destination = await db.FiatWalletWithdrawalDestinations.AsNoTracking()
             .SingleOrDefaultAsync(x => x.Id == request.DestinationId && x.FinancialAccountId == walletId &&
@@ -101,15 +101,12 @@ public sealed class WalletWithdrawalFeePreviewService(
             throw new ComplianceLimitExceededException(limits.FailureCode ?? "COMPLIANCE_LIMIT_EXCEEDED",
                 limits.FailureMessage ?? "The withdrawal exceeds a configured compliance limit.");
 
-        var raw = await blaaiz.GetFeeBreakdownAsync(new BlaaizFeeBreakdownRequest
-        {
-            FromCurrencyId = wallet.AssetCode,
-            ToCurrencyId = wallet.AssetCode,
-            FromAmount = request.WithdrawalAmount,
-            CustomerId = providerId.ToString("D")
-        }, ct);
-        var values = WalletWithdrawalFeePolicy.Evaluate(raw.Data, destination.PaymentMethod,
-            request.WithdrawalAmount, wallet.Asset.DecimalPlaces);
+        // Route the fee request through the provider selected by the channel.
+        // Provider-specific HTTP contracts are confined to registered adapters.
+        var values = await quotes.QuoteAsync(matching[0].Channel.ProviderCode,
+            wallet.AssetCode, verifiedCustomer.ProviderCustomerId,
+            request.WithdrawalAmount, wallet.Asset.DecimalPlaces,
+            destination.PaymentMethod, ct);
 
         // There is currently no fiat-withdrawal-specific KorridorX fee rule.
         // TransferFee belongs to Send/Trading; do not silently apply it here.

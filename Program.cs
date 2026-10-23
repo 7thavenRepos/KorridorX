@@ -258,6 +258,11 @@ builder.Services.AddScoped<IProviderRequestAuditService, ProviderRequestAuditSer
 builder.Services.AddScoped<IBlaaizTokenService, BlaaizTokenService>();
 builder.Services.AddScoped<IRemittanceProvider, BlaaizRemittanceProvider>();
 builder.Services.AddScoped<IProviderCustomerService, ProviderCustomerService>();
+// Provider-independent payout liquidity and withdrawal pricing gateways.
+builder.Services.AddScoped<IProviderPayoutWalletBalanceReader, BlaaizPayoutWalletBalanceReader>();
+builder.Services.AddScoped<IProviderPayoutLiquidityService, ProviderPayoutLiquidityService>();
+builder.Services.AddScoped<IWalletWithdrawalQuoteProvider, BlaaizWalletWithdrawalQuoteProvider>();
+builder.Services.AddScoped<IWalletWithdrawalQuoteGateway, WalletWithdrawalQuoteGateway>();
 builder.Services.AddScoped<IBankDirectoryService, BankDirectoryService>();
 builder.Services.AddScoped<IProviderOperationsQueryService, ProviderOperationsQueryService>();
 builder.Services.AddScoped<RetainedBankDepositRecoveryService>();

@@ -17,6 +17,68 @@ public sealed class WalletWithdrawalDispatchSafetyPolicyTests
         Assert.False(WalletWithdrawalDispatchSafetyPolicy.CanRecover("Development", flags, provider));
     }
 
+    [Fact]
+    public void Sandbox_execution_requires_explicit_nonempty_unique_allowlist()
+    {
+        var flags = Flags();
+        flags.SandboxAllowedWithdrawalIds.Clear();
+        Assert.False(WalletWithdrawalDispatchSafetyPolicy.CanDispatch("Development", flags, Provider()));
+        Assert.False(WalletWithdrawalDispatchSafetyPolicy.CanRecover("Development", flags, Provider()));
+
+        flags.SandboxAllowedWithdrawalIds.Add(Guid.Empty);
+        Assert.False(WalletWithdrawalDispatchSafetyPolicy.CanDispatch("Development", flags, Provider()));
+
+        var id = Guid.NewGuid();
+        flags.SandboxAllowedWithdrawalIds = [id, id];
+        Assert.False(WalletWithdrawalDispatchSafetyPolicy.CanDispatch("Development", flags, Provider()));
+
+        flags.SandboxAllowedWithdrawalIds = [id, Guid.NewGuid()];
+        Assert.False(WalletWithdrawalDispatchSafetyPolicy.CanDispatch("Development", flags, Provider()));
+
+        flags.SandboxAllowedWithdrawalIds = [id, Guid.NewGuid(), Guid.NewGuid()];
+        Assert.False(WalletWithdrawalDispatchSafetyPolicy.CanDispatch("Development", flags, Provider()));
+
+        flags.SandboxAllowedWithdrawalIds = [id];
+        Assert.True(WalletWithdrawalDispatchSafetyPolicy.CanDispatch("Development", flags, Provider()));
+        Assert.True(WalletWithdrawalDispatchSafetyPolicy.CanRecover("Development", flags, Provider()));
+    }
+
+    [Fact]
+    public void Sandbox_dispatch_requires_exact_withdrawal_id_and_explicit_currency_debit_ceiling()
+    {
+        var row = Withdrawal();
+        var flags = Flags(row.Id);
+        Assert.True(WalletWithdrawalDispatchSafetyPolicy.IsWithinSandboxDebitCeiling(row, flags));
+
+        flags.SandboxMaxNgnDebit = 0m;
+        Assert.False(WalletWithdrawalDispatchSafetyPolicy.IsWithinSandboxDebitCeiling(row, flags));
+        flags.SandboxMaxNgnDebit = 99.99m;
+        Assert.False(WalletWithdrawalDispatchSafetyPolicy.IsWithinSandboxDebitCeiling(row, flags));
+        flags.SandboxMaxNgnDebit = WalletWithdrawalDispatchSafetyPolicy.AbsoluteMaxNgnDebit + 0.01m;
+        Assert.False(WalletWithdrawalDispatchSafetyPolicy.IsWithinSandboxDebitCeiling(row, flags));
+        flags.SandboxMaxNgnDebit = 100m;
+        Assert.False(WalletWithdrawalDispatchSafetyPolicy.IsWithinSandboxDebitCeiling(
+            new FiatWalletWithdrawal { CurrencyCode = "NGN", TotalWalletDebit = 1m }, flags));
+        Assert.False(WalletWithdrawalDispatchSafetyPolicy.IsSandboxAllowlisted(Guid.Empty, flags));
+        Assert.False(WalletWithdrawalDispatchSafetyPolicy.IsSandboxAllowlisted(Guid.NewGuid(), flags));
+    }
+
+    [Fact]
+    public void Cad_uses_independent_small_debit_ceiling_and_other_fiat_currencies_remain_ineligible()
+    {
+        var row = Withdrawal();
+        row.CurrencyCode = "CAD";
+        var flags = Flags(row.Id);
+        flags.SandboxMaxCadDebit = 0m;
+        Assert.False(WalletWithdrawalDispatchSafetyPolicy.IsWithinSandboxDebitCeiling(row, flags));
+        flags.SandboxMaxCadDebit = 100m;
+        Assert.True(WalletWithdrawalDispatchSafetyPolicy.IsWithinSandboxDebitCeiling(row, flags));
+        flags.SandboxMaxCadDebit = 101m;
+        Assert.False(WalletWithdrawalDispatchSafetyPolicy.IsWithinSandboxDebitCeiling(row, flags));
+        row.CurrencyCode = "USD";
+        Assert.False(WalletWithdrawalDispatchSafetyPolicy.IsWithinSandboxDebitCeiling(row, flags));
+    }
+
     [Theory]
     [InlineData("Staging", "https://api-dev.blaaiz.com")]
     [InlineData("Production", "https://api-dev.blaaiz.com")]
@@ -159,8 +221,17 @@ public sealed class WalletWithdrawalDispatchSafetyPolicyTests
 
     private static WalletWithdrawalProcessingOptions Flags() => new()
     {
-        Enabled = true, DispatchEnabled = true, RecoveryEnabled = true
+        Enabled = true, DispatchEnabled = true, RecoveryEnabled = true,
+        SandboxAllowedWithdrawalIds = [Guid.NewGuid()],
+        SandboxMaxNgnDebit = 100m, SandboxMaxCadDebit = 100m
     };
+
+    private static WalletWithdrawalProcessingOptions Flags(Guid withdrawalId)
+    {
+        var flags = Flags();
+        flags.SandboxAllowedWithdrawalIds = [withdrawalId];
+        return flags;
+    }
 
     private static BlaaizOptions Provider(string url = "https://api-dev.blaaiz.com") => new()
     {
