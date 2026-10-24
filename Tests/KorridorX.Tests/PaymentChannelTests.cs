@@ -33,9 +33,32 @@ public sealed class PaymentChannelTests
     [Theory][InlineData("NGN")][InlineData("USD")]
     public void Raw_card_flow_is_not_exposed_to_business_web(string asset) =>
         Assert.False(BlaaizChannelCapabilities.Find("card", asset, PaymentChannelDirection.Deposit)!.BusinessSupported);
-    [Theory][InlineData("USD", "ach-payout")][InlineData("USD", "wire-payout")][InlineData("EUR", "bank-payout")][InlineData("GBP", "bank-payout")]
-    public void Unconnected_payouts_cannot_be_activated(string asset, string code)
-    { var cap = BlaaizChannelCapabilities.Find(code, asset, PaymentChannelDirection.Withdrawal)!; Assert.False(cap.Implemented); Assert.NotEmpty(cap.BlockedReason!); }
+    // These foreign-currency rails became executable in W8. A capability being
+    // implemented does not by itself activate a payment channel: Admin must
+    // still enable a verified provider wallet, asset and approved payout route.
+    [Theory]
+    [InlineData("USD", "ach-payout", PaymentMethod.Ach)]
+    [InlineData("USD", "wire-payout", PaymentMethod.Wire)]
+    [InlineData("EUR", "bank-payout", PaymentMethod.BankTransfer)]
+    [InlineData("GBP", "bank-payout", PaymentMethod.BankTransfer)]
+    public void Foreign_payout_capabilities_are_implemented_for_both_audiences(string asset, string code, PaymentMethod method)
+    {
+        var capability = BlaaizChannelCapabilities.Find(code, asset, PaymentChannelDirection.Withdrawal);
+        Assert.NotNull(capability);
+        Assert.True(capability!.Implemented);
+        Assert.Equal(method, capability.PaymentMethod);
+        Assert.True(capability.IndividualSupported);
+        Assert.True(capability.BusinessSupported);
+        Assert.True(string.IsNullOrWhiteSpace(capability.BlockedReason));
+    }
+
+    [Theory]
+    [InlineData("USD", "interac-payout")]
+    [InlineData("CAD", "bank-payout")]
+    [InlineData("EUR", "ach-payout")]
+    [InlineData("GBP", "wire-payout")]
+    public void Unsupported_currency_and_payout_method_combinations_remain_unavailable(string asset, string code) =>
+        Assert.Null(BlaaizChannelCapabilities.Find(code, asset, PaymentChannelDirection.Withdrawal));
     [Fact] public void Draft_does_not_opt_in_and_route_snapshot_is_independent()
     { Assert.False(new PaymentChannel().HasBeenActivated); Assert.Equal(PaymentChannelStatus.Draft, new PaymentChannel().Status); Assert.Null(new PaymentChannelSelection().Amount); }
     [Theory][InlineData("*", "NG", true)][InlineData("CA", "CA", true)][InlineData("CA", "NG", false)]
