@@ -40,9 +40,8 @@ public sealed class WalletWithdrawalInitiationService(
     public async Task<WalletWithdrawalDetailsDto> InitiateAsync(Guid userId, Guid walletId, bool business,
         InitiateWalletWithdrawalRequestDto request, string? idempotencyKey, CancellationToken ct = default)
     {
-        // A guard cannot be bypassed by a staging/prod setting; W2B2 must
-        // explicitly change this code after the payout lifecycle is verified.
-        if (!environment.IsDevelopment() || !options.Value.Enabled)
+        // Enabled in configured Development, Staging and Production deployments.
+        if (!WalletWithdrawalDispatchSafetyPolicy.CanInitiate(environment.EnvironmentName, options.Value))
             throw new InvalidOperationException("Fiat wallet withdrawal processing is not enabled. No funds have been reserved.");
         ArgumentNullException.ThrowIfNull(request);
         var keyHash = WalletWithdrawalInitiationPolicy.HashIdempotencyKey(idempotencyKey);
@@ -194,7 +193,7 @@ public sealed class WalletWithdrawalInitiationService(
                 }, UserId: userId));
             var subject = $"Withdrawal request reserved: {row.CurrencyCode}";
             var message = "<p>Your withdrawal request was recorded and its amount reserved in your wallet.</p>" +
-                "<p>No bank or Interac payout has been dispatched. The request is awaiting processing.</p>";
+                "<p>No payout has been dispatched yet. The request is awaiting processing.</p>";
             if (business)
                 await notifications.QueueBusinessAsync(context.OwnerId, subject, message,
                     nameof(FiatWalletWithdrawal), row.Id, ct);
@@ -251,7 +250,7 @@ public sealed class WalletWithdrawalInitiationService(
         return row;
     }
 
-    private static WalletWithdrawalDetailsDto ToDto(FiatWalletWithdrawal row) => new(
+    private WalletWithdrawalDetailsDto ToDto(FiatWalletWithdrawal row) => new(
         row.Id, row.FinancialAccountId, row.DestinationId, row.PaymentChannelId,
         row.Reference, row.CurrencyCode, row.WithdrawalAmount, row.ProviderFee,
         row.KorridorXFee, row.KorridorXFeePolicy, row.TotalWalletDebit,
@@ -259,5 +258,6 @@ public sealed class WalletWithdrawalInitiationService(
         row.BankName,
         row.AccountNumberLast4 is null ? null : "•••• " + row.AccountNumberLast4,
         row.RecipientEmail, row.FeeQuotedAtUtc, row.CreatedAt,
-        ProviderDispatchEnabled: false);
+        ProviderDispatchEnabled: options.Value.DispatchEnabled &&
+            WalletWithdrawalDispatchSafetyPolicy.CanInitiate(environment.EnvironmentName, options.Value));
 }

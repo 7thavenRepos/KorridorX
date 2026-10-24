@@ -116,24 +116,44 @@ public sealed class WalletWithdrawalInitiationPolicyTests
     }
 
     [Theory]
-    [InlineData("Development", false)]
-    [InlineData("Staging", true)]
-    [InlineData("Production", true)]
-    public async Task Processing_gate_rejects_all_disabled_or_non_development_requests_before_any_dependency_is_used(
-        string environment, bool enabled)
+    [InlineData("Development")]
+    [InlineData("Staging")]
+    [InlineData("Production")]
+    public async Task Processing_disabled_in_any_environment_rejects_before_reserving_funds(
+        string environment)
     {
-        // If the gate is not the first step this test fails with a null
-        // dependency, protecting against accidentally live reservations.
+        // The disabled gate must fail before invoking any injected dependency.
         var service = new WalletWithdrawalInitiationService(
             db: null!, contexts: null!, previews: null!, reservations: null!,
             pins: null!, businessAccess: null!, complianceLimits: null!,
             notifications: null!, audit: null!,
-            options: Options.Create(new WalletWithdrawalProcessingOptions { Enabled = enabled }),
+            options: Options.Create(new WalletWithdrawalProcessingOptions { Enabled = false }),
             environment: new HostingEnvironment { EnvironmentName = environment });
         var error = await Assert.ThrowsAsync<InvalidOperationException>(() =>
             service.InitiateAsync(Guid.NewGuid(), Guid.NewGuid(), business: false,
                 new InitiateWalletWithdrawalRequestDto(), "safe_key_123456"));
         Assert.Contains("not enabled", error.Message);
+    }
+
+    [Theory]
+    [InlineData("Development")]
+    [InlineData("Staging")]
+    [InlineData("Production")]
+    public async Task Enabled_processing_passes_environment_gate_but_still_requires_valid_request(
+        string environment)
+    {
+        // These intentionally incomplete requests must fail validation before
+        // any dependency can reserve funds or contact the payout provider.
+        var service = new WalletWithdrawalInitiationService(
+            db: null!, contexts: null!, previews: null!, reservations: null!,
+            pins: null!, businessAccess: null!, complianceLimits: null!,
+            notifications: null!, audit: null!,
+            options: Options.Create(new WalletWithdrawalProcessingOptions { Enabled = true }),
+            environment: new HostingEnvironment { EnvironmentName = environment });
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            service.InitiateAsync(Guid.NewGuid(), Guid.NewGuid(), business: false,
+                new InitiateWalletWithdrawalRequestDto(), "safe_key_123456"));
+        Assert.Contains("Valid wallet, destination, payout channel", error.Message);
     }
 
     [Fact]

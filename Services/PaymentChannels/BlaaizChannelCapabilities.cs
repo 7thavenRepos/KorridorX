@@ -45,12 +45,20 @@ public static class BlaaizChannelCapabilities
                 true, asset == "NGN", true, null,
                 asset == "NGN" ? "Requires a verified customer and the provider's virtual-account feature/scope. Never share a pooled treasury account as a customer deposit account."
                 : "Blaaiz currently permits verified individual customers only. GBP/EUR creation is on hold on api-dev; USD creation works there, but USD/EUR/GBP deposits do not settle in the provider development environment."));
-        foreach (var item in new[] { ("USD", "ach-payout", PaymentMethod.Ach), ("USD", "wire-payout", PaymentMethod.Wire),
-                     ("EUR", BankPayout, PaymentMethod.BankTransfer), ("GBP", BankPayout, PaymentMethod.BankTransfer) })
-            rows.Add(new(item.Item2, "BLAAIZ", PaymentChannelDirection.Withdrawal, item.Item1, item.Item3,
-                "TransferPayout", item.Item3.ToString(), true, true, false,
-                "Required recipient fields, eligibility checks and payout execution are not connected in this KorridorX release.",
-                "Provider documentation is not proof of an implemented KorridorX flow. This capability cannot be activated."));
+        // All five fiat routes are executable. A configured channel and verified
+        // provider wallet still determine whether an account can use the rail.
+        rows.Add(new("ach-payout", "BLAAIZ", PaymentChannelDirection.Withdrawal, "USD", PaymentMethod.Ach,
+            "TransferPayout", "USD ACH", true, true, true, null,
+            "Uses a verified owner-matched US account, routing number, account type and recipient address."));
+        rows.Add(new("wire-payout", "BLAAIZ", PaymentChannelDirection.Withdrawal, "USD", PaymentMethod.Wire,
+            "TransferPayout", "USD Wire", true, true, true, null,
+            "Requires US account and routing details, account type, SWIFT, and recipient address."));
+        rows.Add(new(BankPayout, "BLAAIZ", PaymentChannelDirection.Withdrawal, "EUR", PaymentMethod.BankTransfer,
+            "TransferPayout", "EUR SEPA bank transfer", true, true, true, null,
+            "Requires account-holder name, IBAN, BIC and SEPA-reachable bank; provider validates final eligibility."));
+        rows.Add(new(BankPayout, "BLAAIZ", PaymentChannelDirection.Withdrawal, "GBP", PaymentMethod.BankTransfer,
+            "TransferPayout", "GBP bank transfer", true, true, true, null,
+            "Requires account-holder name, account number and sort code. Blaaiz performs Confirmation of Payee."));
         return rows;
     }
 }

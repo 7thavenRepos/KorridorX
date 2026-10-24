@@ -5,15 +5,18 @@ namespace KorridorX.Services.WalletWithdrawals;
 
 public static class WalletWithdrawalSetupPolicy
 {
-    // Only the two fiat payout adapters that are currently executable in KorridorX.
-    // Foreign same-currency bank payouts are *not* activated by this foundation.
-    public static string DestinationCountry(string currency, PaymentMethod method) =>
+    // The payout currency always equals the source wallet currency. EUR uses
+    // the actual beneficiary bank's SEPA country, never a fabricated "EU" code.
+    public static string DestinationCountry(string currency, PaymentMethod method, string? selectedCountry = null) =>
         (currency.Trim().ToUpperInvariant(), method) switch
         {
             ("NGN", PaymentMethod.BankTransfer) => "NG",
             ("CAD", PaymentMethod.Interac) => "CA",
-            _ => throw new InvalidOperationException(
-                "This wallet has no implemented same-currency withdrawal method. Use Send for transfers or contact support.")
+            ("USD", PaymentMethod.Ach or PaymentMethod.Wire) => "US",
+            ("GBP", PaymentMethod.BankTransfer) => "GB",
+            ("EUR", PaymentMethod.BankTransfer) when selectedCountry is { Length: 2 } &&
+                selectedCountry.All(c => c is >= 'A' and <= 'Z') => selectedCountry,
+            _ => throw new InvalidOperationException("This currency and payout method are not supported together.")
         };
 
     public static string NormalizeNgnAccountNumber(string? raw)

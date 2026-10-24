@@ -16,18 +16,42 @@ public sealed class WalletWithdrawalSetupPolicyTests
     [Theory]
     [InlineData("NGN", PaymentMethod.BankTransfer, "NG")]
     [InlineData("CAD", PaymentMethod.Interac, "CA")]
-    public void Only_implemented_same_currency_fiat_methods_are_available(string asset, PaymentMethod method, string expected) =>
+    [InlineData("USD", PaymentMethod.Ach, "US")]
+    [InlineData("USD", PaymentMethod.Wire, "US")]
+    [InlineData("GBP", PaymentMethod.BankTransfer, "GB")]
+    public void Supported_same_currency_fiat_methods_resolve_to_payout_country(
+        string asset, PaymentMethod method, string expected) =>
         Assert.Equal(expected, WalletWithdrawalSetupPolicy.DestinationCountry(asset, method));
+
+    [Theory]
+    [InlineData("DE")]
+    [InlineData("FR")]
+    [InlineData("NL")]
+    public void Eur_bank_transfer_uses_real_selected_bank_country(string country) =>
+        Assert.Equal(country, WalletWithdrawalSetupPolicy.DestinationCountry(
+            "EUR", PaymentMethod.BankTransfer, country));
 
     [Theory]
     [InlineData("NGN", PaymentMethod.Interac)]
     [InlineData("CAD", PaymentMethod.BankTransfer)]
-    [InlineData("USD", PaymentMethod.Ach)]
-    [InlineData("GBP", PaymentMethod.BankTransfer)]
+    [InlineData("USD", PaymentMethod.BankTransfer)]
+    [InlineData("GBP", PaymentMethod.Wire)]
     [InlineData("EUR", PaymentMethod.Sepa)]
+    [InlineData("EUR", PaymentMethod.BankTransfer)]
     [InlineData("NGN", PaymentMethod.DigitalAsset)]
-    public void Unimplemented_or_cross_currency_methods_fail_closed(string asset, PaymentMethod method) =>
-        Assert.Throws<InvalidOperationException>(() => WalletWithdrawalSetupPolicy.DestinationCountry(asset, method));
+    public void Unsupported_methods_and_missing_eur_country_fail_closed(
+        string asset, PaymentMethod method) =>
+        Assert.Throws<InvalidOperationException>(() =>
+            WalletWithdrawalSetupPolicy.DestinationCountry(asset, method));
+
+    [Theory]
+    [InlineData("D")]
+    [InlineData("D1")]
+    [InlineData("de")]
+    [InlineData("ZZZ")]
+    public void Eur_rejects_malformed_bank_country_codes(string country) =>
+        Assert.Throws<InvalidOperationException>(() =>
+            WalletWithdrawalSetupPolicy.DestinationCountry("EUR", PaymentMethod.BankTransfer, country));
 
     [Theory]
     [InlineData("Olukayode Adebiyi", "OLUKAYODE OLUFEMI ADEBIYI")]

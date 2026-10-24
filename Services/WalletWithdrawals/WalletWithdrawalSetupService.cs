@@ -68,15 +68,16 @@ public sealed class WalletWithdrawalSetupService : IWalletWithdrawalSetupService
         await _contexts.EnsureComplianceAsync(context, ct);
 
         var asset = context.Wallet.AssetCode;
-        var country = WalletWithdrawalSetupPolicy.DestinationCountry(asset, request.PaymentMethod);
+        var country = WalletWithdrawalSetupPolicy.DestinationCountry(
+            asset, request.PaymentMethod, request.DestinationCountryCode?.Trim().ToUpperInvariant());
         var methods = await MethodsAsync(context, ct);
         if (!methods.Any(x => x.CurrencyCode == asset && x.DestinationCountryCode == country &&
             x.PaymentMethod == request.PaymentMethod))
             throw new InvalidOperationException("No verified and active same-currency withdrawal channel supports this method. Configure a payout channel in Admin.");
 
         string? bankId = null, bankName = null, accountNumber = null, verifiedName = null;
-        string? email = null, verification = null;
-        if (request.PaymentMethod == PaymentMethod.BankTransfer)
+        string? email = null, verification = null, protectedPlaintext = null;
+        if (asset == "NGN" && request.PaymentMethod == PaymentMethod.BankTransfer)
         {
             if (!string.IsNullOrWhiteSpace(request.Email))
                 throw new InvalidOperationException("Bank withdrawals do not accept an Interac email.");
@@ -116,6 +117,23 @@ public sealed class WalletWithdrawalSetupService : IWalletWithdrawalSetupService
             verifiedName = context.Name;
             verification = "KorridorXConfirmedOwnerEmail";
         }
+        else if (WalletWithdrawalForeignAccount.Supports(asset, request.PaymentMethod))
+        {
+            if (!string.IsNullOrWhiteSpace(request.Email) || !string.IsNullOrWhiteSpace(request.ProviderBankId))
+                throw new InvalidOperationException("Foreign bank withdrawals require account-routing details, not an Interac address or NGN bank ID.");
+            if (!await _db.CountryAssets.AsNoTracking().AnyAsync(x => x.CountryCode == country &&
+                x.AssetCode == asset && x.Country.IsSupported && (x.CanWithdraw || x.CanReceive), ct))
+                throw new InvalidOperationException("This recipient country is not enabled for the selected currency.");
+            var details = WalletWithdrawalForeignAccount.Create(asset, request.PaymentMethod,
+                request, context.Name, context.Business);
+            accountNumber = details.Identifier;
+            bankName = details.BankName;
+            verifiedName = details.AccountName;
+            protectedPlaintext = details.ToProtectedPlaintext();
+            // Blaaiz validates final bank reachability/CoP during payout; do not
+            // misrepresent local format and verified-owner-name checks as CoP.
+            verification = "KorridorXOwnerNameMatched_ProviderValidationAtPayout";
+        }
         else throw new InvalidOperationException("Unsupported wallet withdrawal method.");
 
         // Provider verification is read-only and deliberately completed before the DB transaction.
@@ -125,11 +143,13 @@ public sealed class WalletWithdrawalSetupService : IWalletWithdrawalSetupService
         {
             var existing = await _db.FiatWalletWithdrawalDestinations
                 .Where(x => x.FinancialAccountId == walletId && x.OwnerType == context.Wallet.OwnerType &&
-                    x.OwnerId == context.OwnerId && x.PaymentMethod == request.PaymentMethod && !x.IsDeleted).ToListAsync(ct);
+                    x.OwnerId == context.OwnerId && x.PaymentMethod == request.PaymentMethod &&
+                x.DestinationCountryCode == country && !x.IsDeleted).ToListAsync(ct);
             var row = existing.FirstOrDefault(x => request.PaymentMethod == PaymentMethod.Interac
                 ? string.Equals(x.Email, email, StringComparison.OrdinalIgnoreCase)
                 : x.ProviderBankId == bankId && x.ProtectedAccountNumber is not null &&
-                  string.Equals(_protector.Unprotect(x.ProtectedAccountNumber), accountNumber, StringComparison.Ordinal));
+                  string.Equals(_protector.Unprotect(x.ProtectedAccountNumber),
+                      protectedPlaintext ?? accountNumber, StringComparison.Ordinal));
             if (row is not null && row.IsActive)
             {
                 await tx.CommitAsync(ct);
@@ -144,7 +164,8 @@ public sealed class WalletWithdrawalSetupService : IWalletWithdrawalSetupService
             row.AssetCode = asset; row.DestinationCountryCode = country;
             row.PaymentMethod = request.PaymentMethod;
             row.ProviderBankId = bankId; row.BankName = bankName;
-            row.ProtectedAccountNumber = accountNumber is null ? null : _protector.Protect(accountNumber);
+            row.ProtectedAccountNumber = accountNumber is null ? null :
+                _protector.Protect(protectedPlaintext ?? accountNumber);
             row.AccountNumberLast4 = accountNumber is null ? null : accountNumber[^4..];
             row.VerifiedAccountName = verifiedName; row.Email = email;
             row.VerificationReference = verification; row.VerifiedAtUtc = DateTime.UtcNow;
@@ -197,21 +218,37 @@ public sealed class WalletWithdrawalSetupService : IWalletWithdrawalSetupService
         WalletFundingContext context, CancellationToken ct)
     {
         if (!await IsWalletEligibleAsync(context, ct)) return [];
-        string destinationCountry;
-        PaymentMethod method;
-        try
+        var asset = context.Wallet.AssetCode;
+        var routes = new List<(string Country, PaymentMethod Method)>();
+        switch (asset)
         {
-            method = context.Wallet.AssetCode == "NGN" ? PaymentMethod.BankTransfer : PaymentMethod.Interac;
-            destinationCountry = WalletWithdrawalSetupPolicy.DestinationCountry(context.Wallet.AssetCode, method);
+            case "NGN": routes.Add(("NG", PaymentMethod.BankTransfer)); break;
+            case "CAD": routes.Add(("CA", PaymentMethod.Interac)); break;
+            case "USD":
+                routes.Add(("US", PaymentMethod.Ach));
+                routes.Add(("US", PaymentMethod.Wire));
+                break;
+            case "GBP": routes.Add(("GB", PaymentMethod.BankTransfer)); break;
+            case "EUR":
+                var countries = await _db.CountryAssets.AsNoTracking().Where(x =>
+                    x.AssetCode == "EUR" && x.Country.IsSupported && (x.CanWithdraw || x.CanReceive))
+                    .Select(x => x.CountryCode).Distinct().ToListAsync(ct);
+                foreach (var country in countries.Where(x => x.Length == 2 &&
+                    x.All(c => c is >= 'A' and <= 'Z'))) routes.Add((country, PaymentMethod.BankTransfer));
+                break;
         }
-        catch (InvalidOperationException) { return []; }
-        var eligible = await _channels.EligibleAsync(destinationCountry, context.Wallet.AssetCode, context.Business,
-            PaymentChannelDirection.Withdrawal, context.Wallet.AssetCode, null, ct);
-        return eligible.Where(x => x.Capability.PaymentMethod == method &&
-                x.Channel.AssetCode == context.Wallet.AssetCode && x.Wallet.AssetCode == context.Wallet.AssetCode)
-            .Select(x => new WalletWithdrawalMethodDto(x.Channel.Id, context.Wallet.AssetCode,
-                destinationCountry, method, x.Channel.DisplayName, x.Channel.MinimumAmount,
-                x.Channel.MaximumAmount)).ToArray();
+        var result = new List<WalletWithdrawalMethodDto>();
+        foreach (var (country, method) in routes)
+        {
+            var eligible = await _channels.EligibleAsync(country, asset, context.Business,
+                PaymentChannelDirection.Withdrawal, asset, null, ct);
+            result.AddRange(eligible.Where(x => x.Capability.PaymentMethod == method &&
+                    x.Channel.AssetCode == asset && x.Wallet.AssetCode == asset)
+                .Select(x => new WalletWithdrawalMethodDto(x.Channel.Id, asset,
+                    country, method, x.Channel.DisplayName, x.Channel.MinimumAmount,
+                    x.Channel.MaximumAmount)));
+        }
+        return result;
     }
 
     private async Task<bool> IsWalletEligibleAsync(WalletFundingContext context, CancellationToken ct)
@@ -233,7 +270,13 @@ public sealed class WalletWithdrawalSetupService : IWalletWithdrawalSetupService
 
     private static WalletWithdrawalDestinationDto ToDto(FiatWalletWithdrawalDestination row) => new(
         row.Id, row.FinancialAccountId, row.AssetCode, row.DestinationCountryCode,
-        row.PaymentMethod, row.PaymentMethod == PaymentMethod.Interac ? "Interac e-Transfer" : "Bank transfer",
+        row.PaymentMethod, row.PaymentMethod switch
+        {
+            PaymentMethod.Interac => "Interac e-Transfer",
+            PaymentMethod.Ach => "ACH bank transfer",
+            PaymentMethod.Wire => "Wire transfer",
+            _ => "Bank transfer"
+        },
         row.BankName, row.AccountNumberLast4 is null ? null : "•••• " + row.AccountNumberLast4,
         row.VerifiedAccountName, row.Email, row.IsActive, row.VerifiedAtUtc);
 }

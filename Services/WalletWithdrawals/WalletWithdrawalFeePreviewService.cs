@@ -55,16 +55,22 @@ public sealed class WalletWithdrawalFeePreviewService(
                 x.OwnerId == context.OwnerId && x.OwnerType == wallet.OwnerType && !x.IsDeleted && x.IsActive, ct)
             ?? throw new InvalidOperationException("This withdrawal destination is inactive or does not belong to the selected wallet.");
 
-        var country = WalletWithdrawalSetupPolicy.DestinationCountry(wallet.AssetCode, destination.PaymentMethod);
+        var country = WalletWithdrawalSetupPolicy.DestinationCountry(
+            wallet.AssetCode, destination.PaymentMethod, destination.DestinationCountryCode);
         if (destination.AssetCode != wallet.AssetCode || destination.DestinationCountryCode != country ||
             destination.VerifiedAtUtc == default || string.IsNullOrWhiteSpace(destination.VerificationReference))
             throw new InvalidOperationException("The withdrawal destination requires fresh verification.");
-        if (destination.PaymentMethod == PaymentMethod.BankTransfer &&
+        if (wallet.AssetCode == "NGN" && destination.PaymentMethod == PaymentMethod.BankTransfer &&
             (string.IsNullOrWhiteSpace(destination.ProviderBankId) ||
              string.IsNullOrWhiteSpace(destination.ProtectedAccountNumber) ||
              string.IsNullOrWhiteSpace(destination.AccountNumberLast4) ||
              string.IsNullOrWhiteSpace(destination.VerifiedAccountName)))
-            throw new InvalidOperationException("The saved bank destination is incomplete and must be verified again.");
+            throw new InvalidOperationException("The saved NGN bank destination is incomplete and must be verified again.");
+        if (WalletWithdrawalForeignAccount.Supports(wallet.AssetCode, destination.PaymentMethod) &&
+            (string.IsNullOrWhiteSpace(destination.ProtectedAccountNumber) ||
+             string.IsNullOrWhiteSpace(destination.AccountNumberLast4) ||
+             string.IsNullOrWhiteSpace(destination.VerifiedAccountName)))
+            throw new InvalidOperationException("The saved foreign bank destination is incomplete.");
         if (destination.PaymentMethod == PaymentMethod.Interac)
         {
             var ownerUserId = business
@@ -119,7 +125,13 @@ public sealed class WalletWithdrawalFeePreviewService(
             request.WithdrawalAmount, values.RecipientAmount, wallet.AvailableBalance,
             new WalletWithdrawalDestinationDto(destination.Id, walletId, destination.AssetCode,
                 destination.DestinationCountryCode, destination.PaymentMethod,
-                destination.PaymentMethod == PaymentMethod.Interac ? "Interac e-Transfer" : "Bank transfer",
+                destination.PaymentMethod switch
+                {
+                    PaymentMethod.Interac => "Interac e-Transfer",
+                    PaymentMethod.Ach => "ACH bank transfer",
+                    PaymentMethod.Wire => "Wire transfer",
+                    _ => "Bank transfer"
+                },
                 destination.BankName,
                 destination.AccountNumberLast4 is null ? null : "•••• " + destination.AccountNumberLast4,
                 destination.VerifiedAccountName, destination.Email, destination.IsActive,

@@ -107,7 +107,16 @@ public sealed record RemittancePayoutRequest(
     // Inclusive source-wallet debit mode used only by guarded fiat withdrawals.
     // Existing transfer payouts keep DestinationAmount/to_amount unchanged.
     decimal? FromAmount = null,
-    string? MerchantReference = null);
+    string? MerchantReference = null,
+    // Additional method-specific fields for USD ACH/Wire and EUR/GBP bank rails.
+    string? RecipientType = null,
+    string? AccountType = null,
+    string? RecipientCountry = null,
+    string? RecipientState = null,
+    string? RecipientStreet = null,
+    string? RecipientCity = null,
+    string? RecipientPostalCode = null,
+    string? BicCode = null);
 
 public sealed record RemittancePayoutResult(
     string ProviderTransactionId,

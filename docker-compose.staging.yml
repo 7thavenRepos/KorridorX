@@ -63,6 +63,7 @@ services:
       Hosting__ForwardLimit: 1
       Hosting__DataProtectionKeysPath: /var/lib/korridorx/keys
       Blaaiz__IsEnabled: ${BLAAIZ_ENABLED:-false}
+      Blaaiz__BaseUrl: ${BLAAIZ_BASE_URL:-https://api-dev.blaaiz.com}
       Blaaiz__ClientId: ${BLAAIZ_CLIENT_ID:-}
       Blaaiz__ClientSecret: ${BLAAIZ_CLIENT_SECRET:-}
       Blaaiz__WebhookSigningSecret: ${BLAAIZ_WEBHOOK_SIGNING_SECRET:-}

@@ -744,16 +744,57 @@ public class BlaaizRemittanceProvider : IRemittanceProvider
         switch (request.PaymentMethod)
         {
             case PaymentMethod.BankTransfer:
-                providerRequest.BankId = NormalizeRequired(request.BankId, "Bank ID");
-                providerRequest.AccountNumber = NormalizeRequired(request.AccountNumber, "Account number");
-                providerRequest.AccountName = NormalizeOptional(request.AccountName);
-                providerRequest.BankName = NormalizeOptional(request.BankName);
-                providerRequest.SortCode = NormalizeOptional(request.SortCode);
-                providerRequest.Iban = NormalizeOptional(request.Iban);
-                providerRequest.BicCode = NormalizeOptional(request.SwiftBic);
-                // Country is not required for the currently enabled NGN bank-transfer corridor.
-                // Additional country-specific payout fields will be added when more corridors are enabled.
-                providerRequest.Country = null;
+                switch (request.DestinationCurrencyCode.ToUpperInvariant())
+                {
+                    case "NGN":
+                        providerRequest.BankId = NormalizeRequired(request.BankId, "Nigerian bank ID");
+                        providerRequest.AccountNumber = NormalizeRequired(request.AccountNumber, "Account number");
+                        providerRequest.AccountName = NormalizeOptional(request.AccountName);
+                        providerRequest.BankName = NormalizeOptional(request.BankName);
+                        break;
+                    case "GBP":
+                        providerRequest.AccountNumber = NormalizeRequired(request.AccountNumber, "GBP account number");
+                        providerRequest.SortCode = NormalizeRequired(request.SortCode, "GBP sort code");
+                        providerRequest.AccountName = NormalizeRequired(request.AccountName, "GBP account name");
+                        providerRequest.Country = NormalizeRequired(request.RecipientCountry, "Bank country");
+                        providerRequest.Street = NormalizeRequired(request.RecipientStreet, "Recipient street");
+                        providerRequest.City = NormalizeRequired(request.RecipientCity, "Recipient city");
+                        providerRequest.ZipCode = NormalizeRequired(request.RecipientPostalCode, "Recipient postal code");
+                        break;
+                    case "EUR":
+                        providerRequest.Iban = NormalizeRequired(request.Iban, "SEPA IBAN");
+                        providerRequest.BicCode = NormalizeRequired(request.BicCode, "SEPA BIC");
+                        providerRequest.AccountName = NormalizeRequired(request.AccountName, "EUR account name");
+                        providerRequest.Country = NormalizeRequired(request.RecipientCountry, "Bank country");
+                        providerRequest.Street = NormalizeRequired(request.RecipientStreet, "Recipient street");
+                        providerRequest.City = NormalizeRequired(request.RecipientCity, "Recipient city");
+                        providerRequest.ZipCode = NormalizeRequired(request.RecipientPostalCode, "Recipient postal code");
+                        break;
+                    default: throw new InvalidOperationException("Bank transfers are supported only for NGN, GBP and EUR destinations.");
+                }
+                break;
+
+            case PaymentMethod.Ach:
+            case PaymentMethod.Wire:
+                if (request.DestinationCurrencyCode != "USD")
+                    throw new InvalidOperationException("ACH/Wire payout currency must be USD.");
+                providerRequest.RecipientType = NormalizeRequired(request.RecipientType, "Recipient type");
+                if (providerRequest.RecipientType is not ("individual" or "business"))
+                    throw new InvalidOperationException("Recipient type must be individual or business.");
+                providerRequest.AccountNumber = NormalizeRequired(request.AccountNumber, "US account number");
+                providerRequest.AccountName = NormalizeRequired(request.AccountName, "US account name");
+                providerRequest.AccountType = NormalizeRequired(request.AccountType, "US account type");
+                if (providerRequest.AccountType is not ("checking" or "savings"))
+                    throw new InvalidOperationException("US account type must be checking or savings.");
+                providerRequest.BankName = NormalizeRequired(request.BankName, "US bank name");
+                providerRequest.RoutingNumber = NormalizeRequired(request.RoutingNumber, "US routing number");
+                if (request.PaymentMethod == PaymentMethod.Wire)
+                    providerRequest.SwiftCode = NormalizeRequired(request.SwiftBic, "Wire SWIFT code");
+                providerRequest.Country = NormalizeRequired(request.RecipientCountry, "Recipient country");
+                providerRequest.State = NormalizeRequired(request.RecipientState, "Recipient state");
+                providerRequest.Street = NormalizeRequired(request.RecipientStreet, "Recipient street");
+                providerRequest.City = NormalizeRequired(request.RecipientCity, "Recipient city");
+                providerRequest.ZipCode = NormalizeRequired(request.RecipientPostalCode, "Recipient postal code");
                 break;
 
             case PaymentMethod.Interac:

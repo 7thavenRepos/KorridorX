@@ -18,29 +18,18 @@ public sealed class WalletWithdrawalDispatchSafetyPolicyTests
     }
 
     [Fact]
-    public void Sandbox_execution_requires_explicit_nonempty_unique_allowlist()
+    public void Configured_staging_and_production_do_not_require_sandbox_allowlists()
     {
         var flags = Flags();
         flags.SandboxAllowedWithdrawalIds.Clear();
-        Assert.False(WalletWithdrawalDispatchSafetyPolicy.CanDispatch("Development", flags, Provider()));
-        Assert.False(WalletWithdrawalDispatchSafetyPolicy.CanRecover("Development", flags, Provider()));
-
-        flags.SandboxAllowedWithdrawalIds.Add(Guid.Empty);
-        Assert.False(WalletWithdrawalDispatchSafetyPolicy.CanDispatch("Development", flags, Provider()));
-
-        var id = Guid.NewGuid();
-        flags.SandboxAllowedWithdrawalIds = [id, id];
-        Assert.False(WalletWithdrawalDispatchSafetyPolicy.CanDispatch("Development", flags, Provider()));
-
-        flags.SandboxAllowedWithdrawalIds = [id, Guid.NewGuid()];
-        Assert.False(WalletWithdrawalDispatchSafetyPolicy.CanDispatch("Development", flags, Provider()));
-
-        flags.SandboxAllowedWithdrawalIds = [id, Guid.NewGuid(), Guid.NewGuid()];
-        Assert.False(WalletWithdrawalDispatchSafetyPolicy.CanDispatch("Development", flags, Provider()));
-
-        flags.SandboxAllowedWithdrawalIds = [id];
-        Assert.True(WalletWithdrawalDispatchSafetyPolicy.CanDispatch("Development", flags, Provider()));
-        Assert.True(WalletWithdrawalDispatchSafetyPolicy.CanRecover("Development", flags, Provider()));
+        Assert.True(WalletWithdrawalDispatchSafetyPolicy.CanDispatch("Staging", flags, Provider()));
+        Assert.True(WalletWithdrawalDispatchSafetyPolicy.CanDispatch("Production", flags,
+            Provider("https://api-prod.blaaiz.com")));
+        Assert.True(WalletWithdrawalDispatchSafetyPolicy.CanRecover("Production", flags,
+            Provider("https://api-prod.blaaiz.com")));
+        Assert.False(WalletWithdrawalDispatchSafetyPolicy.CanDispatch("Production", flags, Provider()));
+        Assert.False(WalletWithdrawalDispatchSafetyPolicy.CanDispatch("Development", flags,
+            Provider("https://api-prod.blaaiz.com")));
     }
 
     [Fact]
@@ -80,8 +69,8 @@ public sealed class WalletWithdrawalDispatchSafetyPolicyTests
     }
 
     [Theory]
-    [InlineData("Staging", "https://api-dev.blaaiz.com")]
     [InlineData("Production", "https://api-dev.blaaiz.com")]
+    [InlineData("Staging", "https://api.blaaiz.com")]
     [InlineData("Development", "https://api.blaaiz.com")]
     [InlineData("Development", "http://api-dev.blaaiz.com")]
     [InlineData("Development", "https://api-dev.blaaiz.com.malicious.example")]
@@ -178,7 +167,7 @@ public sealed class WalletWithdrawalDispatchSafetyPolicyTests
     [InlineData("GBP", PaymentMethod.BankTransfer)]
     [InlineData("NGN", PaymentMethod.Interac)]
     [InlineData("CAD", PaymentMethod.BankTransfer)]
-    public void Unsupported_currency_and_method_pairs_must_not_dispatch(string currency, PaymentMethod method)
+    public void Unsupported_or_incomplete_currency_and_method_pairs_must_not_dispatch(string currency, PaymentMethod method)
     {
         var row = Withdrawal(); row.CurrencyCode = currency; row.PaymentMethod = method;
         Assert.Throws<InvalidOperationException>(() =>

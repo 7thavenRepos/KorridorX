@@ -31,6 +31,8 @@ public static class WalletWithdrawalFeePolicy
         {
             PaymentMethod.BankTransfer => "BANK_TRANSFER",
             PaymentMethod.Interac => "INTERAC",
+            PaymentMethod.Ach => "ACH",
+            PaymentMethod.Wire => "WIRE",
             _ => throw new InvalidOperationException("An executable same-currency payout method is required.")
         };
 

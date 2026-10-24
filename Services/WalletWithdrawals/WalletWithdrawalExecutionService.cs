@@ -72,10 +72,9 @@ public sealed class WalletWithdrawalExecutionService : IWalletWithdrawalExecutio
     public async Task<int> DispatchBatchAsync(int batchSize, CancellationToken ct = default)
     {
         if (!DispatchAllowed) return 0;
-        var allowedIds = _settings.SandboxAllowedWithdrawalIds;
         var ids = await _db.FiatWalletWithdrawals.AsNoTracking()
             .Where(x => !x.IsDeleted && x.Status == FiatWalletWithdrawalStatus.AwaitingExecution &&
-                x.PayoutId == null && x.OperationalHoldReason == null && allowedIds.Contains(x.Id))
+                x.PayoutId == null && x.OperationalHoldReason == null)
             .OrderBy(x => x.CreatedAt).Select(x => x.Id)
             .Take(Math.Clamp(batchSize, 1, 50)).ToListAsync(ct);
         var claimed = 0;
@@ -100,10 +99,9 @@ public sealed class WalletWithdrawalExecutionService : IWalletWithdrawalExecutio
     public async Task<int> RecoverBatchAsync(int batchSize, CancellationToken ct = default)
     {
         if (!RecoverAllowed) return 0;
-        var allowedIds = _settings.SandboxAllowedWithdrawalIds;
         var cutoff = DateTime.UtcNow.AddSeconds(-15);
         var ids = await _db.FiatWalletWithdrawals.AsNoTracking()
-            .Where(x => !x.IsDeleted && x.PayoutId != null && allowedIds.Contains(x.Id) &&
+            .Where(x => !x.IsDeleted && x.PayoutId != null &&
                 (x.Status == FiatWalletWithdrawalStatus.Processing ||
                  x.Status == FiatWalletWithdrawalStatus.RequiresReconciliation) &&
                 x.SubmittedToProviderAtUtc <= cutoff &&
@@ -130,14 +128,14 @@ public sealed class WalletWithdrawalExecutionService : IWalletWithdrawalExecutio
 
     private async Task<bool> DispatchOneAsync(Guid id, CancellationToken ct)
     {
-        if (!DispatchAllowed || !WalletWithdrawalDispatchSafetyPolicy.IsSandboxAllowlisted(id, _settings))
-            return false;
+        if (!DispatchAllowed || !WalletWithdrawalDispatchSafetyPolicy.IsWithinConfiguredScope(
+                id, _environment.EnvironmentName, _settings)) return false;
         var row = await _db.FiatWalletWithdrawals.AsNoTracking().SingleOrDefaultAsync(x =>
             x.Id == id && !x.IsDeleted && x.Status == FiatWalletWithdrawalStatus.AwaitingExecution &&
             x.PayoutId == null && x.OperationalHoldReason == null, ct);
         if (row is null) return false;
-        if (!WalletWithdrawalDispatchSafetyPolicy.IsWithinSandboxDebitCeiling(row, _settings))
-            return false;
+        if (!WalletWithdrawalDispatchSafetyPolicy.IsWithinExecutionDebitLimit(
+                row, _environment.EnvironmentName, _settings)) return false;
         WalletWithdrawalDispatchSafetyPolicy.ValidateSnapshot(row);
         var business = row.BusinessProfileId.HasValue;
 
@@ -154,7 +152,15 @@ public sealed class WalletWithdrawalExecutionService : IWalletWithdrawalExecutio
         if (string.IsNullOrWhiteSpace(customer.ProviderCustomerId))
             throw new InvalidOperationException("A verified provider customer ID is required.");
 
-        var destinationCountry = WalletWithdrawalSetupPolicy.DestinationCountry(row.CurrencyCode, row.PaymentMethod);
+        // Decode/validate bank routing data BEFORE the irreversible provider claim.
+        // Foreign details come from the encrypted, immutable withdrawal snapshot.
+        var accountDetails = row.PaymentMethod != PaymentMethod.Interac
+            ? _accounts.Unprotect(row.ProtectedAccountNumber ??
+                throw new InvalidOperationException("Missing saved payout bank details.")) : null;
+        var foreign = WalletWithdrawalForeignAccount.Supports(row.CurrencyCode, row.PaymentMethod)
+            ? WalletWithdrawalForeignAccount.Parse(accountDetails, row.CurrencyCode, row.PaymentMethod) : null;
+        var destinationCountry = WalletWithdrawalSetupPolicy.DestinationCountry(
+            row.CurrencyCode, row.PaymentMethod, foreign?.Country);
         var eligible = await _channels.EligibleAsync(destinationCountry, row.CurrencyCode,
             business, PaymentChannelDirection.Withdrawal, row.CurrencyCode, row.TotalWalletDebit, ct);
         var choice = eligible.SingleOrDefault(x => x.Channel.Id == row.PaymentChannelId &&
@@ -188,10 +194,8 @@ public sealed class WalletWithdrawalExecutionService : IWalletWithdrawalExecutio
             var walletId = await _wallets.SelectAsync("Payout", payoutId.Value,
                 _provider.ProviderName, row.CurrencyCode, null,
                 ProviderWalletResolver.Payout, previouslySubmitted: false, ct);
-            var accountNumber = row.PaymentMethod == PaymentMethod.BankTransfer
-                ? _accounts.Unprotect(row.ProtectedAccountNumber!) : null;
             var request = WalletWithdrawalDispatchSafetyPolicy.BuildRequest(row, payoutId.Value,
-                customer.ProviderCustomerId, walletId, accountNumber);
+                customer.ProviderCustomerId, walletId, accountDetails);
             var result = await _provider.InitiatePayoutAsync(request, ct);
             await SaveAcknowledgementAsync(row.Id, payoutId.Value, result, ct);
         }
@@ -362,8 +366,8 @@ public sealed class WalletWithdrawalExecutionService : IWalletWithdrawalExecutio
     public async Task<bool> RecoverOneAsync(Guid withdrawalId, CancellationToken ct = default)
     {
         if ((!RecoverAllowed && !DispatchAllowed) ||
-            !WalletWithdrawalDispatchSafetyPolicy.IsSandboxAllowlisted(withdrawalId, _settings))
-            return false;
+            !WalletWithdrawalDispatchSafetyPolicy.IsWithinConfiguredScope(
+                withdrawalId, _environment.EnvironmentName, _settings)) return false;
         var row = await _db.FiatWalletWithdrawals.AsNoTracking().SingleOrDefaultAsync(x =>
             x.Id == withdrawalId && !x.IsDeleted && x.PayoutId != null &&
             (x.Status == FiatWalletWithdrawalStatus.Processing ||
@@ -543,10 +547,8 @@ public sealed class WalletWithdrawalExecutionService : IWalletWithdrawalExecutio
     public async Task CancelUnsubmittedAsync(Guid withdrawalId, Guid adminUserId, string reason,
         CancellationToken ct = default)
     {
-        if (!_environment.IsDevelopment() || !_settings.Enabled)
-            throw new InvalidOperationException("Wallet withdrawal cancellation is not enabled outside Development.");
-        if (!WalletWithdrawalDispatchSafetyPolicy.IsSandboxAllowlisted(withdrawalId, _settings))
-            throw new InvalidOperationException("Withdrawal is not on the explicit Development sandbox allowlist.");
+        if (!WalletWithdrawalDispatchSafetyPolicy.CanInitiate(_environment.EnvironmentName, _settings))
+            throw new InvalidOperationException("Wallet withdrawal cancellation is disabled in this environment.");
         if (adminUserId == Guid.Empty || string.IsNullOrWhiteSpace(reason) || reason.Trim().Length > 500)
             throw new InvalidOperationException("A valid admin and cancellation reason are required.");
 
