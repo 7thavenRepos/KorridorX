@@ -64,6 +64,7 @@ services:
       Hosting__DataProtectionKeysPath: /var/lib/korridorx/keys
       Blaaiz__IsEnabled: ${BLAAIZ_ENABLED:-false}
       Blaaiz__BaseUrl: ${BLAAIZ_BASE_URL:-https://api-dev.blaaiz.com}
+      Blaaiz__Scopes: "${BLAAIZ_SCOPES:?BLAAIZ_SCOPES is required in .env.staging}"
       Blaaiz__ClientId: ${BLAAIZ_CLIENT_ID:-}
       Blaaiz__ClientSecret: ${BLAAIZ_CLIENT_SECRET:-}
       Blaaiz__WebhookSigningSecret: ${BLAAIZ_WEBHOOK_SIGNING_SECRET:-}
