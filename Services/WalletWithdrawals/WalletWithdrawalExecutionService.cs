@@ -384,11 +384,18 @@ public sealed class WalletWithdrawalExecutionService : IWalletWithdrawalExecutio
     private async Task ClaimKnownRejectedRetryOnceAsync(FiatWalletWithdrawal snapshot,
         Guid adminUserId, string expectedReference, string reason, CancellationToken ct)
     {
+        // Preflight is read-only. Reject any pending writes in this scoped DbContext
+        // so the retry claim cannot accidentally save an unrelated, stale entity.
+        if (_db.ChangeTracker.HasChanges())
+            throw new InvalidOperationException(
+                "The retry preflight left unsaved database changes. No payout was submitted.");
+
         await using var tx = await _db.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, ct);
         try
         {
             var row = await _db.FiatWalletWithdrawals.FromSqlInterpolated(
                     $"SELECT * FROM \"FiatWalletWithdrawals\" WHERE \"Id\" = {snapshot.Id} FOR UPDATE")
+                .AsNoTracking()
                 .SingleAsync(ct);
             if (row.PayoutId is not Guid payoutId ||
                 row.PayoutId != snapshot.PayoutId ||
@@ -402,7 +409,7 @@ public sealed class WalletWithdrawalExecutionService : IWalletWithdrawalExecutio
                 throw new InvalidOperationException(
                     "Withdrawal changed since the preflight. No provider POST was attempted.");
 
-            var payout = await _db.Payouts.Include(x => x.Attempts)
+            var payout = await _db.Payouts.AsNoTracking().Include(x => x.Attempts)
                 .SingleAsync(x => x.Id == payoutId, ct);
             var logs = _db.ProviderRequestLogs.AsNoTracking()
                 .Where(x => x.RelatedPayoutId == payoutId);
@@ -426,6 +433,7 @@ public sealed class WalletWithdrawalExecutionService : IWalletWithdrawalExecutio
                 await EnsureBusinessAuthorizationAsync(row, ct);
             _ = await _db.FinancialAccounts.FromSqlInterpolated(
                     $"SELECT * FROM \"FinancialAccounts\" WHERE \"Id\" = {row.FinancialAccountId} FOR UPDATE")
+                .AsNoTracking()
                 .SingleAsync(ct);
             var reservation = await _db.FinancialReservations.AsNoTracking().SingleAsync(x =>
                 x.Id == row.FinancialReservationId &&
@@ -440,11 +448,60 @@ public sealed class WalletWithdrawalExecutionService : IWalletWithdrawalExecutio
                 throw new InvalidOperationException("Original wallet reservation is not fully held.");
 
             var originalAttempt = payout.Attempts.Single();
-            originalAttempt.Status = ProviderRequestStatus.Failed;
-            originalAttempt.ProviderRequestId = firstPost!.Id.ToString();
-            originalAttempt.ErrorMessage = WalletWithdrawalRecoveryPolicy.BlaaizNoteLimitMessage;
             var now = DateTime.UtcNow;
-            payout.Attempts.Add(new PayoutAttempt
+            var originalRequestId = firstPost!.Id.ToString("D");
+
+            // Execute guarded updates directly in the same transaction instead of
+            // asking SaveChanges to flush several tracked concurrency-token entities.
+            // Each expected row must still exist in its original state; a zero-row
+            // update is a hard stop, never permission to submit a payout.
+            var changedAttempt = await _db.PayoutAttempts.Where(x =>
+                    x.Id == originalAttempt.Id && x.PayoutId == payoutId &&
+                    x.Status == ProviderRequestStatus.Pending &&
+                    x.ProviderRequestId == null && x.ProviderResponseId == null)
+                .ExecuteUpdateAsync(update => update
+                    .SetProperty(x => x.Status, ProviderRequestStatus.Failed)
+                    .SetProperty(x => x.ProviderRequestId, originalRequestId)
+                    .SetProperty(x => x.ErrorMessage,
+                        WalletWithdrawalRecoveryPolicy.BlaaizNoteLimitMessage), ct);
+            if (changedAttempt != 1)
+                throw new InvalidOperationException(
+                    "The original payout attempt changed. No retry was claimed.");
+
+            var changedPayout = await _db.Payouts.Where(x =>
+                    x.Id == payoutId && x.Status == PayoutStatus.Processing &&
+                    x.ProviderPayoutId == null &&
+                    (x.ProviderReference == null || x.ProviderReference == ""))
+                .ExecuteUpdateAsync(update => update
+                    .SetProperty(x => x.LastUpdatedAt, now), ct);
+            if (changedPayout != 1)
+                throw new InvalidOperationException(
+                    "The payout changed. No retry was claimed.");
+
+            var changedWithdrawal = await _db.FiatWalletWithdrawals.Where(x =>
+                    x.Id == row.Id &&
+                    x.Status == FiatWalletWithdrawalStatus.RequiresReconciliation &&
+                    x.PayoutId == payoutId &&
+                    x.Reference == expectedReference &&
+                    x.RequestFingerprint == snapshot.RequestFingerprint &&
+                    x.TotalWalletDebit == snapshot.TotalWalletDebit &&
+                    x.ProviderFee == snapshot.ProviderFee &&
+                    x.ExpectedRecipientAmount == snapshot.ExpectedRecipientAmount &&
+                    x.FinancialReservationId == snapshot.FinancialReservationId &&
+                    x.PaymentChannelId == snapshot.PaymentChannelId)
+                .ExecuteUpdateAsync(update => update
+                    .SetProperty(x => x.Status, FiatWalletWithdrawalStatus.Processing)
+                    .SetProperty(x => x.OperationalHoldReason, (string?)null)
+                    .SetProperty(x => x.SubmittedToProviderAtUtc, now)
+                    .SetProperty(x => x.LastUpdatedAt, now)
+                    .SetProperty(x => x.LastUpdatedByUserId, adminUserId), ct);
+            if (changedWithdrawal != 1)
+                throw new InvalidOperationException(
+                    "The withdrawal changed. No retry was claimed.");
+
+            // Only the new attempt and audit record are inserted by SaveChanges.
+            // No existing financial account or reservation is mutated here.
+            _db.PayoutAttempts.Add(new PayoutAttempt
             {
                 PayoutId = payout.Id, Status = ProviderRequestStatus.Pending, AttemptedAt = now,
                 RequestPayloadJson = System.Text.Json.JsonSerializer.Serialize(new
@@ -455,25 +512,29 @@ public sealed class WalletWithdrawalExecutionService : IWalletWithdrawalExecutio
                     merchantReference = row.Reference
                 })
             });
-            row.Status = FiatWalletWithdrawalStatus.Processing;
-            row.OperationalHoldReason = null;
-            row.SubmittedToProviderAtUtc = now;
-            row.LastUpdatedAt = now;
-            row.LastUpdatedByUserId = adminUserId;
-            payout.LastUpdatedAt = now;
             _audit.Stage(new AuditRecordRequest(
                 "FIAT_WALLET_WITHDRAWAL_ADMIN_KNOWN_422_RETRY_CLAIMED",
                 "WalletWithdrawal", nameof(FiatWalletWithdrawal), row.Id.ToString(),
                 NewValues: new
                 {
                     row.Reference, payout.Id, PreviousProviderRequestId = firstPost.Id,
-                    TotalAttempts = payout.Attempts.Count,
+                    TotalAttempts = payout.Attempts.Count + 1,
                     row.TotalWalletDebit, row.ExpectedRecipientAmount
                 },
                 Metadata: new { Reason = reason, OriginalHttpStatus = 422 },
                 UserId: adminUserId));
             await _db.SaveChangesAsync(ct);
             await tx.CommitAsync(ct);
+        }
+        catch (DbUpdateConcurrencyException ex)
+        {
+            // Deliberately log entity TYPES only: no bank details, provider
+            // credentials, or request payloads can enter this diagnostic log.
+            _logger.LogError(ex,
+                "One-time payout claim hit EF concurrency on entities: {EntityTypes}",
+                string.Join(",", ex.Entries.Select(x => x.Metadata.ClrType.Name).Distinct()));
+            await tx.RollbackAsync(CancellationToken.None);
+            throw;
         }
         catch
         {
