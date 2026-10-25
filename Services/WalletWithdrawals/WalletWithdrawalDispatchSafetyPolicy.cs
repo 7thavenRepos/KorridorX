@@ -155,7 +155,7 @@ public static class WalletWithdrawalDispatchSafetyPolicy
             AccountName: row.VerifiedAccountName, AccountNumber: foreign?.AccountNumber ?? unprotectedAccountNumber,
             RoutingNumber: foreign?.RoutingNumber, SortCode: foreign?.SortCode,
             Iban: foreign?.Iban, SwiftBic: foreign?.SwiftCode,
-            Note: "KorridorX wallet withdrawal " + row.Reference,
+            Note: "KorridorX wallet withdrawal",
             FromAmount: row.TotalWalletDebit, MerchantReference: row.Reference,
             RecipientType: foreign?.RecipientType, AccountType: foreign?.AccountType,
             RecipientCountry: foreign?.Country, RecipientState: foreign?.State,

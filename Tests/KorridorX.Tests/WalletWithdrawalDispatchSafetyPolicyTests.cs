@@ -147,6 +147,23 @@ public sealed class WalletWithdrawalDispatchSafetyPolicyTests
     }
 
     [Fact]
+    public void Full_length_merchant_reference_never_exceeds_Blaaiz_note_limit()
+    {
+        var row = Withdrawal();
+        row.Reference = "KXWD-" + new string('a', 32);
+        Assert.True(("KorridorX wallet withdrawal " + row.Reference).Length > 50);
+
+        var request = WalletWithdrawalDispatchSafetyPolicy.BuildRequest(
+            row, Guid.NewGuid(), "customer", "wallet", "0123456789");
+
+        Assert.Equal("KorridorX wallet withdrawal", request.Note);
+        Assert.NotNull(request.Note);
+        Assert.InRange(request.Note!.Length, 1, 50);
+        Assert.Equal(row.Reference, request.MerchantReference);
+        Assert.DoesNotContain(row.Reference, request.Note);
+    }
+
+    [Fact]
     public void Cad_wallet_withdrawal_is_inclusive_and_uses_confirmed_owner_email()
     {
         var row = Withdrawal();
