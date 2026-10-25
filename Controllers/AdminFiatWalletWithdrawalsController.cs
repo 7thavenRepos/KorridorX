@@ -42,7 +42,7 @@ public sealed class AdminFiatWalletWithdrawalsController(
         var count = await query.CountAsync(ct);
         var rows = await query.OrderByDescending(x => x.CreatedAt).ThenBy(x => x.Id)
             .Skip((page - 1) * pageSize).Take(pageSize).ToListAsync(ct);
-        return Ok(ApiResponses.OkPaged(rows.Select(Summarize).ToArray(),
+        return Ok(ApiResponses.OkPaged(rows.Select(x => Summarize(x)).ToArray(),
             new PageMeta { Page = page, PageSize = pageSize, TotalItems = count },
             "Withdrawal operations queue retrieved successfully."));
     }
@@ -53,7 +53,7 @@ public sealed class AdminFiatWalletWithdrawalsController(
         var row = await db.FiatWalletWithdrawals.AsNoTracking()
             .SingleOrDefaultAsync(x => x.Id == id && !x.IsDeleted, ct);
         if (row is null) return NotFound(ApiResponses.Fail("Withdrawal not found."));
-        return Ok(ApiResponses.Ok(Summarize(row), "Withdrawal status retrieved."));
+        return Ok(ApiResponses.Ok(Summarize(row, await LoadProviderDiagnosticsAsync(row.PayoutId, ct)), "Withdrawal status retrieved."));
     }
 
     [HttpPost("{id:guid}/reconcile")]
@@ -80,14 +80,50 @@ public sealed class AdminFiatWalletWithdrawalsController(
             "Never-submitted withdrawal cancelled and its reservation released."));
     }
 
-    private static object Summarize(FiatWalletWithdrawal x) => new
+    private async Task<object?> LoadProviderDiagnosticsAsync(Guid? payoutId, CancellationToken ct)
+    {
+        if (payoutId is not Guid id) return null;
+        var requests = db.ProviderRequestLogs.AsNoTracking()
+            .Where(x => x.RelatedPayoutId == id);
+        var originalPost = await requests.Where(x => x.HttpMethod == "POST")
+            .OrderBy(x => x.RequestedAt)
+            .Select(x => new { x.ResponseStatusCode, x.RequestedAt, x.ResponseBodyJson })
+            .FirstOrDefaultAsync(ct);
+        var lastGet = await requests.Where(x => x.HttpMethod == "GET")
+            .OrderByDescending(x => x.RequestedAt)
+            .Select(x => new { x.ResponseStatusCode, x.RequestedAt })
+            .FirstOrDefaultAsync(ct);
+        var get404Count = await requests.CountAsync(x =>
+            x.HttpMethod == "GET" && x.ResponseStatusCode == 404, ct);
+
+        // Only this recognized, non-sensitive field validation is disclosed.
+        // Provider payloads, recipient details, headers and unknown error text
+        // never cross the administrator API boundary.
+        var knownNoteError = originalPost?.ResponseStatusCode == 422
+            ? WalletWithdrawalRecoveryPolicy.ReadKnownNoteValidationError(originalPost.ResponseBodyJson)
+            : null;
+        return new
+        {
+            OriginalPostHttpStatus = originalPost?.ResponseStatusCode,
+            OriginalPostUtc = originalPost?.RequestedAt,
+            ValidationField = knownNoteError is null ? null : "note",
+            ValidationMessage = knownNoteError,
+            AutomatedLookupsPausedForKnownValidation = knownNoteError is not null,
+            Lookup404Count = get404Count,
+            LastLookupHttpStatus = lastGet?.ResponseStatusCode,
+            LastLookupUtc = lastGet?.RequestedAt,
+            ReleaseAuthorized = false
+        };
+    }
+
+    private static object Summarize(FiatWalletWithdrawal x, object? providerDiagnostics = null) => new
     {
         x.Id, x.Reference, x.OwnerType, x.OwnerId, x.FinancialAccountId,
         x.CurrencyCode, x.WithdrawalAmount, x.ProviderFee, x.KorridorXFee,
         x.TotalWalletDebit, x.ExpectedRecipientAmount, x.PaymentMethod,
         x.Status, x.PayoutId, x.SubmittedToProviderAtUtc, x.SettledAtUtc,
         x.OperationalHoldReason, x.CreatedAt, x.LastUpdatedAt,
-        x.BankName, x.AccountNumberLast4, x.RecipientEmail
+        x.BankName, x.AccountNumberLast4, x.RecipientEmail, ProviderDiagnostics = providerDiagnostics
     };
 
     private static string RequireReason(AdminFiatWalletWithdrawalActionDto? request) =>

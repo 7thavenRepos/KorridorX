@@ -99,28 +99,59 @@ public sealed class WalletWithdrawalExecutionService : IWalletWithdrawalExecutio
     public async Task<int> RecoverBatchAsync(int batchSize, CancellationToken ct = default)
     {
         if (!RecoverAllowed) return 0;
+        var limit = Math.Clamp(batchSize, 1, 50);
         var cutoff = DateTime.UtcNow.AddSeconds(-15);
-        var ids = await _db.FiatWalletWithdrawals.AsNoTracking()
+        // Scan beyond the oldest held entries so one deferred withdrawal
+        // cannot starve newer provider transactions awaiting settlement.
+        var candidates = await _db.FiatWalletWithdrawals.AsNoTracking()
             .Where(x => !x.IsDeleted && x.PayoutId != null &&
                 (x.Status == FiatWalletWithdrawalStatus.Processing ||
                  x.Status == FiatWalletWithdrawalStatus.RequiresReconciliation) &&
                 x.SubmittedToProviderAtUtc <= cutoff &&
                 (x.LastUpdatedAt == null || x.LastUpdatedAt <= cutoff))
-            .OrderBy(x => x.SubmittedToProviderAtUtc).Select(x => x.Id)
-            .Take(Math.Clamp(batchSize, 1, 50)).ToListAsync(ct);
+            .OrderBy(x => x.SubmittedToProviderAtUtc)
+            .Select(x => new { x.Id, x.PayoutId })
+            .Take(Math.Min(limit * 10, 500)).ToListAsync(ct);
+
         var attempted = 0;
-        foreach (var id in ids)
+        foreach (var candidate in candidates)
         {
             ct.ThrowIfCancellationRequested();
+            if (attempted >= limit) break;
             try
             {
-                if (await RecoverOneAsync(id, ct)) attempted++;
+                // HTTP 422 with the exact Blaaiz note-length validation is
+                // a known rejected submission. Pause *automatic* GET polling,
+                // but preserve the claim, reservation and manual GET path.
+                var original422 = await _db.ProviderRequestLogs.AsNoTracking()
+                    .Where(x => x.RelatedPayoutId == candidate.PayoutId &&
+                        x.HttpMethod == "POST" && x.ResponseStatusCode == 422)
+                    .OrderBy(x => x.RequestedAt)
+                    .Select(x => x.ResponseBodyJson)
+                    .FirstOrDefaultAsync(ct);
+                if (WalletWithdrawalRecoveryPolicy.ReadKnownNoteValidationError(original422) is not null)
+                    continue;
+
+                // Other unknown outcomes continue reconciling, but consecutive
+                // 404s receive an increasing cooldown capped at one hour.
+                var recentGets = await _db.ProviderRequestLogs.AsNoTracking()
+                    .Where(x => x.RelatedPayoutId == candidate.PayoutId && x.HttpMethod == "GET")
+                    .OrderByDescending(x => x.RequestedAt)
+                    .Select(x => new { x.RequestedAt, x.ResponseStatusCode })
+                    .Take(8).ToListAsync(ct);
+                var consecutive404 = recentGets.TakeWhile(x => x.ResponseStatusCode == 404).Count();
+                if (consecutive404 > 0 &&
+                    WalletWithdrawalRecoveryPolicy.ShouldDeferAutomaticLookup(
+                        DateTime.UtcNow, recentGets[0].RequestedAt, consecutive404))
+                    continue;
+
+                if (await RecoverOneAsync(candidate.Id, ct)) attempted++;
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
             catch (Exception ex)
             {
                 _logger.LogWarning("Withdrawal {WithdrawalId} reconciliation deferred: {ErrorType}",
-                    id, ex.GetType().Name);
+                    candidate.Id, ex.GetType().Name);
             }
         }
         return attempted;
