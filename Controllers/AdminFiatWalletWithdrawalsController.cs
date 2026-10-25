@@ -15,6 +15,7 @@ using Microsoft.EntityFrameworkCore;
 namespace KorridorX.Controllers;
 
 public sealed record AdminFiatWalletWithdrawalActionDto(string Reason);
+public sealed record AdminFiatWalletWithdrawalRetryDto(string Reason, string ExpectedReference);
 
 // Read-only queue in every environment. Manual reconciliation and cancellation
 // are separately guarded by the Development-only execution service.
@@ -70,6 +71,23 @@ public sealed class AdminFiatWalletWithdrawalsController(
             "Provider evidence retrieved and withdrawal settlement evaluated."));
     }
 
+    // The endpoint alone can send a second payout POST. Restrict the authority,
+    // exact merchant reference and explicit reason, then let the service
+    // perform the full DB/provider one-shot safety gate.
+    [Authorize(Roles = "SuperAdmin,Operations")]
+    [HttpPost("{id:guid}/retry-known-note-rejection")]
+    public async Task<IActionResult> RetryKnownNoteRejection(Guid id,
+        [FromBody] AdminFiatWalletWithdrawalRetryDto request, CancellationToken ct)
+    {
+        if (request is null || string.IsNullOrWhiteSpace(request.ExpectedReference))
+            return BadRequest(ApiResponses.Fail("Expected original merchant reference is required."));
+        var reason = RequireReason(new AdminFiatWalletWithdrawalActionDto(request.Reason));
+        await execution.RetryKnownRejectedOnceAsync(
+            id, GetActor(), request.ExpectedReference, reason, ct);
+        return Accepted(ApiResponses.Ok(new { withdrawalId = id },
+            "One guarded payout retry was claimed. Inspect withdrawal status; this is not settlement confirmation."));
+    }
+
     [HttpPost("{id:guid}/cancel-unsubmitted")]
     public async Task<IActionResult> CancelUnsubmitted(Guid id,
         [FromBody] AdminFiatWalletWithdrawalActionDto request, CancellationToken ct)
@@ -87,6 +105,10 @@ public sealed class AdminFiatWalletWithdrawalsController(
             .Where(x => x.RelatedPayoutId == id);
         var originalPost = await requests.Where(x => x.HttpMethod == "POST")
             .OrderBy(x => x.RequestedAt)
+            .Select(x => new { x.ResponseStatusCode, x.RequestedAt, x.ResponseBodyJson })
+            .FirstOrDefaultAsync(ct);
+        var latestPost = await requests.Where(x => x.HttpMethod == "POST")
+            .OrderByDescending(x => x.RequestedAt)
             .Select(x => new { x.ResponseStatusCode, x.RequestedAt, x.ResponseBodyJson })
             .FirstOrDefaultAsync(ct);
         var lastGet = await requests.Where(x => x.HttpMethod == "GET")
@@ -108,7 +130,11 @@ public sealed class AdminFiatWalletWithdrawalsController(
             OriginalPostUtc = originalPost?.RequestedAt,
             ValidationField = knownNoteError is null ? null : "note",
             ValidationMessage = knownNoteError,
-            AutomatedLookupsPausedForKnownValidation = knownNoteError is not null,
+            AutomatedLookupsPausedForKnownValidation = latestPost is not null &&
+                WalletWithdrawalRetryPolicy.IsLatestKnownNoteRejection(
+                    latestPost.ResponseStatusCode, latestPost.ResponseBodyJson),
+            LatestPostHttpStatus = latestPost?.ResponseStatusCode,
+            LatestPostUtc = latestPost?.RequestedAt,
             Lookup404Count = get404Count,
             LastLookupHttpStatus = lastGet?.ResponseStatusCode,
             LastLookupUtc = lastGet?.RequestedAt,

@@ -123,19 +123,27 @@ public sealed class WalletWithdrawalExecutionService : IWalletWithdrawalExecutio
                 // HTTP 422 with the exact Blaaiz note-length validation is
                 // a known rejected submission. Pause *automatic* GET polling,
                 // but preserve the claim, reservation and manual GET path.
-                var original422 = await _db.ProviderRequestLogs.AsNoTracking()
-                    .Where(x => x.RelatedPayoutId == candidate.PayoutId &&
-                        x.HttpMethod == "POST" && x.ResponseStatusCode == 422)
-                    .OrderBy(x => x.RequestedAt)
-                    .Select(x => x.ResponseBodyJson)
+                // After a strictly guarded admin retry, the original 422
+                // remains audit history. Only the MOST RECENT POST can pause
+                // automatic GET reconciliation for a known note rejection.
+                var latestPost = await _db.ProviderRequestLogs.AsNoTracking()
+                    .Where(x => x.RelatedPayoutId == candidate.PayoutId && x.HttpMethod == "POST")
+                    .OrderByDescending(x => x.RequestedAt)
+                    .Select(x => new { x.RequestedAt, x.ResponseStatusCode, x.ResponseBodyJson })
                     .FirstOrDefaultAsync(ct);
-                if (WalletWithdrawalRecoveryPolicy.ReadKnownNoteValidationError(original422) is not null)
+                if (latestPost is not null &&
+                    WalletWithdrawalRetryPolicy.IsLatestKnownNoteRejection(
+                        latestPost.ResponseStatusCode, latestPost.ResponseBodyJson))
                     continue;
+                // A fresh POST starts a new recovery epoch. The original
+                // 1120 GET 404s must not inflate cooldown of the retry.
+                var currentAttemptStartUtc = latestPost?.RequestedAt ?? DateTime.UnixEpoch;
 
                 // Other unknown outcomes continue reconciling, but consecutive
                 // 404s receive an increasing cooldown capped at one hour.
                 var recentGets = await _db.ProviderRequestLogs.AsNoTracking()
-                    .Where(x => x.RelatedPayoutId == candidate.PayoutId && x.HttpMethod == "GET")
+                    .Where(x => x.RelatedPayoutId == candidate.PayoutId && x.HttpMethod == "GET" &&
+                        x.RequestedAt >= currentAttemptStartUtc)
                     .OrderByDescending(x => x.RequestedAt)
                     .Select(x => new { x.RequestedAt, x.ResponseStatusCode })
                     .Take(8).ToListAsync(ct);
@@ -254,6 +262,224 @@ public sealed class WalletWithdrawalExecutionService : IWalletWithdrawalExecutio
                 row.Id, ex.GetType().Name);
         }
         return true;
+    }
+
+    // Restricted to staging, SuperAdmin/Operations and a single provably
+    // rejected note-validation POST. THIS METHOD SENDS MONEY ONLY WHEN THE
+    // SEPARATELY DEPLOYED ADMIN ENDPOINT IS EXPLICITLY INVOKED.
+    public async Task RetryKnownRejectedOnceAsync(Guid withdrawalId, Guid adminUserId,
+        string expectedReference, string reason, CancellationToken ct = default)
+    {
+        if (_environment.EnvironmentName != Environments.Staging || !DispatchAllowed)
+            throw new InvalidOperationException("One-time validated retry is available only in enabled staging.");
+        if (adminUserId == Guid.Empty || string.IsNullOrWhiteSpace(expectedReference) ||
+            string.IsNullOrWhiteSpace(reason) || reason.Trim().Length > 500)
+            throw new InvalidOperationException("An exact merchant reference and reason are required.");
+        var auditReason = reason.Trim();
+        var row = await _db.FiatWalletWithdrawals.AsNoTracking().SingleOrDefaultAsync(x =>
+            x.Id == withdrawalId && !x.IsDeleted &&
+            x.Status == FiatWalletWithdrawalStatus.RequiresReconciliation &&
+            x.PayoutId != null, ct)
+            ?? throw new InvalidOperationException("Withdrawal is not awaiting a claimed-payout reconciliation.");
+        if (!string.Equals(expectedReference, row.Reference, StringComparison.Ordinal) ||
+            !WalletWithdrawalDispatchSafetyPolicy.IsWithinExecutionDebitLimit(
+                row, _environment.EnvironmentName, _settings))
+            throw new InvalidOperationException("Reviewed withdrawal identity or amount is not eligible.");
+        WalletWithdrawalDispatchSafetyPolicy.ValidateSnapshot(row);
+        var business = row.BusinessProfileId.HasValue;
+
+        // Perform the same current eligibility, compliance, route, fee and
+        // liquidity checks as normal dispatch, BEFORE any durable retry claim.
+        await _restrictions.EnsureFinancialAccountOwnerOutboundAllowedAsync(
+            row.OwnerType, row.OwnerId, "FiatWalletWithdrawalAdminRetry", ct);
+        if (business) await EnsureBusinessAuthorizationAsync(row, ct);
+        var customer = business
+            ? await _compliance.EnsureBusinessCanInitiateMoneyMovementAsync(
+                row.BusinessProfileId!.Value, _provider.ProviderCode, ct)
+            : await _compliance.EnsureCanInitiateMoneyMovementAsync(
+                row.CustomerProfileId ?? throw new InvalidOperationException(
+                    "Withdrawal customer profile is missing."), _provider.ProviderCode, ct);
+        if (string.IsNullOrWhiteSpace(customer.ProviderCustomerId))
+            throw new InvalidOperationException("A verified payout-provider customer is required.");
+
+        var accountDetails = row.PaymentMethod != PaymentMethod.Interac
+            ? _accounts.Unprotect(row.ProtectedAccountNumber ??
+                throw new InvalidOperationException("Original protected bank account is missing."))
+            : null;
+        var foreign = WalletWithdrawalForeignAccount.Supports(row.CurrencyCode, row.PaymentMethod)
+            ? WalletWithdrawalForeignAccount.Parse(accountDetails, row.CurrencyCode, row.PaymentMethod)
+            : null;
+        var destinationCountry = WalletWithdrawalSetupPolicy.DestinationCountry(
+            row.CurrencyCode, row.PaymentMethod, foreign?.Country);
+        var eligible = await _channels.EligibleAsync(destinationCountry, row.CurrencyCode,
+            business, PaymentChannelDirection.Withdrawal, row.CurrencyCode, row.TotalWalletDebit, ct);
+        var choice = eligible.SingleOrDefault(x => x.Channel.Id == row.PaymentChannelId &&
+            x.Capability.PaymentMethod == row.PaymentMethod)
+            ?? throw new InvalidOperationException("The original withdrawal payout channel is disabled.");
+        if (!string.Equals(choice.Channel.ProviderCode, _provider.ProviderName,
+                StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("Provider changed since the original withdrawal.");
+
+        var fee = await _quotes.QuoteAsync(choice.Channel.ProviderCode, row.CurrencyCode,
+            customer.ProviderCustomerId, row.TotalWalletDebit,
+            row.CurrencyDecimalPlaces, row.PaymentMethod, ct);
+        if (fee.ProviderFee != row.ProviderFee || fee.RecipientAmount != row.ExpectedRecipientAmount)
+            throw new InvalidOperationException(
+                "Payout pricing changed. Admin retry refused; reserved funds remain held.");
+        var payoutId = row.PayoutId!.Value;
+        var walletId = await _wallets.SelectAsync("Payout", payoutId,
+            _provider.ProviderName, row.CurrencyCode, null,
+            ProviderWalletResolver.Payout, previouslySubmitted: true, ct);
+
+        // Only the saved provider wallet may fund this retry. Never
+        // check liquidity on a newly selected channel wallet.
+        await _liquidity.EnsureAvailableAsync(choice.Channel.ProviderCode, row.CurrencyCode,
+            row.TotalWalletDebit, walletId, ct);
+        var request = WalletWithdrawalDispatchSafetyPolicy.BuildRequest(
+            row, payoutId, customer.ProviderCustomerId, walletId, accountDetails);
+
+        // This transaction locks and revalidates *all* sensitive evidence,
+        // preserves the old failed attempt, and claims the only allowed retry.
+        // No provider HTTP call occurs before its commit.
+        await ClaimKnownRejectedRetryOnceAsync(row, adminUserId,
+            expectedReference, auditReason, ct);
+
+        try
+        {
+            var result = await _provider.InitiatePayoutAsync(request, ct);
+            await SaveAcknowledgementAsync(row.Id, payoutId, result, ct);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            await MarkUncertainAsync(row.Id, "Admin retry interrupted; provider verification required",
+                CancellationToken.None);
+            throw;
+        }
+        catch (Exception ex)
+        {
+            await MarkUncertainAsync(row.Id,
+                "Admin retry outcome unknown; verify the original merchant reference",
+                CancellationToken.None);
+            _logger.LogWarning(
+                "Admin-authorized one-shot payout retry {WithdrawalId} needs reconciliation: {ErrorType}",
+                row.Id, ex.GetType().Name);
+            return;
+        }
+
+        // POST acknowledgement is NEVER financial settlement.
+        // Only independently verified provider GET may capture or release.
+        try { await RecoverOneAsync(row.Id, ct); }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+        catch (Exception ex)
+        {
+            await MarkUncertainAsync(row.Id,
+                "Admin retry accepted, independent provider settlement unverified",
+                CancellationToken.None);
+            _logger.LogWarning(
+                "Admin-authorized retry {WithdrawalId} still awaits GET: {ErrorType}",
+                row.Id, ex.GetType().Name);
+        }
+    }
+
+    private async Task ClaimKnownRejectedRetryOnceAsync(FiatWalletWithdrawal snapshot,
+        Guid adminUserId, string expectedReference, string reason, CancellationToken ct)
+    {
+        await using var tx = await _db.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, ct);
+        try
+        {
+            var row = await _db.FiatWalletWithdrawals.FromSqlInterpolated(
+                    $"SELECT * FROM \"FiatWalletWithdrawals\" WHERE \"Id\" = {snapshot.Id} FOR UPDATE")
+                .SingleAsync(ct);
+            if (row.PayoutId is not Guid payoutId ||
+                row.PayoutId != snapshot.PayoutId ||
+                !string.Equals(row.Reference, expectedReference, StringComparison.Ordinal) ||
+                row.RequestFingerprint != snapshot.RequestFingerprint ||
+                row.TotalWalletDebit != snapshot.TotalWalletDebit ||
+                row.ProviderFee != snapshot.ProviderFee ||
+                row.ExpectedRecipientAmount != snapshot.ExpectedRecipientAmount ||
+                row.FinancialReservationId != snapshot.FinancialReservationId ||
+                row.PaymentChannelId != snapshot.PaymentChannelId)
+                throw new InvalidOperationException(
+                    "Withdrawal changed since the preflight. No provider POST was attempted.");
+
+            var payout = await _db.Payouts.Include(x => x.Attempts)
+                .SingleAsync(x => x.Id == payoutId, ct);
+            var logs = _db.ProviderRequestLogs.AsNoTracking()
+                .Where(x => x.RelatedPayoutId == payoutId);
+            var firstPost = await logs.Where(x => x.HttpMethod == "POST")
+                .OrderBy(x => x.RequestedAt).FirstOrDefaultAsync(ct);
+            var posts = await logs.CountAsync(x => x.HttpMethod == "POST", ct);
+            var gets404 = await logs.CountAsync(x =>
+                x.HttpMethod == "GET" && x.ResponseStatusCode == 404, ct);
+            var otherGets = await logs.CountAsync(x =>
+                x.HttpMethod == "GET" && x.ResponseStatusCode != 404, ct);
+            var last404Utc = await logs.Where(x =>
+                x.HttpMethod == "GET" && x.ResponseStatusCode == 404)
+                .MaxAsync(x => (DateTime?)x.RequestedAt, ct);
+            if (!WalletWithdrawalRetryPolicy.CanRetryOnce(
+                    row, payout, firstPost, posts, gets404, otherGets,
+                    last404Utc, DateTime.UtcNow))
+                throw new InvalidOperationException(
+                    "Safe one-shot retry proof failed. Existing hold and provider claim are preserved.");
+
+            if (row.BusinessProfileId.HasValue)
+                await EnsureBusinessAuthorizationAsync(row, ct);
+            _ = await _db.FinancialAccounts.FromSqlInterpolated(
+                    $"SELECT * FROM \"FinancialAccounts\" WHERE \"Id\" = {row.FinancialAccountId} FOR UPDATE")
+                .SingleAsync(ct);
+            var reservation = await _db.FinancialReservations.AsNoTracking().SingleAsync(x =>
+                x.Id == row.FinancialReservationId &&
+                x.FinancialAccountId == row.FinancialAccountId &&
+                x.RelatedEntityId == row.Id &&
+                x.RelatedEntityType == nameof(FiatWalletWithdrawal), ct);
+            if (reservation.IsDeleted ||
+                reservation.Status != FinancialReservationStatus.Active ||
+                reservation.Type != FinancialReservationType.Withdrawal ||
+                reservation.Amount != row.TotalWalletDebit ||
+                reservation.CapturedAmount != 0m || reservation.ReleasedAmount != 0m)
+                throw new InvalidOperationException("Original wallet reservation is not fully held.");
+
+            var originalAttempt = payout.Attempts.Single();
+            originalAttempt.Status = ProviderRequestStatus.Failed;
+            originalAttempt.ProviderRequestId = firstPost!.Id.ToString();
+            originalAttempt.ErrorMessage = WalletWithdrawalRecoveryPolicy.BlaaizNoteLimitMessage;
+            var now = DateTime.UtcNow;
+            payout.Attempts.Add(new PayoutAttempt
+            {
+                PayoutId = payout.Id, Status = ProviderRequestStatus.Pending, AttemptedAt = now,
+                RequestPayloadJson = System.Text.Json.JsonSerializer.Serialize(new
+                {
+                    withdrawal = row.Reference, retry = "admin_known_note_validation",
+                    row.TotalWalletDebit, row.ExpectedRecipientAmount, row.ProviderFee,
+                    row.CurrencyCode, method = row.PaymentMethod.ToString(),
+                    merchantReference = row.Reference
+                })
+            });
+            row.Status = FiatWalletWithdrawalStatus.Processing;
+            row.OperationalHoldReason = null;
+            row.SubmittedToProviderAtUtc = now;
+            row.LastUpdatedAt = now;
+            row.LastUpdatedByUserId = adminUserId;
+            payout.LastUpdatedAt = now;
+            _audit.Stage(new AuditRecordRequest(
+                "FIAT_WALLET_WITHDRAWAL_ADMIN_KNOWN_422_RETRY_CLAIMED",
+                "WalletWithdrawal", nameof(FiatWalletWithdrawal), row.Id.ToString(),
+                NewValues: new
+                {
+                    row.Reference, payout.Id, PreviousProviderRequestId = firstPost.Id,
+                    TotalAttempts = payout.Attempts.Count,
+                    row.TotalWalletDebit, row.ExpectedRecipientAmount
+                },
+                Metadata: new { Reason = reason, OriginalHttpStatus = 422 },
+                UserId: adminUserId));
+            await _db.SaveChangesAsync(ct);
+            await tx.CommitAsync(ct);
+        }
+        catch
+        {
+            await tx.RollbackAsync(CancellationToken.None);
+            throw;
+        }
     }
 
     private async Task<Guid?> ClaimOnceAsync(FiatWalletWithdrawal snapshot, PaymentChannelChoice choice,
