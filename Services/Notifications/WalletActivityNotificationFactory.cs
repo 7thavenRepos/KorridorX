@@ -46,7 +46,7 @@ public static class WalletActivityNotificationFactory
         return ($"Your {currencyCode} wallet is ready",
             $"<p>Your {currency} wallet has been added to KorridorX.</p>" +
             "<p>Open Wallet to view your receiving details and funding instructions. " +
-            "Receiving details may remain pending while the provider completes activation.</p>");
+            "Receiving details may remain pending while your account setup is completed.</p>");
     }
 
     public static (string Subject, string Body) FundingReceived(string currencyCode, decimal amount, string reference)

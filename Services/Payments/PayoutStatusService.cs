@@ -118,11 +118,11 @@ public class PayoutStatusService : IPayoutStatusService
                     TransferStatus.PayoutInitiated,
                     new TransferStatusTransitionContext(
                         source,
-                        reason ?? "Recipient payout has been initiated.",
+                        "We are sending money to your recipient.",
                         context.ChangedByUserId,
                         EventType: "PAYOUT_INITIATED",
-                        Title: "Payout initiated",
-                        Description: "The payout to your recipient has been initiated.",
+                        Title: "Sending money",
+                        Description: "We are sending money to your recipient.",
                         MetadataJson: context.MetadataJson,
                         OccurredAt: occurredAt));
             }
@@ -169,7 +169,7 @@ public class PayoutStatusService : IPayoutStatusService
                         context.ChangedByUserId,
                         EventType: "PAYOUT_COMPLETED",
                         Title: "Recipient paid",
-                        Description: "The recipient payout has been completed successfully.",
+                        Description: "The recipient has been paid successfully.",
                         MetadataJson: context.MetadataJson,
                         OccurredAt: occurredAt));
             }
@@ -206,7 +206,7 @@ public class PayoutStatusService : IPayoutStatusService
         {
             var consumerWalletRestored = _consumerFunding.ReleaseTransferReservation(
                 transfer,
-                reason ?? "Recipient payout could not be completed.",
+                "Your transfer could not be completed.",
                 context.ChangedByUserId,
                 source);
 
@@ -219,7 +219,7 @@ public class PayoutStatusService : IPayoutStatusService
                         TransferStatus.Failed,
                         new TransferStatusTransitionContext(
                             source,
-                            reason ?? "Recipient payout failed. Reserved funds were returned to your wallet.",
+                            "The transfer could not be completed. Your reserved funds were returned to your wallet.",
                             context.ChangedByUserId,
                             EventType: newStatus == PayoutStatus.Reversed ? "PAYOUT_REVERSED_WALLET_RESTORED" : "PAYOUT_FAILED_WALLET_RESTORED",
                             Title: "Funds returned to wallet",
@@ -280,7 +280,7 @@ public class PayoutStatusService : IPayoutStatusService
 
             _businessFundingService.ReleaseTransferReservation(
                 transfer,
-                reason ?? "Recipient payout could not be completed.",
+                "Your transfer could not be completed.",
                 context.ChangedByUserId,
                 source);
         }

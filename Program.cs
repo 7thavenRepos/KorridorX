@@ -11,6 +11,7 @@ using KorridorX.Providers.DigitalAssets;
 using KorridorX.Providers.Remittance;
 using KorridorX.Providers.Remittance.Blaaiz;
 using KorridorX.Providers.Screening;
+using KorridorX.Services.AccountClosure;
 using KorridorX.Services.Auth;
 using KorridorX.Services.Audit;
 using KorridorX.Services.AdminUsers;
@@ -320,6 +321,7 @@ builder.Services.AddScoped<IdentitySeedRunner>();
 
 builder.Services.AddScoped<ICustomerProfileService, CustomerProfileService>();
 builder.Services.AddScoped<IConsumerWalletService, ConsumerWalletService>();
+builder.Services.AddScoped<IAccountClosureService, AccountClosureService>();
 builder.Services.AddScoped<IWalletWithdrawalSetupService, WalletWithdrawalSetupService>();
 builder.Services.AddScoped<IWalletWithdrawalFeePreviewService, WalletWithdrawalFeePreviewService>();
 builder.Services.AddScoped<IWalletWithdrawalInitiationService, WalletWithdrawalInitiationService>();

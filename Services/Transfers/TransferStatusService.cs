@@ -46,7 +46,8 @@ public class TransferStatusService : ITransferStatusService
             [
                 TransferStatus.Processing,
                 TransferStatus.RefundPending,
-                TransferStatus.Failed
+                TransferStatus.Failed,
+                TransferStatus.Cancelled
             ],
 
             [TransferStatus.Processing] =
@@ -313,8 +314,8 @@ public class TransferStatusService : ITransferStatusService
             TransferStatus.PendingPayment => "Payment pending",
             TransferStatus.PaymentReceived => "Payment received",
             TransferStatus.Processing => "Transfer processing",
-            TransferStatus.PayoutInitiated => "Payout initiated",
-            TransferStatus.PayoutCompleted => "Payout completed",
+            TransferStatus.PayoutInitiated => "Sending money",
+            TransferStatus.PayoutCompleted => "Recipient paid",
             TransferStatus.Completed => "Transfer completed",
             TransferStatus.Failed => "Transfer failed",
             TransferStatus.Cancelled => "Transfer cancelled",
@@ -335,8 +336,8 @@ public class TransferStatusService : ITransferStatusService
             TransferStatus.PendingPayment => "The transfer is waiting for payment.",
             TransferStatus.PaymentReceived => "Payment for the transfer has been received.",
             TransferStatus.Processing => "The transfer is being processed.",
-            TransferStatus.PayoutInitiated => "The recipient payout has been initiated.",
-            TransferStatus.PayoutCompleted => "The recipient payout has been completed.",
+            TransferStatus.PayoutInitiated => "We are sending money to your recipient.",
+            TransferStatus.PayoutCompleted => "The recipient has been paid successfully.",
             TransferStatus.Completed => "The transfer has been completed successfully.",
             TransferStatus.Failed => "The transfer could not be completed.",
             TransferStatus.Cancelled => "The transfer has been cancelled.",

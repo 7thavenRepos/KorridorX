@@ -173,6 +173,17 @@ public sealed class FirebasePushNotificationDeliveryProvider
             return "support";
         }
 
+        if (string.Equals(notification.RelatedEntityType, "FiatWalletWithdrawal", StringComparison.OrdinalIgnoreCase))
+            return "wallet-withdrawal";
+        if (string.Equals(notification.RelatedEntityType, "FinancialAccount", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(notification.RelatedEntityType, "AccountSecurity.ReceivingAccountReady", StringComparison.OrdinalIgnoreCase))
+            return "wallet";
+        if (string.Equals(notification.RelatedEntityType, "WalletFunding", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(notification.RelatedEntityType, "Collection", StringComparison.OrdinalIgnoreCase))
+            return "collection";
+        if (string.Equals(notification.RelatedEntityType, "AccountClosureRequest", StringComparison.OrdinalIgnoreCase))
+            return "account-closure";
+
         return "notifications";
     }
 

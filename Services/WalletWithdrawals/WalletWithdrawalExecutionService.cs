@@ -787,8 +787,8 @@ public sealed class WalletWithdrawalExecutionService : IWalletWithdrawalExecutio
                 var succeeded = decision == WalletWithdrawalSettlementDecision.Capture;
                 var subject = succeeded ? "Wallet withdrawal completed" : "Wallet withdrawal unsuccessful";
                 var message = succeeded
-                    ? "<p>Your withdrawal was confirmed by the payout provider.</p>"
-                    : "<p>The payout provider confirmed that your withdrawal failed. The reserved funds have been returned to your available wallet balance.</p>";
+                    ? "<p>Your withdrawal was completed successfully.</p>"
+                    : "<p>Your withdrawal was unsuccessful. The reserved funds have been returned to your available wallet balance.</p>";
                 if (row.BusinessProfileId is Guid businessId)
                     await _notifications.QueueBusinessAsync(businessId, subject, message,
                         nameof(FiatWalletWithdrawal), row.Id, ct);
@@ -806,7 +806,7 @@ public sealed class WalletWithdrawalExecutionService : IWalletWithdrawalExecutio
             if (decision == WalletWithdrawalSettlementDecision.RequireReconciliation && firstHold)
             {
                 const string subject = "Wallet withdrawal under review";
-                const string body = "<p>Your withdrawal is awaiting verification with the payout provider. Funds remain reserved and will not be deducted again.</p>";
+                const string body = "<p>Your withdrawal is being reviewed. Your funds remain reserved and will not be deducted again.</p>";
                 if (row.BusinessProfileId is Guid businessId)
                     await _notifications.QueueBusinessAsync(businessId, subject, body,
                         nameof(FiatWalletWithdrawal), row.Id, ct);
@@ -842,7 +842,7 @@ public sealed class WalletWithdrawalExecutionService : IWalletWithdrawalExecutio
                     row.Status = FiatWalletWithdrawalStatus.RequiresReconciliation;
                     row.OperationalHoldReason = genericReason;
                     const string subject = "Wallet withdrawal under review";
-                    const string message = "<p>Your payout is being verified. Your wallet reservation remains protected while we investigate.</p>";
+                    const string message = "<p>Your withdrawal is being reviewed. Your reserved funds remain protected while we investigate.</p>";
                     if (row.BusinessProfileId is Guid businessId)
                         await _notifications.QueueBusinessAsync(businessId, subject, message,
                             nameof(FiatWalletWithdrawal), row.Id, ct);
@@ -900,7 +900,7 @@ public sealed class WalletWithdrawalExecutionService : IWalletWithdrawalExecutio
             row.LastUpdatedAt = DateTime.UtcNow;
             row.LastUpdatedByUserId = adminUserId;
             const string subject = "Wallet withdrawal cancelled";
-            const string body = "<p>Your withdrawal was cancelled before being sent to the payout provider. The reserved funds have been restored to your available wallet balance.</p>";
+            const string body = "<p>Your withdrawal was cancelled before processing. The reserved funds have been returned to your available wallet balance.</p>";
             if (row.BusinessProfileId is Guid businessId)
                 await _notifications.QueueBusinessAsync(businessId, subject, body,
                     nameof(FiatWalletWithdrawal), row.Id, ct);

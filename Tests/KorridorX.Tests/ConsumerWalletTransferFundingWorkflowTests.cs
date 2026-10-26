@@ -197,6 +197,88 @@ public sealed class ConsumerWalletTransferFundingWorkflowTests
         Assert.Equal(30m, reservation.ReleasedAmount);
     }
 
+[DatabaseIntegrationFact]
+public async Task Cancelling_fully_funded_not_dispatched_transfer_restores_wallet_once()
+{
+    using var client = _fixture.CreateClient();
+    var setup = await CreateTransferAsync(client, 500m);
+    Assert.Equal(TransferStatus.PaymentReceived, setup.Transfer.Status);
+
+    using var cancel = await client.PostJsonAsync(
+        $"/api/transfers/{setup.Transfer.Id}/cancel",
+        new CancelTransferRequestDto("Cancel before processing"));
+    await cancel.EnsureSuccessWithBodyAsync();
+    var cancelled = await cancel.ReadApiResponseAsync<TransferDetailsDto>();
+    Assert.Equal(TransferStatus.Cancelled, Assert.IsType<TransferDetailsDto>(cancelled.Data).Transfer.Status);
+
+    // A repeated cancellation must not release the wallet reservation twice.
+    using var repeated = await client.PostJsonAsync(
+        $"/api/transfers/{setup.Transfer.Id}/cancel",
+        new CancelTransferRequestDto("Repeated cancellation"));
+    Assert.Equal(HttpStatusCode.OK, repeated.StatusCode);
+
+    await using var scope = _fixture.Factory.Services.CreateAsyncScope();
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    var wallet = await db.FinancialAccounts.AsNoTracking().SingleAsync(x => x.Id == setup.WalletId);
+    var reservation = await db.FinancialReservations.AsNoTracking().SingleAsync(x =>
+        x.Type == FinancialReservationType.Transfer &&
+        x.RelatedEntityType == nameof(KorridorX.Models.Transfers.Transfer) &&
+        x.RelatedEntityId == setup.Transfer.Id && !x.IsDeleted);
+    Assert.Equal(500m, wallet.SettledBalance);
+    Assert.Equal(500m, wallet.AvailableBalance);
+    Assert.Equal(0m, wallet.HeldBalance);
+    Assert.Equal(FinancialReservationStatus.Released, reservation.Status);
+    Assert.Equal(setup.Transfer.TotalPayableAmount, reservation.ReleasedAmount);
+    Assert.Equal(0m, reservation.CapturedAmount);
+    Assert.Equal(0, await db.Payouts.CountAsync(x => x.TransferId == setup.Transfer.Id));
+    Assert.Equal(1, await db.LedgerTransactions.CountAsync(x =>
+        x.Type == LedgerTransactionType.ReservationRelease &&
+        x.RelatedEntityType == nameof(KorridorX.Models.Transfers.Transfer) &&
+        x.RelatedEntityId == setup.Transfer.Id));
+}
+
+[DatabaseIntegrationFact]
+public async Task Cancellation_is_blocked_once_payout_record_exists_and_hold_is_preserved()
+{
+    using var client = _fixture.CreateClient();
+    var setup = await CreateTransferAsync(client, 500m);
+    Assert.Equal(TransferStatus.PaymentReceived, setup.Transfer.Status);
+    await using (var scope = _fixture.Factory.Services.CreateAsyncScope())
+    {
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        db.Payouts.Add(new Payout
+        {
+            TransferId = setup.Transfer.Id,
+            Reference = $"KXPO-TEST-{Guid.NewGuid():N}",
+            CurrencyCode = setup.Transfer.DestinationCurrencyCode,
+            Amount = setup.Transfer.DestinationAmount,
+            PaymentMethod = PaymentMethod.BankTransfer,
+            Status = PayoutStatus.Pending,
+            ProviderCode = "Blaaiz"
+        });
+        await db.SaveChangesAsync();
+    }
+
+    using var response = await client.PostJsonAsync(
+        $"/api/transfers/{setup.Transfer.Id}/cancel",
+        new CancelTransferRequestDto("Attempt late cancellation"));
+    Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+
+    await using var verify = _fixture.Factory.Services.CreateAsyncScope();
+    var view = verify.ServiceProvider.GetRequiredService<AppDbContext>();
+    var transfer = await view.Transfers.AsNoTracking().SingleAsync(x => x.Id == setup.Transfer.Id);
+    var wallet = await view.FinancialAccounts.AsNoTracking().SingleAsync(x => x.Id == setup.WalletId);
+    var reservation = await view.FinancialReservations.AsNoTracking().SingleAsync(x =>
+        x.Type == FinancialReservationType.Transfer &&
+        x.RelatedEntityType == nameof(KorridorX.Models.Transfers.Transfer) &&
+        x.RelatedEntityId == setup.Transfer.Id && !x.IsDeleted);
+    Assert.Equal(TransferStatus.PaymentReceived, transfer.Status);
+    Assert.Equal(setup.Transfer.TotalPayableAmount, wallet.HeldBalance);
+    Assert.Equal(500m - setup.Transfer.TotalPayableAmount, wallet.AvailableBalance);
+    Assert.Equal(FinancialReservationStatus.Active, reservation.Status);
+    Assert.Equal(0m, reservation.ReleasedAmount);
+}
+
     private async Task<TransferSetup> CreateTransferAsync(HttpClient client, decimal walletBalance)
     {
         var email = $"wallet-transfer-{Guid.NewGuid():N}@example.test";

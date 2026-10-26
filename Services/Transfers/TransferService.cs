@@ -1,3 +1,4 @@
+using System.Data;
 using KorridorX.Data;
 using KorridorX.Dtos.Transfers;
 using KorridorX.Extensions;
@@ -406,72 +407,73 @@ public class TransferService : ITransferService
     }
 
     public async Task<TransferDetailsDto> CancelTransferAsync(
-        Guid userId,
-        Guid transferId,
-        CancelTransferRequestDto request,
+        Guid userId, Guid transferId, CancelTransferRequestDto request,
         CancellationToken ct = default)
     {
         var reason = string.IsNullOrWhiteSpace(request.Reason)
-            ? "Cancelled by customer."
+            ? "Cancelled by customer before processing."
             : request.Reason.Trim();
-
         if (reason.Length > 1000)
-        {
             throw new InvalidOperationException("Cancellation reason cannot exceed 1000 characters.");
-        }
 
-        await using var tx = await _db.Database.BeginTransactionAsync(ct);
-
-        var transfer = await _db.Transfers
-            .Include(x => x.CustomerProfile)
-            .FirstOrDefaultAsync(x =>
-                x.Id == transferId &&
-                x.CustomerProfileId != null &&
-                x.CustomerProfile!.UserId == userId &&
-                !x.IsDeleted,
-                ct);
-
-        if (transfer is null)
-        {
-            throw new InvalidOperationException("Transfer not found.");
-        }
-
-        if (transfer.Status == TransferStatus.Cancelled)
-        {
-            await tx.CommitAsync(ct);
-            return await GetTransferByIdAsync(userId, transfer.Id, ct);
-        }
-
-        await _consumerFunding.ReleaseActiveTransferReservationAsync(
-            transfer,
-            reason,
-            userId,
-            "CustomerCancellation",
-            ct);
-
-        _transferStatusService.ApplyTransition(
-            transfer,
-            TransferStatus.Cancelled,
-            new TransferStatusTransitionContext(
-                Source: "Customer",
-                Reason: reason,
-                ChangedByUserId: userId,
-                EventType: "TRANSFER_CANCELLED",
-                Title: "Transfer cancelled",
-                Description: reason));
-
+        // Serialize customer cancellation against the payout's durable dispatch
+        // claim. No external payout may start once this state change commits.
+        await using var tx = await _db.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, ct);
         try
         {
+            var transfer = await _db.Transfers.FromSqlInterpolated(
+                    $"SELECT * FROM \"Transfers\" WHERE \"Id\" = {transferId} FOR UPDATE")
+                .SingleOrDefaultAsync(ct);
+            if (transfer is null || transfer.CustomerProfileId is not Guid profileId ||
+                !await _db.CustomerProfiles.AsNoTracking().AnyAsync(x =>
+                    x.Id == profileId && x.UserId == userId && !x.IsDeleted, ct))
+                throw new InvalidOperationException("Transfer not found.");
+
+            if (transfer.Status == TransferStatus.Cancelled)
+            {
+                await tx.CommitAsync(ct);
+                return await GetTransferByIdAsync(userId, transferId, ct);
+            }
+
+            if (transfer.Status is not (TransferStatus.PendingPayment or TransferStatus.PaymentReceived) ||
+                !string.IsNullOrWhiteSpace(transfer.ProviderTransferId) ||
+                !string.IsNullOrWhiteSpace(transfer.ProviderReference) ||
+                transfer.PayoutInitiatedAt.HasValue ||
+                await _db.Payouts.AsNoTracking().AnyAsync(x => x.TransferId == transferId, ct))
+                throw new InvalidOperationException(
+                    "This transfer has entered processing or needs review and can no longer be cancelled online.");
+
+            // Release only this consumer transfer's existing reservation. A
+            // collection arriving after cancellation is credited to the wallet
+            // by the existing collection-credit path, never silently discarded.
+            await _consumerFunding.ReleaseActiveTransferReservationAsync(
+                transfer, reason, userId, "CustomerCancellation", ct);
+
+            _transferStatusService.ApplyTransition(
+                transfer, TransferStatus.Cancelled,
+                new TransferStatusTransitionContext(
+                    Source: "Customer",
+                    Reason: reason,
+                    ChangedByUserId: userId,
+                    EventType: "TRANSFER_CANCELLED",
+                    Title: "Transfer cancelled",
+                    Description: "The transfer was cancelled before processing. Any reserved wallet funds are available again."));
+
             await _db.SaveChangesAsync(ct);
             await tx.CommitAsync(ct);
+            return await GetTransferByIdAsync(userId, transferId, ct);
         }
         catch (DbUpdateConcurrencyException)
         {
+            await tx.RollbackAsync(CancellationToken.None);
             throw new InvalidOperationException(
-                "The transfer status changed while the cancellation was being processed. Please refresh and try again.");
+                "The transfer status changed during cancellation. Refresh the transaction before trying again.");
         }
-
-        return await GetTransferByIdAsync(userId, transfer.Id, ct);
+        catch
+        {
+            await tx.RollbackAsync(CancellationToken.None);
+            throw;
+        }
     }
 
     private async Task<string> GenerateUniqueTransferReferenceAsync(CancellationToken ct)

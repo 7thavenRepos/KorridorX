@@ -1,3 +1,4 @@
+using System.Data;
 using KorridorX.Services.PaymentChannels;
 using System.Text.Json;
 using KorridorX.Configuration;
@@ -97,6 +98,13 @@ public class PayoutService : IPayoutService
         if (payout is not null && payout.Status is PayoutStatus.Initiated or PayoutStatus.Processing or PayoutStatus.Successful)
         {
             return ToDetailsDto(payout);
+        }
+
+        if (payout is not null && payout.Attempts.Count > 0 &&
+            !string.Equals(source, "AdminRetry", StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(
+                "A payout attempt already exists. Verify its outcome before authorizing any recovery.");
         }
 
         if (transfer.Status is not TransferStatus.PaymentReceived and not TransferStatus.Processing)
@@ -231,8 +239,42 @@ public class PayoutService : IPayoutService
             AttemptedAt = DateTime.UtcNow
         };
 
-        payout.Attempts.Add(attempt);
-        await _db.SaveChangesAsync(ct);
+        // Before any provider POST, claim processing durably. This conditional
+        // update synchronizes with the row lock in consumer cancellation.
+        // Another dispatcher or a completed customer cancellation means STOP.
+        await using (var claim = await _db.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, ct))
+        {
+            var observedStatus = transfer.Status;
+            var claimed = await _db.Transfers.Where(x =>
+                    x.Id == transfer.Id && x.Status == observedStatus &&
+                    !x.IsDeleted && !x.IsComplianceHold && !x.IsOperationalHold &&
+                    (x.Status == TransferStatus.PaymentReceived || x.Status == TransferStatus.Processing) &&
+                    !_db.PayoutAttempts.Any(a => a.PayoutId == payout.Id &&
+                        a.Status == ProviderRequestStatus.Pending))
+                .ExecuteUpdateAsync(update => update
+                    .SetProperty(x => x.Status, TransferStatus.Processing), ct);
+            if (claimed != 1)
+                throw new InvalidOperationException(
+                    "Payout dispatch was superseded or already claimed. No provider payout was submitted.");
+
+            // ExecuteUpdate does not update the tracked entity or its EF
+            // concurrency original. Synchronize them before SaveChanges.
+            _db.Entry(transfer).Property(x => x.Status).OriginalValue = TransferStatus.Processing;
+            if (observedStatus == TransferStatus.PaymentReceived)
+                _transferStatusService.ApplyTransition(
+                    transfer, TransferStatus.Processing,
+                    new TransferStatusTransitionContext(
+                        Source: "System",
+                        Reason: "Transfer processing started.",
+                        ChangedByUserId: changedByUserId,
+                        EventType: "TRANSFER_PROCESSING",
+                        Title: "Transfer processing",
+                        Description: "We are preparing to send your transfer."));
+
+            payout.Attempts.Add(attempt);
+            await _db.SaveChangesAsync(ct);
+            await claim.CommitAsync(ct);
+        }
 
         try
         {
