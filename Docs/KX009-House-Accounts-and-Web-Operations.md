@@ -64,18 +64,22 @@ Guide: `/admin/help/kx009-provision-house-accounts`
 **Warnings:** Provisioning does not fund an account, create an external bank/provider wallet, enable an asset, configure a rate, or activate a trading pair. If any selected asset or reserved identity fails validation, the provisioning transaction does not create part of that batch. Existing accounts are never silently zeroed or re-owned.
 **Troubleshooting:** No assets: ask a master-data administrator to configure supported assets. Operations users cannot bypass master-data permissions. Dropdown still empty: ensure the account is Active, House type, Treasury/Platform-owned and in the selected asset; click Refresh house accounts. No funds in Treasury: stop and ask Finance to arrange approved, recorded funding. Do not insert account balances into the database.
 
-## Fund and troubleshoot instant house liquidity (admin)
-Page: `/admin/treasury/house-accounts`
+## Fund and reconcile company house liquidity (admin)
+Page: `/admin/treasury`
 Guide: `/admin/help/kx009-house-account-funding`
+Reviewed: 2026-10-27
 
-1. **Separate creation from funding** — An Active house account with a zero balance is valid but cannot supply destination currency for a conversion. Provisioning is not a deposit.
-2. **Review recorded funds** — Use Treasury liquidity positions to identify an eligible, active internal treasury account holding the same asset with sufficient settled and available funds. A provider balance alone is not an internal posting.
-3. **Move existing liquidity** — Use Treasury → Internal transfers. Select the funded source and matching house destination, enter the amount and reason, and retain the generated idempotency key for that operation.
-4. **Verify the result** — Check the transfer reference, source/destination balances and ledger before retrying. CAD → NGN needs NGN destination liquidity; NGN → CAD needs CAD destination liquidity.
-5. **Stop when no source exists** — If there is no eligible funded internal source, there is no supported shortcut in this provisioning screen. Arrange approved Finance funding/reconciliation before enabling conversion.
+1. **Refresh the provider balance** — Open Treasury and choose Sync provider wallets. The House wallet funding table uses the existing Blaaiz balance service and shows each supported fiat currency separately.
+2. **Read the funding position** — Net company funds equal Blaaiz cash minus customer settled balances, identified uncredited incoming deposits and other positive reserved internal balances. Customer settled balances already include holds. Existing house, treasury and revenue allocations reduce the amount available for new funding.
+3. **Choose the right funding route** — For company money already recorded in Treasury, use Internal transfers in the same currency. For reconciled company cash held at Blaaiz but not yet recorded internally, choose Fund house and enter the house account, amount, company deposit or opening-balance approval reference, and reason.
+4. **Preview and confirm once** — Preview refreshes Blaaiz again and checks the available company amount. Review incoming receipts, fees and other obligations, confirm company ownership, then choose Confirm house funding. The server refreshes balances, rejects a changed or expired preview and records a balanced ledger transaction with an audit trail.
+5. **Check the posted result** — Retain the ledger reference and check the house balance. Reusing the same funding reference and details returns the recorded operation rather than crediting it twice. An existing reference with different details requires reconciliation.
 
-**Warnings:** Internal transfers move an existing balance in the same asset. They do not mint money or exchange currencies. Use approved test balances in staging. Do not alter database balances or move customer money to demonstrate setup.
-**Troubleshooting:** Confirm your role, selected business and current filters. Record the reference and any correlation ID, but never send passwords, bearer tokens or API secrets to support.
+**Expected result:** The approved company-owned amount becomes available in the selected house account, with an equal external debit and available credit and a retained ledger/audit reference. No provider transfer is initiated.
+
+**Warnings:** A provider balance or calculated surplus alone does not prove company ownership. Customer funds, held balances, unmatched incoming deposits and other obligations must remain protected. Stale or missing provider balances, invalid ledger balances and incoming receipts without a reliable amount or currency block funding until reconciled. Use Internal transfers for already recorded company funds. Provisioning starts at zero and does not fund an account. Never edit database balances.
+
+**Troubleshooting:** Sync first if the balance is missing or stale. A zero funding limit can mean liabilities or existing company allocations consume the provider balance; a negative net position requires Finance reconciliation. For unquantified incoming receipts, review Provider operations and recover or reconcile the original deposit. Do not classify it as company cash to bypass the block. If balances change or the preview expires after ten minutes, preview again. For an uncertain result, use the original funding reference and details to check whether it already posted.
 
 ## Configure an instant conversion from house account to quote (admin)
 Page: `/admin/trading-wallets`

@@ -290,15 +290,18 @@
   {
     "slug": "kx009-house-account-funding",
     "portal": "admin",
-    "title": "Fund and troubleshoot instant house liquidity",
-    "summary": "An Active house account with a zero balance is valid but cannot supply destination currency for a conversion. Provisioning is not a deposit.",
+    "title": "Fund and reconcile company house liquidity",
+    "summary": "Use the existing Blaaiz balance sync, deduct customer and other identified liabilities per currency, then record reviewed company funds in an active house account.",
     "category": "Treasury",
-    "pageRoute": "/admin/treasury/house-accounts",
+    "pageRoute": "/admin/treasury",
     "keywords": [
       "house funding",
+      "master wallet",
+      "Blaaiz balance",
+      "customer liabilities",
+      "uncredited deposit",
+      "company funds",
       "insufficient liquidity",
-      "settled",
-      "available",
       "internal transfer"
     ],
     "adminRoles": [
@@ -310,39 +313,44 @@
     "businessRoles": [],
     "allowNoBusiness": false,
     "isPage": false,
-    "reviewedOn": "2026-10-17",
+    "reviewedOn": "2026-10-27",
     "prerequisites": [
-      "Sign in to the correct workspace with permission to use this page."
+      "Operations can review the funding position; Admin or SuperAdmin can preview and confirm company funding.",
+      "Create an active Treasury/Platform-owned House account in the required currency through House accounts.",
+      "Reconcile company ownership and any obligations not represented in operational wallet balances before funding."
     ],
     "steps": [
       {
-        "title": "Separate creation from funding",
-        "instruction": "An Active house account with a zero balance is valid but cannot supply destination currency for a conversion. Provisioning is not a deposit."
+        "title": "Refresh the provider balance",
+        "instruction": "Open Treasury and choose Sync provider wallets. The House wallet funding table uses the existing Blaaiz balance service and shows each supported fiat currency separately."
       },
       {
-        "title": "Review recorded funds",
-        "instruction": "Use Treasury liquidity positions to identify an eligible, active internal treasury account holding the same asset with sufficient settled and available funds. A provider balance alone is not an internal posting."
+        "title": "Read the funding position",
+        "instruction": "Net company funds equal Blaaiz cash minus customer settled balances, identified uncredited incoming deposits and other positive reserved internal balances. Customer settled balances already include holds. Existing house, treasury and revenue allocations reduce the amount available for new funding."
       },
       {
-        "title": "Move existing liquidity",
-        "instruction": "Use Treasury → Internal transfers. Select the funded source and matching house destination, enter the amount and reason, and retain the generated idempotency key for that operation."
+        "title": "Choose the right funding route",
+        "instruction": "For company money already recorded in Treasury, use Internal transfers in the same currency. For reconciled company cash held at Blaaiz but not yet recorded internally, choose Fund house and enter the house account, amount, company deposit or opening-balance approval reference, and reason."
       },
       {
-        "title": "Verify the result",
-        "instruction": "Check the transfer reference, source/destination balances and ledger before retrying. CAD → NGN needs NGN destination liquidity; NGN → CAD needs CAD destination liquidity."
+        "title": "Preview and confirm once",
+        "instruction": "Preview refreshes Blaaiz again and checks the available company amount. Review incoming receipts, fees and other obligations, confirm company ownership, then choose Confirm house funding. The server refreshes balances, rejects a changed or expired preview and records a balanced ledger transaction with an audit trail."
       },
       {
-        "title": "Stop when no source exists",
-        "instruction": "If there is no eligible funded internal source, there is no supported shortcut in this provisioning screen. Arrange approved Finance funding/reconciliation before enabling conversion."
+        "title": "Check the posted result",
+        "instruction": "Retain the ledger reference and check the house balance. Reusing the same funding reference and details returns the recorded operation rather than crediting it twice. An existing reference with different details requires reconciliation."
       }
     ],
-    "expectedResult": "The described changes are visible after successful server confirmation; errors are shown without reporting success.",
+    "expectedResult": "The approved company-owned amount becomes available in the selected house account, with an equal external debit and available credit and a retained ledger/audit reference. No provider transfer is initiated.",
     "warnings": [
-      "Internal transfers move an existing balance in the same asset. They do not mint money or exchange currencies.",
-      "Use approved test balances in staging. Do not alter database balances or move customer money to demonstrate setup."
+      "A provider balance or calculated surplus alone does not prove company ownership. Customer funds, held balances, unmatched incoming deposits and other obligations must remain protected.",
+      "Stale or missing provider balances, invalid ledger balances and incoming receipts without a reliable amount or currency block funding until reconciled.",
+      "Use Internal transfers for already recorded company funds. Provisioning starts at zero and does not fund an account. Never edit database balances."
     ],
     "troubleshooting": [
-      "Confirm your role, selected business and current filters. Record the reference and any correlation ID, but never send passwords, bearer tokens or API secrets to support."
+      "Sync first if the balance is missing or stale. A zero funding limit can mean liabilities or existing company allocations consume the provider balance; a negative net position requires Finance reconciliation.",
+      "For unquantified incoming receipts, review Provider operations and recover or reconcile the original deposit. Do not classify it as company cash to bypass the block.",
+      "If balances change or the preview expires after ten minutes, preview again. For an uncertain result, use the original funding reference and details to check whether it already posted."
     ]
   },
   {
