@@ -12,6 +12,8 @@ public sealed class HelpEntry
     public string Category { get; set; } = "";
     public string PageRoute { get; set; } = "";
     public string[] Keywords { get; set; } = [];
+    public string[] ErrorCodes { get; set; } = [];
+    public string[] ErrorMessages { get; set; } = [];
     public string[] AdminRoles { get; set; } = [];
     public string[] Permissions { get; set; } = [];
     public string[] BusinessRoles { get; set; } = [];
@@ -32,7 +34,7 @@ public sealed class HelpEntry
             (BusinessRoles.Length == 0 || BusinessRoles.Contains(scope.Business.Role.ToString(),StringComparer.Ordinal));
     }
     public GuideSummaryDto SummaryDto() => new(Slug,Title,Summary,Category,$"/{Portal}/help/{Slug}",PageRoute,ReviewedOn);
-    public string SearchText => string.Join(' ',Keywords)+" "+Summary+" "+string.Join(' ',Prerequisites)+" "+
+    public string SearchText => string.Join(' ',ErrorCodes)+" "+string.Join(' ',ErrorMessages)+" "+string.Join(' ',Keywords)+" "+Summary+" "+string.Join(' ',Prerequisites)+" "+
         string.Join(' ',Steps.Select(s => s.Title+" "+s.Instruction))+" "+ExpectedResult+" "+string.Join(' ',Troubleshooting);
 }
 public sealed class HelpCatalog
@@ -62,6 +64,21 @@ public sealed class HelpCatalog
         // Replace obsolete manual-rate instructions while preserving existing help links.
         var fxKeys = fxGuides.Select(x => (x.Portal, x.Slug)).ToHashSet();
         Entries = Entries.Where(x => !fxKeys.Contains((x.Portal, x.Slug))).Concat(fxGuides).ToArray();
+        using var errorsStream = typeof(HelpCatalog).Assembly.GetManifestResourceStream("KorridorX.Content.SearchHelp.error-help-20261027.json")
+            ?? throw new InvalidOperationException("The error help catalog is missing.");
+        var errorGuides = JsonSerializer.Deserialize<HelpEntry[]>(errorsStream, new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
+            ?? throw new InvalidOperationException("The error help catalog is empty.");
+        Entries = Entries.Concat(errorGuides).ToArray();
+        var errorKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var entry in errorGuides)
+        {
+            if (entry.IsPage || entry.ErrorCodes.Length == 0 || entry.ErrorMessages.Length == 0)
+                throw new InvalidOperationException("Error help requires a code, message and article.");
+            foreach (var code in entry.ErrorCodes)
+                if (!System.Text.RegularExpressions.Regex.IsMatch(code, "^KX-[A-Z]+-[0-9]{3}$") ||
+                    !errorKeys.Add(entry.Portal + ":" + code))
+                    throw new InvalidOperationException("Duplicate or invalid error help code.");
+        }
         var unique = new HashSet<string>();
         foreach (var e in Entries)
         {

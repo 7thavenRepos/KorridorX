@@ -1,0 +1,466 @@
+[
+  {
+    "slug": "error-recipient-delivery-unavailable",
+    "portal": "admin",
+    "title": "KX-PAYOUT-001: Recipient delivery is unavailable",
+    "summary": "Send money recipient delivery and withdrawal to an owned account have different supported routes; adding a recipient cannot create an unsupported route.",
+    "category": "Errors and fixes",
+    "pageRoute": "/admin/support",
+    "keywords": [
+      "USD",
+      "NGN",
+      "CAD",
+      "recipient",
+      "payout",
+      "rail",
+      "Send money",
+      "Blaaiz",
+      "not configured"
+    ],
+    "errorCodes": [
+      "KX-PAYOUT-001"
+    ],
+    "errorMessages": [
+      "No recipient payout method is configured for this currency.",
+      "No recipient payout rail is configured for this asset. Choose another receiving asset or My wallet for a supported exchange.",
+      "Recipient payout is not configured for this asset. Try To my wallet when an exchange pair exists.",
+      "No supported recipient delivery method is configured for this destination."
+    ],
+    "adminRoles": [
+      "Support",
+      "Operations",
+      "Admin",
+      "SuperAdmin"
+    ],
+    "permissions": [],
+    "businessRoles": [],
+    "allowNoBusiness": false,
+    "isPage": false,
+    "reviewedOn": "2026-10-27",
+    "prerequisites": [
+      "Use the affected screen, app version, environment, asset and safe support reference to identify the actual operation."
+    ],
+    "steps": [
+      {
+        "title": "Identify the flow",
+        "instruction": "Check whether the customer used Send money / Recipient, My wallet (exchange), or Wallet / Withdraw. The screenshot selects NGN to USD / Recipient."
+      },
+      {
+        "title": "Check the consumer delivery contract",
+        "instruction": "The current recipient delivery endpoint and RecipientDeliveryPolicy expose NG/NGN bank delivery and CA/CAD email delivery only. USD ACH/Wire and GBP/EUR account validation belong to wallet withdrawal; a Payment channels capability alone does not extend consumer remittance."
+      },
+      {
+        "title": "Offer the supported action",
+        "instruction": "For a supported recipient route select its receiving currency and an eligible recipient. For an own-wallet conversion, the customer explicitly chooses My wallet (exchange); use only an available pair and a fresh quote. Do not silently change the delivery mode."
+      },
+      {
+        "title": "Escalate a real discrepancy",
+        "instruction": "If NGN or CAD delivery is missing, verify the installed app and backend version, GET /api/recipients/delivery-methods, recipient destination country, mapping, and the eligible active channel. The source funding wallet must match the source currency. SuperAdmin reviews Payment channels; Support does not activate routes."
+      }
+    ],
+    "expectedResult": "The operation and cause are identified, the appropriate supported action is explained, and its outcome is verified without duplicate money movement.",
+    "warnings": [
+      "Never request passwords, PINs, access tokens, full card details or private provider credentials."
+    ],
+    "troubleshooting": [
+      "A visible currency is selection compatibility, not proof of an executable recipient route.",
+      "Unsupported USD recipient delivery requires a recipient-verification and remittance execution extension; do not bypass the policy or mark an unverified bank account verified.",
+      "The fixed mobile screen disables unsupported Recipient selection, hides Add recipient and quote actions for that mode, and offers this support code."
+    ]
+  },
+  {
+    "slug": "error-no-matching-recipient",
+    "portal": "admin",
+    "title": "KX-PAYOUT-002: No compatible verified recipient",
+    "summary": "A supported recipient route exists but there is no active compatible recipient or verified bank account.",
+    "category": "Errors and fixes",
+    "pageRoute": "/admin/support",
+    "keywords": [
+      "recipient",
+      "bank account",
+      "Interac",
+      "verification"
+    ],
+    "errorCodes": [
+      "KX-PAYOUT-002"
+    ],
+    "errorMessages": [
+      "No verified NGN bank recipient found.",
+      "No verified USD bank recipient found.",
+      "No verified GBP bank recipient found.",
+      "No verified EUR bank recipient found.",
+      "No verified CAD bank recipient found.",
+      "No CAD recipient with an Interac email found.",
+      "Recipient bank account is not verified for the selected payout provider."
+    ],
+    "adminRoles": [
+      "Support",
+      "Operations",
+      "Admin",
+      "SuperAdmin"
+    ],
+    "permissions": [],
+    "businessRoles": [],
+    "allowNoBusiness": false,
+    "isPage": false,
+    "reviewedOn": "2026-10-27",
+    "prerequisites": [
+      "Use the affected screen, app version, environment, asset and safe support reference to identify the actual operation."
+    ],
+    "steps": [
+      {
+        "title": "Confirm delivery is supported",
+        "instruction": "Resolve KX-PAYOUT-001 first. Do not diagnose an unsupported route as a missing bank account."
+      },
+      {
+        "title": "Check the actual recipient",
+        "instruction": "Confirm the recipient is active and its destination country and account currency match the transfer. NGN requires an active provider-verified bank account. CAD Interac uses an active Canadian recipient with a valid email."
+      },
+      {
+        "title": "Correct and refresh",
+        "instruction": "Use Add recipient or the saved-recipient action only for a supported route. Complete the existing verification flow and refresh recipient matching. If loading failed, retry the lookup rather than treating an incomplete list as empty."
+      }
+    ],
+    "expectedResult": "The operation and cause are identified, the appropriate supported action is explained, and its outcome is verified without duplicate money movement.",
+    "warnings": [
+      "Never request passwords, PINs, access tokens, full card details or private provider credentials."
+    ],
+    "troubleshooting": [
+      "A missing USD bank recipient is historical secondary text when USD recipient delivery itself is unsupported.",
+      "Customer funds, provider liquidity and recipient verification are separate checks."
+    ]
+  },
+  {
+    "slug": "error-no-eligible-payout-channel",
+    "portal": "admin",
+    "title": "KX-CHANNEL-001: No eligible payout channel",
+    "summary": "The operation has no channel that meets the current environment, currency, country, audience and provider-wallet requirements.",
+    "category": "Errors and fixes",
+    "pageRoute": "/admin/support",
+    "keywords": [
+      "channel",
+      "withdrawal",
+      "provider wallet",
+      "readiness"
+    ],
+    "errorCodes": [
+      "KX-CHANNEL-001"
+    ],
+    "errorMessages": [
+      "No verified and active same-currency withdrawal channel supports this method. Configure a payout channel in Admin.",
+      "No active payout channel matches this destination, audience, funding asset and amount. Review Payment channels in Admin."
+    ],
+    "adminRoles": [
+      "Support",
+      "Operations",
+      "Admin",
+      "SuperAdmin"
+    ],
+    "permissions": [],
+    "businessRoles": [],
+    "allowNoBusiness": false,
+    "isPage": false,
+    "reviewedOn": "2026-10-27",
+    "prerequisites": [
+      "Use the affected screen, app version, environment, asset and safe support reference to identify the actual operation."
+    ],
+    "steps": [
+      {
+        "title": "Identify the operation and environment",
+        "instruction": "Determine whether this is a wallet withdrawal or remittance payout, its source/destination assets, destination country, and individual/business audience. Never mix api-dev and production wallets."
+      },
+      {
+        "title": "Ask the authorized administrator to inspect readiness",
+        "instruction": "SuperAdmin opens Payment channels and checks the exact blocked reasons, status, verified provider wallet, provider approval, audience, asset and country mapping. Withdrawal to an own account needs a same-currency wallet; remittance funding must match the source currency."
+      },
+      {
+        "title": "Refresh and verify before submission",
+        "instruction": "After an authorized configuration correction, refresh options and review the method and fees. If an earlier submission outcome is unknown, inspect its saved status and reference before attempting another."
+      }
+    ],
+    "expectedResult": "The operation and cause are identified, the appropriate supported action is explained, and its outcome is verified without duplicate money movement.",
+    "warnings": [
+      "Never request passwords, PINs, access tokens, full card details or private provider credentials."
+    ],
+    "troubleshooting": [
+      "Pausing all managed channels does not restore legacy fallback.",
+      "Do not activate consumer USD recipient delivery solely because USD wallet withdrawal exists."
+    ]
+  },
+  {
+    "slug": "error-insufficient-house-liquidity",
+    "portal": "admin",
+    "title": "KX-FUNDING-001: House funds are insufficient",
+    "summary": "Administrative funding checks the internal house account; a provider balance observation does not itself fund that account.",
+    "category": "Errors and fixes",
+    "pageRoute": "/admin/support",
+    "keywords": [
+      "master wallet",
+      "house wallet",
+      "balance",
+      "funding",
+      "Blaaiz",
+      "treasury"
+    ],
+    "errorCodes": [
+      "KX-FUNDING-001"
+    ],
+    "errorMessages": [
+      "Insufficient house-account liquidity for funding request.",
+      "Insufficient settled and available house-account funds; no credit was made."
+    ],
+    "adminRoles": [
+      "Support",
+      "Operations",
+      "Admin",
+      "SuperAdmin"
+    ],
+    "permissions": [],
+    "businessRoles": [],
+    "allowNoBusiness": false,
+    "isPage": false,
+    "reviewedOn": "2026-10-27",
+    "prerequisites": [
+      "Use the affected screen, app version, environment, asset and safe support reference to identify the actual operation."
+    ],
+    "steps": [
+      {
+        "title": "Check the funding source",
+        "instruction": "Read the selected house account asset, status, settled balance, available balance and held amount in Wallet Funding & Approvals. The destination must use the same fiat asset."
+      },
+      {
+        "title": "Reconcile the provider position",
+        "instruction": "Compare like-for-like provider cash and the internal cash subledger at one cutoff. Include personal and business customer liabilities, held funds once, pending obligations, fees and unmatched receipts. Do not subtract every customer from each provider separately."
+      },
+      {
+        "title": "Recognize only evidenced house funds",
+        "instruction": "Use a reviewed treasury top-up or opening-balance recognition with provider/statement evidence, a proper contra entry, idempotent reference and the applicable authorization. A residual is a reconciliation result, not authority to overwrite a balance."
+      },
+      {
+        "title": "Retry the approved funding operation once",
+        "instruction": "After house funds are posted and available, use the existing Admin/SuperAdmin direct path or independent approval of an Operations request. Recheck current status and balance before retrying."
+      }
+    ],
+    "expectedResult": "The operation and cause are identified, the appropriate supported action is explained, and its outcome is verified without duplicate money movement.",
+    "warnings": [
+      "Never request passwords, PINs, access tokens, full card details or private provider credentials."
+    ],
+    "troubleshooting": [
+      "Customer HeldBalance remains a liability. Never subtract AvailableBalance alone or count the same pending payout or fee twice.",
+      "A negative residual is a deficit to investigate; do not hide it or fabricate an opening balance."
+    ]
+  },
+  {
+    "slug": "error-quote-unavailable",
+    "portal": "admin",
+    "title": "KX-QUOTE-001: A fresh quote is unavailable",
+    "summary": "Pricing, pair or route readiness prevented a usable fresh quote; the error alone does not identify the specific cause.",
+    "category": "Errors and fixes",
+    "pageRoute": "/admin/support",
+    "keywords": [
+      "quote",
+      "FX",
+      "exchange",
+      "expired",
+      "rate"
+    ],
+    "errorCodes": [
+      "KX-QUOTE-001"
+    ],
+    "errorMessages": [
+      "A new quote is unavailable.",
+      "Transfer quote has expired. Please create a new quote."
+    ],
+    "adminRoles": [
+      "Support",
+      "Operations",
+      "Admin",
+      "SuperAdmin"
+    ],
+    "permissions": [],
+    "businessRoles": [],
+    "allowNoBusiness": false,
+    "isPage": false,
+    "reviewedOn": "2026-10-27",
+    "prerequisites": [
+      "Use the affected screen, app version, environment, asset and safe support reference to identify the actual operation."
+    ],
+    "steps": [
+      {
+        "title": "Capture safe context",
+        "instruction": "Record the selected assets, delivery mode, amount, environment, app version and request correlation reference. Avoid tokens, account numbers and identity documents."
+      },
+      {
+        "title": "Check pricing and operation readiness",
+        "instruction": "Review the detailed authorized error and current pair status, FX availability, configured markup, country mapping and payout capability. My wallet exchange uses its own active pair and house-liquidity rules."
+      },
+      {
+        "title": "Refresh without reusing stale values",
+        "instruction": "Request a fresh quote after correcting the diagnosed issue. Review its expiry, fees and recipient amount. If a transfer or exchange was already submitted, inspect the existing transaction before submitting another."
+      }
+    ],
+    "expectedResult": "The operation and cause are identified, the appropriate supported action is explained, and its outcome is verified without duplicate money movement.",
+    "warnings": [
+      "Never request passwords, PINs, access tokens, full card details or private provider credentials."
+    ],
+    "troubleshooting": [
+      "Do not promise an exchange merely because both currencies appear in the picker.",
+      "A price preview is not a completed transfer."
+    ]
+  },
+  {
+    "slug": "error-recipient-check-incomplete",
+    "portal": "admin",
+    "title": "KX-PAYOUT-004: Recipient checks could not finish",
+    "summary": "Recipient matching could not resolve every eligible record; a partial result must not be presented as a complete empty list.",
+    "category": "Errors and fixes",
+    "pageRoute": "/admin/support",
+    "keywords": [
+      "recipient",
+      "matching",
+      "retry",
+      "lookup"
+    ],
+    "errorCodes": [
+      "KX-PAYOUT-004"
+    ],
+    "errorMessages": [
+      "Some recipient accounts could not be checked. Retry to load the full list."
+    ],
+    "adminRoles": [
+      "Support",
+      "Operations",
+      "Admin",
+      "SuperAdmin"
+    ],
+    "permissions": [],
+    "businessRoles": [],
+    "allowNoBusiness": false,
+    "isPage": false,
+    "reviewedOn": "2026-10-27",
+    "prerequisites": [
+      "Use the affected screen, app version, environment, asset and safe support reference to identify the actual operation."
+    ],
+    "steps": [
+      {
+        "title": "Check connectivity and session",
+        "instruction": "Confirm that the app has a valid session and the recipient and delivery-method requests completed successfully."
+      },
+      {
+        "title": "Retry the read",
+        "instruction": "Use Retry recipient matching. Changing the receiving asset invalidates earlier matching responses so they cannot replace the new selection."
+      },
+      {
+        "title": "Escalate a repeated failure",
+        "instruction": "Support uses the time and safe request reference to inspect the authorized API result. Do not create duplicate recipients or change verification flags to make an incomplete lookup appear successful."
+      }
+    ],
+    "expectedResult": "The operation and cause are identified, the appropriate supported action is explained, and its outcome is verified without duplicate money movement.",
+    "warnings": [
+      "Never request passwords, PINs, access tokens, full card details or private provider credentials."
+    ],
+    "troubleshooting": [
+      "This lookup error is different from unsupported delivery and from a successfully checked empty recipient list."
+    ]
+  },
+  {
+    "slug": "business-error-no-eligible-payout-channel",
+    "portal": "business",
+    "title": "KX-CHANNEL-001: No available withdrawal method",
+    "summary": "The selected business wallet currently has no eligible withdrawal method.",
+    "category": "Errors and fixes",
+    "pageRoute": "/business/support",
+    "keywords": [
+      "withdrawal",
+      "methods",
+      "error"
+    ],
+    "errorCodes": [
+      "KX-CHANNEL-001"
+    ],
+    "errorMessages": [
+      "No verified and active same-currency withdrawal channel supports this method. Configure a payout channel in Admin."
+    ],
+    "adminRoles": [],
+    "permissions": [],
+    "businessRoles": [],
+    "allowNoBusiness": true,
+    "isPage": false,
+    "reviewedOn": "2026-10-27",
+    "prerequisites": [
+      "Use the affected screen, app version, environment, asset and safe support reference to identify the actual operation."
+    ],
+    "steps": [
+      {
+        "title": "Check the workspace",
+        "instruction": "Confirm the selected business and wallet currency. Keep the existing request reference if a withdrawal was already submitted."
+      },
+      {
+        "title": "Refresh the available methods",
+        "instruction": "Refresh wallet withdrawal setup. Do not enter provider details or use a personal recipient to bypass a business restriction."
+      },
+      {
+        "title": "Contact support",
+        "instruction": "Provide the currency, approximate time and KX-CHANNEL-001. An authorized administrator checks business eligibility and channel readiness."
+      }
+    ],
+    "expectedResult": "The operation and cause are identified, the appropriate supported action is explained, and its outcome is verified without duplicate money movement.",
+    "warnings": [
+      "Never request passwords, PINs, access tokens, full card details or private provider credentials."
+    ],
+    "troubleshooting": [
+      "An empty method list does not change a pending withdrawal or authorize a second payout."
+    ]
+  },
+  {
+    "slug": "business-error-quote-unavailable",
+    "portal": "business",
+    "title": "KX-QUOTE-001: A fresh quote is unavailable",
+    "summary": "The requested operation needs an available pair and a fresh price.",
+    "category": "Errors and fixes",
+    "pageRoute": "/business/support",
+    "keywords": [
+      "quote",
+      "rate",
+      "expired",
+      "error"
+    ],
+    "errorCodes": [
+      "KX-QUOTE-001"
+    ],
+    "errorMessages": [
+      "A new quote is unavailable.",
+      "Transfer quote has expired. Please create a new quote."
+    ],
+    "adminRoles": [],
+    "permissions": [],
+    "businessRoles": [],
+    "allowNoBusiness": true,
+    "isPage": false,
+    "reviewedOn": "2026-10-27",
+    "prerequisites": [
+      "Use the affected screen, app version, environment, asset and safe support reference to identify the actual operation."
+    ],
+    "steps": [
+      {
+        "title": "Review the request",
+        "instruction": "Check the business, assets, amount and operation you selected."
+      },
+      {
+        "title": "Request a fresh quote",
+        "instruction": "Refresh the quote and review the final amounts, fees and expiry before confirmation."
+      },
+      {
+        "title": "Ask support if it continues",
+        "instruction": "Provide the reference, time, assets and KX-QUOTE-001. Check any existing submission before trying another."
+      }
+    ],
+    "expectedResult": "The operation and cause are identified, the appropriate supported action is explained, and its outcome is verified without duplicate money movement.",
+    "warnings": [
+      "Never request passwords, PINs, access tokens, full card details or private provider credentials."
+    ],
+    "troubleshooting": [
+      "A visible price preview is not confirmation that money moved."
+    ]
+  }
+]

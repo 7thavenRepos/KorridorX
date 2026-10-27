@@ -5,8 +5,8 @@ public sealed class SearchQueryTests
 {
     [Fact] public void CollapsesWhitespace() => Assert.Equal("USD transfers",new SearchQuery(" USD  transfers ").Text);
     [Theory] [InlineData("")] [InlineData("a")] public void ShortInputsDoNotSearch(string text) => Assert.False(new SearchQuery(text).CanSearch);
-    [Fact] public void RejectsOversize() => Assert.Throws<ArgumentException>(()=>new SearchQuery(new string('x',121)));
-    [Fact] public void RejectsTooManyWords() => Assert.Throws<ArgumentException>(()=>new SearchQuery(string.Join(' ',Enumerable.Repeat("ab",13))));
+    [Fact] public void RejectsOversize() => Assert.Throws<ArgumentException>(()=>new SearchQuery(new string('x',501)));
+    [Fact] public void RejectsTooManyWords() => Assert.Throws<ArgumentException>(()=>new SearchQuery(string.Join(' ',Enumerable.Repeat("ab",81))));
     [Fact] public void RejectsControls() => Assert.Throws<ArgumentException>(()=>new SearchQuery("USD\0x"));
     [Fact] public void RecognizesIdentifier() { var id=Guid.NewGuid(); Assert.Equal(id,new SearchQuery(id.ToString()).ExactId); }
     [Fact] public void ExactReferenceWins() { var q=new SearchQuery("AB123"); Assert.Equal(1000,q.ScoreText("Transfer","AB123","USD")); }

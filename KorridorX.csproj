@@ -43,6 +43,7 @@
 
   <ItemGroup>
     <EmbeddedResource Include="Content/SearchHelp/catalog.json" LogicalName="KorridorX.Content.SearchHelp.catalog.json" />
+    <EmbeddedResource Include="Content/SearchHelp/error-help-20261027.json" LogicalName="KorridorX.Content.SearchHelp.error-help-20261027.json" />
     <EmbeddedResource Include="Content/SearchHelp/web-operations-20261017.json" LogicalName="KorridorX.Content.SearchHelp.web-operations-20261017.json" />
     <EmbeddedResource Include="Content/SearchHelp/payment-channels-20261018.json" LogicalName="KorridorX.Content.SearchHelp.payment-channels-20261018.json" />
     <EmbeddedResource Include="Content/SearchHelp/interac-funding-20261018.json" LogicalName="KorridorX.Content.SearchHelp.interac-funding-20261018.json" />

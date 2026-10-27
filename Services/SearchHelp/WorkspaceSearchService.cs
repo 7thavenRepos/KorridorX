@@ -10,22 +10,23 @@ public sealed class WorkspaceSearchService(SearchRecordCatalog records, HelpCata
         category = string.IsNullOrWhiteSpace(category) ? "all" : category.Trim();
         if (category=="all" && page!=1) throw new ArgumentException("Choose a category before paging.");
         var sources = records.Sources(scope);
-        if (!query.CanSearch || (category!="all" && category!="pages" && category!="guides" && !sources.Any(s => s.Key==category)))
+        if (!query.CanSearch || (category!="all" && category!="pages" && category!="guides" && category!="errors" && !sources.Any(s => s.Key==category)))
             return new WorkspaceSearchDto(query.Text,scope.Portal,scope.BusinessId,0,[]);
         var groups = new List<SearchGroupDto>(); var size = category=="all" ? 3 : pageSize;
-        foreach (var kind in new[] { "pages", "guides" })
+        foreach (var kind in new[] { "errors", "pages", "guides" })
         {
             if (category!="all" && category!=kind) continue;
-            var matches = help.Allowed(scope).Where(e => e.IsPage==(kind=="pages"))
-                .Select(e => (Entry:e,Score:query.ScoreText(e.Title,"",e.SearchText))).Where(x => x.Score>0)
+            var matches = help.Allowed(scope).Where(e => kind == "errors" ? e.ErrorCodes.Length > 0 :
+                    kind == "pages" ? e.IsPage : !e.IsPage && e.ErrorCodes.Length == 0)
+                .Select(e => (Entry:e,Score:query.ScoreHelp(e))).Where(x => x.Score>0)
                 .OrderByDescending(x => x.Score).ThenBy(x => x.Entry.Slug).ToList();
             var items = matches.Skip((page-1)*size).Take(size).Select(x => new SearchItemDto(kind=="pages"?"page":"guide",
-                kind,x.Entry.Slug,x.Entry.Title,"",x.Entry.Summary,"",kind=="pages"?x.Entry.PageRoute:$"/{scope.Portal}/help/{x.Entry.Slug}",
+                kind,x.Entry.Slug,x.Entry.Title,string.Join(", ",x.Entry.ErrorCodes),x.Entry.Summary,"",kind=="pages"?x.Entry.PageRoute:$"/{scope.Portal}/help/{x.Entry.Slug}",
                 x.Entry.PageRoute,null,null,"",x.Score)).ToList();
-            if (matches.Count>0 || category==kind) groups.Add(new SearchGroupDto(kind,kind=="pages"?"Pages and features":"How-to guides",matches.Count,page,size,matches.Count>page*size,items));
+            if (matches.Count>0 || category==kind) groups.Add(new SearchGroupDto(kind,kind=="pages"?"Pages and features":kind=="errors"?"Errors and fixes":"How-to guides",matches.Count,page,size,matches.Count>page*size,items));
         }
         // One scoped DbContext: deliberately sequential. Counts and rows use the SAME authorized predicate.
-        foreach (var source in sources.Where(s => category=="all" || s.Key==category))
+        foreach (var source in sources.Where(s => query.CanSearchRecords && (category=="all" || s.Key==category)))
         {
             var filtered=source.Match(query); var total=await filtered.CountAsync(ct);
             if (total==0 && category=="all") continue;
