@@ -1,3 +1,4 @@
+using KorridorX.Providers.Remittance.Blaaiz;
 using KorridorX.Configuration;
 using KorridorX.Dtos.Recipients;
 using KorridorX.Infrastructure;
@@ -21,6 +22,10 @@ public class RecipientsController : ControllerBase
     {
         _recipientService = recipientService;
     }
+
+    [HttpGet("provider-requirements")]
+    public IActionResult ProviderRequirements() =>
+        Ok(ApiResponses.Ok(BlaaizCurrencyRequirements.All, "Blaaiz currency requirements retrieved successfully."));
 
     [HttpGet("delivery-methods")]
     public IActionResult DeliveryMethods() =>

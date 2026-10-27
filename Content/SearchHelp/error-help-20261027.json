@@ -3,7 +3,7 @@
     "slug": "error-recipient-delivery-unavailable",
     "portal": "admin",
     "title": "KX-PAYOUT-001: Recipient delivery is unavailable",
-    "summary": "Send money recipient delivery and withdrawal to an owned account have different supported routes; adding a recipient cannot create an unsupported route.",
+    "summary": "Blaaiz recipient delivery supports NGN bank, CAD Interac, USD ACH/Wire, GBP bank and EUR SEPA. Missing options require a version, country or configuration check.",
     "category": "Errors and fixes",
     "pageRoute": "/admin/support",
     "keywords": [
@@ -47,15 +47,15 @@
       },
       {
         "title": "Check the consumer delivery contract",
-        "instruction": "The current recipient delivery endpoint and RecipientDeliveryPolicy expose NG/NGN bank delivery and CA/CAD email delivery only. USD ACH/Wire and GBP/EUR account validation belong to wallet withdrawal; a Payment channels capability alone does not extend consumer remittance."
+        "instruction": "GET /api/recipients/delivery-methods and /api/recipients/provider-requirements expose the shared BlaaizCurrencyRequirements contract. NGN uses provider-bank verification; CAD uses recipient email; USD uses ACH/Wire bank and address fields; GBP uses account/sort code and address; EUR uses IBAN/BIC and address in an enabled real bank country. Local foreign-detail readiness is not provider account verification or ownership proof."
       },
       {
         "title": "Offer the supported action",
-        "instruction": "For a supported recipient route select its receiving currency and an eligible recipient. For an own-wallet conversion, the customer explicitly chooses My wallet (exchange); use only an available pair and a fresh quote. Do not silently change the delivery mode."
+        "instruction": "Update the app/API if their contracts differ. Add the correct recipient and currency-specific bank details. Select ACH or Wire explicitly for USD. A receiving-country mapping, eligible channel and provider wallet must exist. Never silently switch a recipient payment to My wallet exchange."
       },
       {
         "title": "Escalate a real discrepancy",
-        "instruction": "If NGN or CAD delivery is missing, verify the installed app and backend version, GET /api/recipients/delivery-methods, recipient destination country, mapping, and the eligible active channel. The source funding wallet must match the source currency. SuperAdmin reviews Payment channels; Support does not activate routes."
+        "instruction": "Check the installed build, API version, shared requirements, actual country/asset flags, selected payment method and ready payout channel. Sending USD/GBP/EUR uses the matching owned source wallet; conversion needs active live FX pricing and fees. Same-currency payments use 1:1 with the configured fee. SuperAdmin reviews configuration; Support does not activate routes."
       }
     ],
     "expectedResult": "The operation and cause are identified, the appropriate supported action is explained, and its outcome is verified without duplicate money movement.",
@@ -71,8 +71,8 @@
   {
     "slug": "error-no-matching-recipient",
     "portal": "admin",
-    "title": "KX-PAYOUT-002: No compatible verified recipient",
-    "summary": "A supported recipient route exists but there is no active compatible recipient or verified bank account.",
+    "title": "KX-PAYOUT-002: No compatible ready recipient",
+    "summary": "A recipient route exists but no active recipient has the matching email, verified NGN bank account or complete foreign bank details.",
     "category": "Errors and fixes",
     "pageRoute": "/admin/support",
     "keywords": [
@@ -114,7 +114,7 @@
       },
       {
         "title": "Check the actual recipient",
-        "instruction": "Confirm the recipient is active and its destination country and account currency match the transfer. NGN requires an active provider-verified bank account. CAD Interac uses an active Canadian recipient with a valid email."
+        "instruction": "Check country, currency and selected rail. NGN requires provider account enquiry. CAD needs a valid recipient email. USD ACH/Wire, GBP and EUR require every field returned by the shared requirements API. A foreign account may be ready with isVerified=false: isPayoutReady indicates local detail readiness; final bank validation occurs at payout."
       },
       {
         "title": "Correct and refresh",

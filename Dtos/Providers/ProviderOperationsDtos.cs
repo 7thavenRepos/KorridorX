@@ -30,7 +30,10 @@ public record RecipientBankVerificationDto(
     string AccountName,
     string ProviderVerifiedAccountName,
     bool IsVerified,
-    DateTime VerifiedAt);
+    DateTime? VerifiedAt,
+    bool? IsPayoutReady = null,
+    string? VerificationMode = null,
+    DateTime? CheckedAt = null);
 
 public record ProviderTransactionDto(
     Guid Id,

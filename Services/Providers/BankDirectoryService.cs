@@ -1,3 +1,5 @@
+using KorridorX.Providers.Remittance.Blaaiz;
+using KorridorX.Services.Recipients;
 using KorridorX.Data;
 using KorridorX.Dtos.Providers;
 using KorridorX.Extensions;
@@ -170,6 +172,23 @@ public class BankDirectoryService : IBankDirectoryService
         if (account is null)
         {
             throw new InvalidOperationException("Recipient bank account not found.");
+        }
+
+        if (BlaaizCurrencyRequirements.IsForeignBank(account.CurrencyCode))
+        {
+            if (_provider.ProviderCode != ProviderCode.Blaaiz)
+                throw new InvalidOperationException("This recipient method requires Blaaiz.");
+            RecipientPayoutPolicy.Validate(account);
+            var checkedAt = DateTime.UtcNow;
+            account.VerificationAttemptedAt = checkedAt;
+            account.LastVerificationError = null;
+            // Local validation is not provider verification or an ownership claim.
+            account.IsVerified = false; account.VerifiedAt = null;
+            account.ProviderVerifiedAccountName = null; account.ProviderVerificationReference = null;
+            await _db.SaveChangesAsync(ct);
+            return new RecipientBankVerificationDto(recipientId, account.Id, "", account.BankName,
+                MaskAccountNumber(account.CurrencyCode == "EUR" ? account.Iban ?? "" : account.AccountNumber),
+                account.AccountName, "", false, null, true, RecipientPayoutPolicy.LocalValidation, checkedAt);
         }
 
         if (string.IsNullOrWhiteSpace(account.ProviderBankId))

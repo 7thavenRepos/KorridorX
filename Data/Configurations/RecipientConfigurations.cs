@@ -45,6 +45,12 @@ public class RecipientBankAccountConfiguration : IEntityTypeConfiguration<Recipi
         builder.Property(x => x.SwiftBic).HasMaxLength(100);
         builder.Property(x => x.RoutingNumber).HasMaxLength(100);
         builder.Property(x => x.SortCode).HasMaxLength(100);
+        builder.Property(x => x.RecipientType).HasMaxLength(20);
+        builder.Property(x => x.AccountType).HasMaxLength(20);
+        builder.Property(x => x.Street).HasMaxLength(150);
+        builder.Property(x => x.City).HasMaxLength(100);
+        builder.Property(x => x.State).HasMaxLength(100);
+        builder.Property(x => x.PostalCode).HasMaxLength(30);
         builder.Property(x => x.ProviderRecipientId).HasMaxLength(150);
         builder.Property(x => x.ProviderBankAccountId).HasMaxLength(150);
         builder.Property(x => x.ProviderBankId).HasMaxLength(150);

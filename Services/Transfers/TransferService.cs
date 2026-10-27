@@ -1,3 +1,6 @@
+using KorridorX.Models.Payments;
+using KorridorX.Services.PaymentChannels;
+using KorridorX.Providers.Remittance.Blaaiz;
 using System.Data;
 using KorridorX.Data;
 using KorridorX.Dtos.Transfers;
@@ -28,6 +31,7 @@ public class TransferService : ITransferService
     private readonly IOutboundFundsRestrictionService _outboundFundsRestrictions;
     private readonly ITransactionPinService _transactionPinService;
     private readonly IConsumerTransferFundingService _consumerFunding;
+    private readonly PaymentChannelService? _paymentChannels;
 
     public TransferService(
         AppDbContext db,
@@ -39,7 +43,8 @@ public class TransferService : ITransferService
         ITransactionMonitoringService transactionMonitoringService,
         IOutboundFundsRestrictionService outboundFundsRestrictions,
         ITransactionPinService transactionPinService,
-        IConsumerTransferFundingService consumerFunding)
+        IConsumerTransferFundingService consumerFunding,
+        PaymentChannelService? paymentChannels = null)
     {
         _db = db;
         _referenceGenerator = referenceGenerator;
@@ -51,6 +56,7 @@ public class TransferService : ITransferService
         _outboundFundsRestrictions = outboundFundsRestrictions;
         _transactionPinService = transactionPinService;
         _consumerFunding = consumerFunding;
+        _paymentChannels = paymentChannels;
     }
 
     public async Task<TransferDetailsDto> CreateTransferAsync(
@@ -130,7 +136,7 @@ public class TransferService : ITransferService
         else
         {
             if (!request.RecipientBankAccountId.HasValue)
-                throw new InvalidOperationException("A verified recipient bank account is required for this payout.");
+                throw new InvalidOperationException("A ready recipient bank account is required for this payout.");
             PayoutDestinationCapabilityPolicy.EnsureSupported(
                 quote.ProviderCode, PayoutDestinationType.RecipientBankAccount);
         }
@@ -183,7 +189,20 @@ public class TransferService : ITransferService
                 throw new InvalidOperationException("Recipient bank account is not valid for this transfer.");
             }
 
-            if (!await IsBankDestinationVerifiedForProviderAsync(
+            if (BlaaizCurrencyRequirements.IsForeignBank(bankAccount.CurrencyCode))
+            {
+                if (!string.Equals(quote.ProviderCode, "Blaaiz", StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidOperationException("This bank method requires Blaaiz.");
+                RecipientPayoutPolicy.Validate(bankAccount);
+                var channels = _paymentChannels
+                    ?? throw new InvalidOperationException("Payout channel readiness is unavailable.");
+                var choices = await channels.EligibleAsync(quote.DestinationCountryCode,
+                    quote.DestinationCurrencyCode, false, PaymentChannelDirection.Withdrawal,
+                    quote.SourceCurrencyCode, quote.DestinationAmount, ct);
+                if (!choices.Any(x => x.Capability.PaymentMethod == RecipientPayoutPolicy.Method(bankAccount)))
+                    throw new InvalidOperationException("No active payout channel matches this recipient method, source currency and amount. No transfer funds were reserved.");
+            }
+            else if (!await IsBankDestinationVerifiedForProviderAsync(
                     PayoutDestinationType.RecipientBankAccount,
                     bankAccount.Id,
                     quote.ProviderCode,

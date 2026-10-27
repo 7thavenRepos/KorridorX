@@ -1,3 +1,4 @@
+using KorridorX.Providers.Remittance.Blaaiz;
 using KorridorX.Data;
 using KorridorX.Dtos.Recipients;
 using KorridorX.Extensions;
@@ -207,8 +208,6 @@ public class RecipientService : IRecipientService
 
     public async Task<RecipientBankAccountDto> AddBankAccountAsync(Guid userId, Guid recipientId, AddRecipientBankAccountRequestDto request, CancellationToken ct = default)
     {
-        ValidateBankAccount(request.CountryCode, request.CurrencyCode, request.BankName, request.AccountName, request.AccountNumber);
-
         var recipient = await GetOwnedRecipientQuery(userId)
             .Include(x => x.BankAccounts)
             .FirstOrDefaultAsync(x => x.Id == recipientId && !x.IsDeleted, ct);
@@ -222,8 +221,13 @@ public class RecipientService : IRecipientService
         var currencyCode = NormalizeAssetCode(request.CurrencyCode);
 
         await EnsureCountryAndCurrencyAreLinkedAsync(countryCode, currencyCode, ct);
-        var providerBank = await ResolveProviderBankAsync(request.ProviderBankId, countryCode, ct);
-        await EnsureBankAccountDoesNotExistAsync(recipientId, request.AccountNumber, providerBank?.Code ?? request.BankCode, ct);
+        var payoutRule = BlaaizCurrencyRequirements.Require(currencyCode, request.PayoutMethod);
+        if (payoutRule.PaymentMethod == KorridorX.Models.Enums.PaymentMethod.Interac)
+            throw new InvalidOperationException("Interac uses the recipient email, not a bank account.");
+        if (!payoutRule.UsesBankDirectory && !string.IsNullOrWhiteSpace(request.ProviderBankId))
+            throw new InvalidOperationException("This bank method uses routing details, not a Nigerian provider bank ID.");
+        var providerBank = payoutRule.UsesBankDirectory
+            ? await ResolveProviderBankAsync(request.ProviderBankId, countryCode, ct) : null;
 
         if (request.IsDefault)
         {
@@ -245,10 +249,15 @@ public class RecipientService : IRecipientService
             RoutingNumber = Clean(request.RoutingNumber),
             SortCode = Clean(request.SortCode),
             ProviderBankId = providerBank?.ProviderBankId,
+            PayoutMethod = payoutRule.PaymentMethod, RecipientType = Clean(request.RecipientType),
+            AccountType = Clean(request.AccountType), Street = Clean(request.Street), City = Clean(request.City),
+            State = Clean(request.State), PostalCode = Clean(request.PostalCode),
             IsDefault = request.IsDefault,
             CreatedByUserId = userId
         };
 
+        RecipientPayoutPolicy.Normalize(account);
+        await EnsureBankAccountDoesNotExistAsync(account, ct);
         _db.RecipientBankAccounts.Add(account);
         await _db.SaveChangesAsync(ct);
 
@@ -257,8 +266,6 @@ public class RecipientService : IRecipientService
 
     public async Task<RecipientBankAccountDto> UpdateBankAccountAsync(Guid userId, Guid recipientId, Guid bankAccountId, UpdateRecipientBankAccountRequestDto request, CancellationToken ct = default)
     {
-        ValidateBankAccount(request.CountryCode, request.CurrencyCode, request.BankName, request.AccountName, request.AccountNumber);
-
         var recipient = await GetOwnedRecipientQuery(userId)
             .Include(x => x.BankAccounts.Where(a => !a.IsDeleted))
             .FirstOrDefaultAsync(x => x.Id == recipientId && !x.IsDeleted, ct);
@@ -278,8 +285,13 @@ public class RecipientService : IRecipientService
         var currencyCode = NormalizeAssetCode(request.CurrencyCode);
 
         await EnsureCountryAndCurrencyAreLinkedAsync(countryCode, currencyCode, ct);
-        var providerBank = await ResolveProviderBankAsync(request.ProviderBankId, countryCode, ct);
-        await EnsureBankAccountDoesNotExistAsync(recipientId, request.AccountNumber, providerBank?.Code ?? request.BankCode, ct, bankAccountId);
+        var payoutRule = BlaaizCurrencyRequirements.Require(currencyCode, request.PayoutMethod);
+        if (payoutRule.PaymentMethod == KorridorX.Models.Enums.PaymentMethod.Interac)
+            throw new InvalidOperationException("Interac uses the recipient email, not a bank account.");
+        if (!payoutRule.UsesBankDirectory && !string.IsNullOrWhiteSpace(request.ProviderBankId))
+            throw new InvalidOperationException("This bank method uses routing details, not a Nigerian provider bank ID.");
+        var providerBank = payoutRule.UsesBankDirectory
+            ? await ResolveProviderBankAsync(request.ProviderBankId, countryCode, ct) : null;
 
         if (request.IsDefault)
         {
@@ -298,6 +310,19 @@ public class RecipientService : IRecipientService
         account.RoutingNumber = Clean(request.RoutingNumber);
         account.SortCode = Clean(request.SortCode);
         account.ProviderBankId = providerBank?.ProviderBankId;
+        account.PayoutMethod = payoutRule.PaymentMethod; account.RecipientType = Clean(request.RecipientType);
+        account.AccountType = Clean(request.AccountType); account.Street = Clean(request.Street);
+        account.City = Clean(request.City); account.State = Clean(request.State); account.PostalCode = Clean(request.PostalCode);
+        RecipientPayoutPolicy.Normalize(account);
+        await EnsureBankAccountDoesNotExistAsync(account, ct, bankAccountId);
+        var mappings = await _db.PayoutDestinationProviderMappings.Where(x =>
+            x.DestinationType == KorridorX.Models.Providers.PayoutDestinationType.RecipientBankAccount &&
+            x.DestinationId == account.Id && !x.IsDeleted).ToListAsync(ct);
+        foreach (var mapping in mappings)
+        {
+            mapping.IsVerified = false; mapping.VerifiedAt = null;
+            mapping.ProviderVerifiedAccountName = null; mapping.ProviderVerificationReference = null;
+        }
         account.IsVerified = false;
         account.VerifiedAt = null;
         account.ProviderVerifiedAccountName = null;
@@ -507,22 +532,18 @@ public class RecipientService : IRecipientService
         }
     }
 
-    private async Task EnsureBankAccountDoesNotExistAsync(Guid recipientId, string accountNumber, string? bankCode, CancellationToken ct, Guid? excludeAccountId = null)
+    private async Task EnsureBankAccountDoesNotExistAsync(RecipientBankAccount account, CancellationToken ct,
+        Guid? excludeAccountId = null)
     {
-        var cleanAccountNumber = accountNumber.Trim();
-        var cleanBankCode = Clean(bankCode);
-
-        var exists = await _db.RecipientBankAccounts.AnyAsync(x =>
-            x.RecipientId == recipientId &&
-            !x.IsDeleted &&
-            x.AccountNumber == cleanAccountNumber &&
-            x.BankCode == cleanBankCode &&
-            (!excludeAccountId.HasValue || x.Id != excludeAccountId.Value), ct);
-
-        if (exists)
-        {
-            throw new InvalidOperationException("This bank account already exists for the recipient.");
-        }
+        var method = RecipientPayoutPolicy.Method(account);
+        var defaultMethod = BlaaizCurrencyRequirements.Require(account.CurrencyCode).PaymentMethod;
+        var identifier = account.CurrencyCode == "EUR" ? account.Iban : account.AccountNumber;
+        if (await _db.RecipientBankAccounts.AnyAsync(x => x.RecipientId == account.RecipientId &&
+            !x.IsDeleted && x.CurrencyCode == account.CurrencyCode && x.CountryCode == account.CountryCode &&
+            (x.PayoutMethod ?? defaultMethod) == method &&
+            (account.CurrencyCode == "EUR" ? x.Iban : x.AccountNumber) == identifier &&
+            x.BankCode == account.BankCode && (!excludeAccountId.HasValue || x.Id != excludeAccountId.Value), ct))
+            throw new InvalidOperationException("This bank account and payout method already exist for the recipient.");
     }
 
     private async Task EnsureMobileWalletDoesNotExistAsync(Guid recipientId, string providerName, string walletNumber, CancellationToken ct, Guid? excludeWalletId = null)
@@ -604,7 +625,11 @@ public class RecipientService : IRecipientService
             account.ProviderVerifiedAccountName,
             account.ProviderVerificationReference,
             account.VerificationAttemptedAt,
-            account.LastVerificationError);
+            account.LastVerificationError,
+            account.PayoutMethod, account.RecipientType, account.AccountType, account.Street,
+            account.City, account.State, account.PostalCode, RecipientPayoutPolicy.IsReady(account),
+            BlaaizCurrencyRequirements.IsForeignBank(account.CurrencyCode)
+                ? RecipientPayoutPolicy.LocalValidation : "ProviderAccountEnquiry");
     }
 
     private static RecipientMobileWalletDto ToDto(RecipientMobileWallet wallet)

@@ -79,7 +79,7 @@
       },
       {
         "title": "Separate payout routing",
-        "instruction": "Withdrawal configuration governs the existing remittance transfer payout, not a new cash-out-from-any-wallet screen. Country means recipient destination. The configured funding wallet must match the transfer source asset. Routes are ranked by display order; the saved payout keeps its selected route. Consumer Send money recipient delivery currently supports NGN bank transfer and CAD Interac. The separate own-account wallet-withdrawal flow also implements USD ACH/Wire and GBP/EUR bank transfer, subject to a ready channel and verified destination. Those wallet-withdrawal capabilities do not automatically enable recipient remittance."
+        "instruction": "Payout-channel country means recipient bank destination; the funding provider wallet must match the transfer source asset. The selected method is retained: a USD Wire recipient cannot silently use an ACH channel. Consumer Send money supports NGN bank, CAD Interac, USD ACH/Wire, GBP bank and EUR SEPA through the shared Blaaiz requirements. Owned-account withdrawals keep their separate ownership checks. Only local detail readiness is asserted for foreign bank recipients; final provider bank validation occurs at payout."
       }
     ],
     "expectedResult": "Only ready active channels matching the owner, country, asset and audience appear. A submitted payment or provisioned bank account is not a confirmed wallet credit.",

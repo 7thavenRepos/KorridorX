@@ -1,55 +1,15 @@
 using KorridorX.Models.Enums;
-
+using KorridorX.Providers.Remittance.Blaaiz;
 namespace KorridorX.Services.Payments;
-
 public class CollectionPaymentMethodPolicy : ICollectionPaymentMethodPolicy
 {
-    // This matrix must describe methods that the active remittance provider can
-    // actually initiate. Do not expose planned methods here: clients use this
-    // policy to create a collection that cannot change payment method later.
-    private static readonly IReadOnlyDictionary<string, IReadOnlyList<PaymentMethod>> SupportedMethods =
-        new Dictionary<string, IReadOnlyList<PaymentMethod>>(StringComparer.OrdinalIgnoreCase)
-        {
-            [BuildKey("US", "USD")] =
-            [
-                PaymentMethod.Card
-            ],
-
-            [BuildKey("CA", "CAD")] =
-            [
-                PaymentMethod.Interac
-            ]
-        };
-
-    public IReadOnlyList<PaymentMethod> GetSupportedMethods(
-        string sourceCountryCode,
-        string sourceCurrencyCode)
+    public IReadOnlyList<PaymentMethod> GetSupportedMethods(string sourceCountryCode, string sourceCurrencyCode)
     {
-        var key = BuildKey(sourceCountryCode, sourceCurrencyCode);
-
-        return SupportedMethods.TryGetValue(key, out var methods)
-            ? methods
-            : [];
+        var currency = BlaaizCurrencyRequirements.Find(sourceCurrencyCode);
+        if (currency is null || !currency.TransferCollectionEnabled ||
+            !BlaaizCurrencyRequirements.SupportsCountry(sourceCurrencyCode, sourceCountryCode)) return [];
+        return currency.CollectionMethods.Where(x => x is PaymentMethod.Card or PaymentMethod.Interac).ToArray();
     }
-
-    public bool IsSupported(
-        string sourceCountryCode,
-        string sourceCurrencyCode,
-        PaymentMethod paymentMethod)
-    {
-        return GetSupportedMethods(sourceCountryCode, sourceCurrencyCode)
-            .Contains(paymentMethod);
-    }
-
-    private static string BuildKey(
-        string sourceCountryCode,
-        string sourceCurrencyCode)
-    {
-        return $"{Normalize(sourceCountryCode)}:{Normalize(sourceCurrencyCode)}";
-    }
-
-    private static string Normalize(string value)
-    {
-        return value.Trim().ToUpperInvariant();
-    }
+    public bool IsSupported(string sourceCountryCode, string sourceCurrencyCode, PaymentMethod paymentMethod) =>
+        GetSupportedMethods(sourceCountryCode, sourceCurrencyCode).Contains(paymentMethod);
 }

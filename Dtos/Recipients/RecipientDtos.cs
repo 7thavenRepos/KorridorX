@@ -1,3 +1,4 @@
+using KorridorX.Models.Enums;
 namespace KorridorX.Dtos.Recipients;
 
 public record RecipientDto
@@ -55,7 +56,16 @@ public record RecipientBankAccountDto
     string? ProviderVerifiedAccountName,
     string? ProviderVerificationReference,
     DateTime? VerificationAttemptedAt,
-    string? LastVerificationError
+    string? LastVerificationError,
+    PaymentMethod? PayoutMethod = null,
+    string? RecipientType = null,
+    string? AccountType = null,
+    string? Street = null,
+    string? City = null,
+    string? State = null,
+    string? PostalCode = null,
+    bool IsPayoutReady = false,
+    string? VerificationMode = null
 );
 
 public record RecipientMobileWalletDto
@@ -112,7 +122,14 @@ public record AddRecipientBankAccountRequestDto
     string? RoutingNumber,
     string? SortCode,
     bool IsDefault,
-    string? ProviderBankId = null
+    string? ProviderBankId = null,
+    PaymentMethod? PayoutMethod = null,
+    string? RecipientType = null,
+    string? AccountType = null,
+    string? Street = null,
+    string? City = null,
+    string? State = null,
+    string? PostalCode = null
 );
 
 public record UpdateRecipientBankAccountRequestDto
@@ -130,7 +147,14 @@ public record UpdateRecipientBankAccountRequestDto
     string? SortCode,
     bool IsDefault,
     bool IsActive,
-    string? ProviderBankId = null
+    string? ProviderBankId = null,
+    PaymentMethod? PayoutMethod = null,
+    string? RecipientType = null,
+    string? AccountType = null,
+    string? Street = null,
+    string? City = null,
+    string? State = null,
+    string? PostalCode = null
 );
 
 public record AddRecipientMobileWalletRequestDto

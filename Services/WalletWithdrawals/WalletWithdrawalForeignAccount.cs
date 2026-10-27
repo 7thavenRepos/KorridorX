@@ -1,3 +1,4 @@
+using KorridorX.Providers.Remittance.Blaaiz;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using KorridorX.Dtos.WalletWithdrawals;
@@ -31,13 +32,8 @@ public sealed class WalletWithdrawalForeignAccount
 
     public string Identifier => CurrencyCode == "EUR" ? Iban : AccountNumber;
     public static bool Supports(string currency, PaymentMethod method) =>
-        (currency.ToUpperInvariant(), method) switch
-        {
-            ("USD", PaymentMethod.Ach or PaymentMethod.Wire) => true,
-            ("GBP", PaymentMethod.BankTransfer) => true,
-            ("EUR", PaymentMethod.BankTransfer) => true,
-            _ => false
-        };
+        BlaaizCurrencyRequirements.IsForeignBank(currency) &&
+        BlaaizCurrencyRequirements.Find(currency)!.PayoutMethods.Any(x => x.PaymentMethod == method);
 
     public static WalletWithdrawalForeignAccount Create(string currency, PaymentMethod method,
         SaveWalletWithdrawalDestinationRequestDto request, string ownerName, bool business)
@@ -95,58 +91,17 @@ public sealed class WalletWithdrawalForeignAccount
 
     private void Validate()
     {
-        if (!Supports(CurrencyCode, Method) ||
-            RecipientType is not ("individual" or "business") ||
-            string.IsNullOrWhiteSpace(AccountName) || AccountName.Length > 250 ||
-            !Regex.IsMatch(Country, "^[A-Z]{2}$", RegexOptions.CultureInvariant) ||
-            string.IsNullOrWhiteSpace(Street) || string.IsNullOrWhiteSpace(City) ||
-            string.IsNullOrWhiteSpace(ZipCode) || Street.Length > 150 || City.Length > 100 || ZipCode.Length > 30)
-            throw new InvalidOperationException("Foreign bank payout details are incomplete.");
-        switch (CurrencyCode)
-        {
-            case "USD":
-                if (Country != "US" || !Regex.IsMatch(AccountNumber, "^[0-9]{4,17}$") ||
-                    !Regex.IsMatch(RoutingNumber, "^[0-9]{9}$") ||
-                    AccountType is not ("checking" or "savings") ||
-                    string.IsNullOrWhiteSpace(BankName) || string.IsNullOrWhiteSpace(State) || State.Length > 100 ||
-                    Method == PaymentMethod.Wire && !ValidSwift(SwiftCode))
-                    throw new InvalidOperationException("USD ACH/Wire requires a valid account, routing number, account type, bank, address, and Wire SWIFT code.");
-                break;
-            case "GBP":
-                if (Method != PaymentMethod.BankTransfer || Country != "GB" ||
-                    !Regex.IsMatch(AccountNumber, "^[0-9]{8}$") || !Regex.IsMatch(SortCode, "^[0-9]{6}$"))
-                    throw new InvalidOperationException("GBP bank transfer requires an eight-digit account and six-digit sort code.");
-                break;
-            case "EUR":
-                if (Method != PaymentMethod.BankTransfer || !ValidIban(Iban) || !ValidSwift(BicCode) ||
-                    !string.Equals(Iban[..2], Country, StringComparison.Ordinal))
-                    throw new InvalidOperationException("EUR bank transfer requires a valid IBAN, BIC, and matching bank country.");
-                break;
-            default: throw new InvalidOperationException("Unsupported payout currency.");
-        }
-    }
-
-    private static bool ValidSwift(string value) =>
-        Regex.IsMatch(value, "^[A-Z0-9]{8}([A-Z0-9]{3})?$", RegexOptions.CultureInvariant);
-
-    // ISO 13616 mod-97 validation; this does not claim SEPA reachability.
-    private static bool ValidIban(string value)
-    {
-        if (!Regex.IsMatch(value, "^[A-Z]{2}[0-9]{2}[A-Z0-9]{11,30}$", RegexOptions.CultureInvariant))
-            return false;
-        var shifted = value[4..] + value[..4];
-        var remainder = 0;
-        foreach (var c in shifted)
-        {
-            if (c is >= '0' and <= '9') remainder = (remainder * 10 + (c - '0')) % 97;
-            else if (c is >= 'A' and <= 'Z')
+        if (!Supports(CurrencyCode, Method))
+            throw new InvalidOperationException("Unsupported foreign-currency payout rail.");
+        BlaaizCurrencyRequirements.Validate(CurrencyCode, Method, Country,
+            new Dictionary<string, string?>
             {
-                var n = c - 'A' + 10;
-                remainder = (remainder * 100 + n) % 97;
-            }
-            else return false;
-        }
-        return remainder == 1;
+                ["recipientType"] = RecipientType, ["accountName"] = AccountName,
+                ["accountNumber"] = AccountNumber, ["bankName"] = BankName, ["accountType"] = AccountType,
+                ["routingNumber"] = RoutingNumber, ["swiftBic"] = CurrencyCode == "EUR" ? BicCode : SwiftCode,
+                ["sortCode"] = SortCode, ["iban"] = Iban, ["state"] = State,
+                ["street"] = Street, ["city"] = City, ["postalCode"] = ZipCode
+            });
     }
 
     private static string Required(string? raw, int max, string label)

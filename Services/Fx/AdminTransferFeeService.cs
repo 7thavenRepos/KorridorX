@@ -1,3 +1,4 @@
+using KorridorX.Providers.Remittance.Blaaiz;
 using KorridorX.Data;
 using KorridorX.Dtos.Audit;
 using KorridorX.Dtos.Fx;
@@ -25,7 +26,10 @@ public sealed class AdminTransferFeeService(AppDbContext db, IAuditService audit
         // Country eligibility remains enforced by the consumer/business quote services.
         var supportedAssets = (await db.Assets.AsNoTracking().Where(x => x.IsSupported)
             .Select(x => x.Code).ToListAsync(ct)).ToHashSet(StringComparer.Ordinal);
-        var pairs = instant.Concat(marketplace)
+        var sameCurrency = BlaaizCurrencyRequirements.All
+            .Where(x => supportedAssets.Contains(x.CurrencyCode))
+            .Select(x => new TransferFeePairOptionDto(x.CurrencyCode, x.CurrencyCode, true));
+        var pairs = instant.Concat(marketplace).Concat(sameCurrency)
             .Where(x => supportedAssets.Contains(x.SourceCurrencyCode) && supportedAssets.Contains(x.DestinationCurrencyCode))
             .GroupBy(x => (x.SourceCurrencyCode, x.DestinationCurrencyCode))
             .Select(x => new TransferFeePairOptionDto(x.Key.SourceCurrencyCode, x.Key.DestinationCurrencyCode, x.Any(p => p.IsActive)))

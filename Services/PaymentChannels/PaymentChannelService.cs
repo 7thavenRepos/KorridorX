@@ -254,7 +254,7 @@ public sealed class PaymentChannelService(AppDbContext db, IProviderWalletResolv
             throw new InvalidOperationException("The saved channel route does not match its immutable selection.");
     }
 
-    public async Task<PaymentChannelChoice?> ResolvePayoutAsync(Transfer transfer, Payout? payout, CancellationToken ct)
+    public async Task<PaymentChannelChoice?> ResolvePayoutAsync(Transfer transfer, Payout? payout, CancellationToken ct, PaymentMethod? requiredMethod = null)
     {
         if (payout?.PaymentChannelId is not null)
         {
@@ -264,7 +264,8 @@ public sealed class PaymentChannelService(AppDbContext db, IProviderWalletResolv
         if (payout is not null || !await IsManagedAsync(transfer.DestinationCurrencyCode, PaymentChannelDirection.Withdrawal, ct)) return null;
         var candidates = await EligibleAsync(transfer.DestinationCountryCode, transfer.DestinationCurrencyCode,
             transfer.BusinessProfileId.HasValue, PaymentChannelDirection.Withdrawal, transfer.SourceCurrencyCode, transfer.DestinationAmount, ct);
-        return candidates.FirstOrDefault() ?? throw new InvalidOperationException("No active payout channel matches this destination, audience, funding asset and amount. Review Payment channels in Admin.");
+        return candidates.FirstOrDefault(x => !requiredMethod.HasValue || x.Capability.PaymentMethod == requiredMethod.Value)
+            ?? throw new InvalidOperationException("No active payout channel matches this destination, selected method, audience, funding asset and amount. Review Payment channels in Admin.");
     }
 
     public static CollectionPaymentMethodDto ToMethod(PaymentChannelChoice choice) => new(choice.Capability.PaymentMethod,

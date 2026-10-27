@@ -1,3 +1,5 @@
+using KorridorX.Services.Recipients;
+using KorridorX.Providers.Remittance.Blaaiz;
 using System.Data;
 using KorridorX.Services.PaymentChannels;
 using System.Text.Json;
@@ -129,9 +131,22 @@ public class PayoutService : IPayoutService
             throw new InvalidOperationException($"Mobile-wallet payouts are not yet enabled for {_remittanceProvider.ProviderName}.");
         }
 
-        var channel = await _channels.ResolvePayoutAsync(transfer, payout, ct);
-        var paymentMethod = payout?.PaymentMethod ?? channel?.Capability.PaymentMethod ?? ResolvePayoutMethod(transfer.DestinationCurrencyCode);
-        ValidateDestination(
+        var preferredMethod = destination.ConsumerBankAccount is null ? (PaymentMethod?)null
+            : RecipientPayoutPolicy.Method(destination.ConsumerBankAccount);
+        if (payout is not null && preferredMethod.HasValue && payout.PaymentMethod != preferredMethod.Value)
+            throw new InvalidOperationException("The saved payout method no longer matches the recipient account.");
+        var channel = await _channels.ResolvePayoutAsync(transfer, payout, ct, preferredMethod);
+        var paymentMethod = payout?.PaymentMethod ?? channel?.Capability.PaymentMethod ?? preferredMethod ?? ResolvePayoutMethod(transfer.DestinationCurrencyCode);
+        var foreignBank = BlaaizCurrencyRequirements.IsForeignBank(transfer.DestinationCurrencyCode);
+        if (foreignBank)
+        {
+            var bank = destination.ConsumerBankAccount
+                ?? throw new InvalidOperationException("Complete recipient bank routing details are required for this payout.");
+            if (!bank.IsActive || bank.IsDeleted || RecipientPayoutPolicy.Method(bank) != paymentMethod)
+                throw new InvalidOperationException("An active recipient account matching the selected payout method is required.");
+            RecipientPayoutPolicy.Validate(bank);
+        }
+        else ValidateDestination(
             transfer.DestinationCurrencyCode,
             paymentMethod,
             destination.BankAccountIsActive,
@@ -302,7 +317,15 @@ public class PayoutService : IPayoutService
                     destination.SortCode,
                     destination.Iban,
                     destination.SwiftBic,
-                    $"KorridorX transfer {transfer.Reference}"),
+                    $"KorridorX transfer {transfer.Reference}",
+                    RecipientType: destination.ConsumerBankAccount?.RecipientType,
+                    AccountType: destination.ConsumerBankAccount?.AccountType,
+                    RecipientCountry: destination.ConsumerBankAccount?.CountryCode,
+                    RecipientState: destination.ConsumerBankAccount?.State,
+                    RecipientStreet: destination.ConsumerBankAccount?.Street,
+                    RecipientCity: destination.ConsumerBankAccount?.City,
+                    RecipientPostalCode: destination.ConsumerBankAccount?.PostalCode,
+                    BicCode: destination.ConsumerBankAccount?.SwiftBic),
                 ct);
 
             var payoutStatus = MapProviderPayoutStatus(result.ProviderStatus);
@@ -609,13 +632,7 @@ public class PayoutService : IPayoutService
     }
 
     private static PaymentMethod ResolvePayoutMethod(string destinationCurrencyCode) =>
-        destinationCurrencyCode.ToUpperInvariant() switch
-        {
-            "NGN" => PaymentMethod.BankTransfer,
-            "CAD" => PaymentMethod.Interac,
-            _ => throw new InvalidOperationException(
-                $"Automatic payout is not yet configured for {destinationCurrencyCode}.")
-        };
+        BlaaizCurrencyRequirements.Require(destinationCurrencyCode).PaymentMethod;
 
     private async Task EnsureTransferOutboundRestrictionAsync(
         Transfer transfer,
@@ -757,7 +774,8 @@ public class PayoutService : IPayoutService
                 : recipientAccount?.IsVerified ?? false,
             transfer.RecipientMobileWallet is not null,
             recipientProviderView?.ProviderPartyId ?? recipientAccount?.ProviderRecipientId,
-            recipientProviderView?.ProviderDestinationId ?? recipientAccount?.ProviderBankAccountId);
+            recipientProviderView?.ProviderDestinationId ?? recipientAccount?.ProviderBankAccountId,
+            recipientAccount);
     }
 
     private async Task<PayoutDestinationProviderMapping?> ResolveBankProviderViewAsync(
@@ -920,7 +938,8 @@ public class PayoutService : IPayoutService
         bool BankAccountIsVerified,
         bool IsMobileWallet,
         string? ProviderPartyId,
-        string? ProviderDestinationId);
+        string? ProviderDestinationId,
+        RecipientBankAccount? ConsumerBankAccount = null);
 
     private static PayoutStatus MapProviderPayoutStatus(string status) =>
         status.Trim().ToUpperInvariant() switch

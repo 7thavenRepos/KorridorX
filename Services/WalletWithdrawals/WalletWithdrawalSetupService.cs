@@ -1,3 +1,4 @@
+using KorridorX.Providers.Remittance.Blaaiz;
 using System.Data;
 using KorridorX.Data;
 using KorridorX.Dtos.Audit;
@@ -220,23 +221,14 @@ public sealed class WalletWithdrawalSetupService : IWalletWithdrawalSetupService
         if (!await IsWalletEligibleAsync(context, ct)) return [];
         var asset = context.Wallet.AssetCode;
         var routes = new List<(string Country, PaymentMethod Method)>();
-        switch (asset)
-        {
-            case "NGN": routes.Add(("NG", PaymentMethod.BankTransfer)); break;
-            case "CAD": routes.Add(("CA", PaymentMethod.Interac)); break;
-            case "USD":
-                routes.Add(("US", PaymentMethod.Ach));
-                routes.Add(("US", PaymentMethod.Wire));
-                break;
-            case "GBP": routes.Add(("GB", PaymentMethod.BankTransfer)); break;
-            case "EUR":
-                var countries = await _db.CountryAssets.AsNoTracking().Where(x =>
-                    x.AssetCode == "EUR" && x.Country.IsSupported && (x.CanWithdraw || x.CanReceive))
-                    .Select(x => x.CountryCode).Distinct().ToListAsync(ct);
-                foreach (var country in countries.Where(x => x.Length == 2 &&
-                    x.All(c => c is >= 'A' and <= 'Z'))) routes.Add((country, PaymentMethod.BankTransfer));
-                break;
-        }
+        var contract = BlaaizCurrencyRequirements.Find(asset);
+        if (contract is null) return [];
+        var countries = contract.CountryCode == "*"
+            ? await _db.CountryAssets.AsNoTracking().Where(x => x.AssetCode == asset &&
+                x.Country.IsSupported && (x.CanWithdraw || x.CanReceive)).Select(x => x.CountryCode).Distinct().ToListAsync(ct)
+            : new List<string> { contract.CountryCode };
+        foreach (var country in countries.Where(x => BlaaizCurrencyRequirements.SupportsCountry(asset, x)))
+            foreach (var method in contract.PayoutMethods) routes.Add((country, method.PaymentMethod));
         var result = new List<WalletWithdrawalMethodDto>();
         foreach (var (country, method) in routes)
         {

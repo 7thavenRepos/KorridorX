@@ -1,3 +1,4 @@
+using KorridorX.Providers.Remittance.Blaaiz;
 using KorridorX.Dtos.PaymentChannels;
 using KorridorX.Models.Enums;
 using KorridorX.Models.Payments;
@@ -23,42 +24,39 @@ public static class BlaaizChannelCapabilities
 
     private static IReadOnlyList<PaymentChannelCapabilityDto> Build()
     {
-        var rows = new List<PaymentChannelCapabilityDto>
+        var rows = new List<PaymentChannelCapabilityDto>();
+        foreach (var currency in BlaaizCurrencyRequirements.All)
         {
-            new(InteracRequest, "BLAAIZ", PaymentChannelDirection.Deposit, "CAD", PaymentMethod.Interac,
-                "Collection", "Interac e-Transfer request", true, true, true, null,
-                "The existing Interac request endpoint uses the connection's CAD wallet. Select its verified default CAD collection wallet; this is not a separately routed multi-wallet API."),
-            new(BankPayout, "BLAAIZ", PaymentChannelDirection.Withdrawal, "NGN", PaymentMethod.BankTransfer,
-                "TransferPayout", "Bank transfer", true, true, true, null,
-                "Uses the existing verified NGN recipient and remittance payout flow. The funding wallet must match the transfer's source asset."),
-            new(InteracPayout, "BLAAIZ", PaymentChannelDirection.Withdrawal, "CAD", PaymentMethod.Interac,
-                "TransferPayout", "Interac e-Transfer", true, true, true, null,
-                "Uses the existing CAD recipient email and remittance payout flow. Not a new standalone withdrawal endpoint.")
-        };
-        foreach (var asset in new[] { "NGN", "USD" })
-            rows.Add(new(Card, "BLAAIZ", PaymentChannelDirection.Deposit, asset, PaymentMethod.Card,
-                "Collection", "Debit / credit card", true, false, true, null,
-                "Uses the existing native card flow, not a hosted-only checkout. Business card collection is unavailable until an approved hosted/tokenized web flow is integrated."));
-        foreach (var asset in new[] { "NGN", "USD", "EUR", "GBP" })
-            rows.Add(new(VirtualAccount, "BLAAIZ", PaymentChannelDirection.Deposit, asset, PaymentMethod.VirtualAccount,
-                "VirtualAccount", asset == "EUR" ? "Bank transfer (SEPA account)" : asset == "USD" ? "Bank transfer (USD account)" : "Bank transfer (dedicated account)",
-                true, asset == "NGN", true, null,
-                asset == "NGN" ? "Requires a verified customer and the provider's virtual-account feature/scope. Never share a pooled treasury account as a customer deposit account."
-                : "Blaaiz currently permits verified individual customers only. GBP/EUR creation is on hold on api-dev; USD creation works there, but USD/EUR/GBP deposits do not settle in the provider development environment."));
-        // All five fiat routes are executable. A configured channel and verified
-        // provider wallet still determine whether an account can use the rail.
-        rows.Add(new("ach-payout", "BLAAIZ", PaymentChannelDirection.Withdrawal, "USD", PaymentMethod.Ach,
-            "TransferPayout", "USD ACH", true, true, true, null,
-            "Uses a verified owner-matched US account, routing number, account type and recipient address."));
-        rows.Add(new("wire-payout", "BLAAIZ", PaymentChannelDirection.Withdrawal, "USD", PaymentMethod.Wire,
-            "TransferPayout", "USD Wire", true, true, true, null,
-            "Requires US account and routing details, account type, SWIFT, and recipient address."));
-        rows.Add(new(BankPayout, "BLAAIZ", PaymentChannelDirection.Withdrawal, "EUR", PaymentMethod.BankTransfer,
-            "TransferPayout", "EUR SEPA bank transfer", true, true, true, null,
-            "Requires account-holder name, IBAN, BIC and SEPA-reachable bank; provider validates final eligibility."));
-        rows.Add(new(BankPayout, "BLAAIZ", PaymentChannelDirection.Withdrawal, "GBP", PaymentMethod.BankTransfer,
-            "TransferPayout", "GBP bank transfer", true, true, true, null,
-            "Requires account-holder name, account number and sort code. Blaaiz performs Confirmation of Payee."));
+            foreach (var method in currency.PayoutMethods)
+            {
+                var code = method.PaymentMethod switch
+                {
+                    PaymentMethod.Ach => "ach-payout", PaymentMethod.Wire => "wire-payout",
+                    PaymentMethod.Interac => InteracPayout, _ => BankPayout
+                };
+                rows.Add(new(code, "BLAAIZ", PaymentChannelDirection.Withdrawal, currency.CurrencyCode,
+                    method.PaymentMethod, "TransferPayout", method.DisplayName, true, true, true, null,
+                    "Uses the shared Blaaiz currency requirements. Recipient payouts and owner withdrawals retain their respective identity, funding and channel checks."));
+            }
+            foreach (var method in currency.CollectionMethods)
+            {
+                var code = method switch
+                {
+                    PaymentMethod.Card => Card, PaymentMethod.Interac => InteracRequest, _ => VirtualAccount
+                };
+                var description = method == PaymentMethod.Card
+                    ? "Uses the existing native card flow. Business card collection requires an approved web flow."
+                    : method == PaymentMethod.Interac
+                    ? "Uses the connection's verified default CAD wallet and existing Interac request flow."
+                    : "Dedicated customer bank account; never share a pooled treasury account. Foreign virtual accounts require verified individuals; development-provider provisioning/settlement limitations still apply.";
+                rows.Add(new(code, "BLAAIZ", PaymentChannelDirection.Deposit, currency.CurrencyCode, method,
+                    method == PaymentMethod.VirtualAccount ? "VirtualAccount" : "Collection",
+                    method == PaymentMethod.Card ? "Debit / credit card" : method == PaymentMethod.Interac
+                        ? "Interac e-Transfer request" : "Bank transfer (dedicated account)",
+                    true, method == PaymentMethod.Interac || method == PaymentMethod.VirtualAccount && currency.CurrencyCode == "NGN",
+                    true, null, description));
+            }
+        }
         return rows;
     }
 }
