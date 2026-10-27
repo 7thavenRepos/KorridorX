@@ -8,8 +8,8 @@ public sealed class WalletActivityHelpCatalogTests
     public void Embedded_catalog_loads_all_entries_and_new_wallet_fee_guides()
     {
         var catalog = new HelpCatalog();
-        Assert.Equal(131, catalog.Entries.Count);
-        Assert.Equal(91, catalog.Entries.Count(x => !x.IsPage));
+        Assert.Equal(139, catalog.Entries.Count);
+        Assert.Equal(99, catalog.Entries.Count(x => !x.IsPage));
         Assert.Equal(40, catalog.Entries.Count(x => x.IsPage));
         Assert.Equal(catalog.Entries.Count, catalog.Entries.Select(x => (x.Portal, x.Slug)).Distinct().Count());
         foreach (var slug in new[] { "automatic-wallet-receiving-accounts", "wallet-security-and-funding-notifications", "manage-transfer-fees" })
