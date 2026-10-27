@@ -9,7 +9,7 @@ public static class RecipientPayoutPolicy
     public const string LocalValidation = "DetailsChecked_ProviderValidationAtPayout";
     public static PaymentMethod Method(RecipientBankAccount account) =>
         BlaaizCurrencyRequirements.Require(account.CurrencyCode, account.PayoutMethod).PaymentMethod;
-    public static Dictionary<string, string?> Validate(RecipientBankAccount account) =>
+    public static Dictionary<string, string?> Validate(RecipientBankAccount account, bool allowUnverifiedBankDraft = false) =>
         BlaaizCurrencyRequirements.Validate(account.CurrencyCode, Method(account), account.CountryCode,
             new Dictionary<string, string?>
             {
@@ -20,7 +20,7 @@ public static class RecipientPayoutPolicy
                 ["recipientType"] = account.RecipientType, ["accountType"] = account.AccountType,
                 ["street"] = account.Street, ["city"] = account.City,
                 ["state"] = account.State, ["postalCode"] = account.PostalCode
-            });
+            }, allowUnverifiedBankDraft: allowUnverifiedBankDraft && !account.IsVerified);
     public static bool IsReady(RecipientBankAccount account)
     {
         if (!account.IsActive || account.IsDeleted) return false;
@@ -30,7 +30,7 @@ public static class RecipientPayoutPolicy
     }
     public static void Normalize(RecipientBankAccount account)
     {
-        var values = Validate(account);
+        var values = Validate(account, allowUnverifiedBankDraft: true);
         account.AccountName = values.GetValueOrDefault("accountName") ?? "";
         account.AccountNumber = values.GetValueOrDefault("accountNumber") ?? "";
         if (values.ContainsKey("bankName")) account.BankName = values["bankName"] ?? "";

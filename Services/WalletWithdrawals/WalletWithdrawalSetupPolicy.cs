@@ -13,7 +13,8 @@ public static class WalletWithdrawalSetupPolicy
         BlaaizCurrencyRequirements.Require(currency, method);
         var contract = BlaaizCurrencyRequirements.Find(currency)!;
         var country = contract.CountryCode == "*" ? selectedCountry : contract.CountryCode;
-        if (!BlaaizCurrencyRequirements.SupportsCountry(currency, country))
+        if (country is not { Length: 2 } || !country.All(c => c is >= 'A' and <= 'Z') ||
+            !BlaaizCurrencyRequirements.SupportsCountry(currency, country))
             throw new InvalidOperationException("Choose a supported recipient bank country.");
         return country!;
     }

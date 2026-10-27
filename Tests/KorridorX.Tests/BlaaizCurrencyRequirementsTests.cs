@@ -82,6 +82,28 @@ public sealed class BlaaizCurrencyRequirementsTests
             BlaaizCurrencyRequirements.ApplyPayoutFields(request with { RecipientState = null }, new()));
     }
 
+    [Fact]
+    public void UnverifiedNgnDraftDoesNotBypassProviderBankOrVerificationForPayout()
+    {
+        var account = new RecipientBankAccount
+        {
+            IsActive = true, CountryCode = "NG", CurrencyCode = "NGN",
+            BankName = "Test Bank", BankCode = "999",
+            AccountName = "Test Recipient", AccountNumber = "0123456789"
+        };
+        RecipientPayoutPolicy.Normalize(account);
+        Assert.Equal("0123456789", account.AccountNumber);
+        Assert.Null(account.ProviderBankId);
+        Assert.False(account.IsVerified);
+        Assert.Null(account.VerifiedAt);
+        Assert.False(RecipientPayoutPolicy.IsReady(account));
+        Assert.Throws<InvalidOperationException>(() => RecipientPayoutPolicy.Validate(account));
+
+        account.ProviderBankId = "999";
+        RecipientPayoutPolicy.Validate(account);
+        Assert.False(RecipientPayoutPolicy.IsReady(account));
+    }
+
     private static RecipientBankAccount Usd() => new()
     {
         IsActive = true, CountryCode = "US", CurrencyCode = "USD", PayoutMethod = PaymentMethod.Ach,

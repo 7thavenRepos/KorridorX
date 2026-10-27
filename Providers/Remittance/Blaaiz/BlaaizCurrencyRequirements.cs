@@ -107,7 +107,7 @@ public static class BlaaizCurrencyRequirements
         row.PayoutMethods.All(x => !x.UsesBankDirectory && x.PaymentMethod != PaymentMethod.Interac);
 
     public static Dictionary<string, string?> Validate(string currency, PaymentMethod method, string country,
-        IReadOnlyDictionary<string, string?> supplied, bool checkFormat = true)
+        IReadOnlyDictionary<string, string?> supplied, bool checkFormat = true, bool allowUnverifiedBankDraft = false)
     {
         var rule = Require(currency, method);
         if (!SupportsCountry(currency, country))
@@ -124,7 +124,10 @@ public static class BlaaizCurrencyRequirements
             if (field.Key is "accountType" or "recipientType" or "email") value = value.ToLowerInvariant();
             if (value.Length > field.MaxLength)
                 throw new InvalidOperationException(field.Label + " is too long.");
-            if (field.Required && value.Length == 0)
+            // Legacy NGN recipients may be saved before choosing a provider bank.
+            // Only the unverified draft-save path opts in; payout calls remain strict.
+            var bankSelectionPending = allowUnverifiedBankDraft && rule.UsesBankDirectory && field.Key == "providerBankId";
+            if (field.Required && value.Length == 0 && !bankSelectionPending)
                 throw new InvalidOperationException(field.Label + " is required.");
             if (value.Length > 0 && (field.Choices is not null && !field.Choices.Contains(value) ||
                 checkFormat && field.Pattern is not null && !Regex.IsMatch(value, field.Pattern, RegexOptions.CultureInvariant)))
