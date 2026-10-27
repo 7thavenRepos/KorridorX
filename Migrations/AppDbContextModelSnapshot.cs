@@ -83,6 +83,114 @@ namespace KorridorX.Migrations
                     b.ToTable("AccountClosureRequests");
                 });
 
+            modelBuilder.Entity("KorridorX.Models.AdminFunding.AdminWalletFundingRequest", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("Amount")
+                        .HasPrecision(36, 18)
+                        .HasColumnType("numeric(36,18)");
+
+                    b.Property<string>("AssetCode")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CreatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("DeletedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("DestinationWalletId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("IdempotencyKey")
+                        .IsRequired()
+                        .HasMaxLength(160)
+                        .HasColumnType("character varying(160)");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime?>("LastUpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("LastUpdatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("LedgerTransactionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("PostedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<string>("Reference")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)");
+
+                    b.Property<string>("RejectionReason")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<string>("RequestHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTime>("RequestedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("RequestedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("ReviewedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("ReviewedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("SourceHouseAccountId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Status")
+                        .IsConcurrencyToken()
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DestinationWalletId");
+
+                    b.HasIndex("LedgerTransactionId")
+                        .IsUnique();
+
+                    b.HasIndex("Reference")
+                        .IsUnique();
+
+                    b.HasIndex("SourceHouseAccountId");
+
+                    b.HasIndex("RequestedByUserId", "IdempotencyKey")
+                        .IsUnique();
+
+                    b.HasIndex("Status", "RequestedAtUtc");
+
+                    b.ToTable("AdminWalletFundingRequests");
+                });
+
             modelBuilder.Entity("KorridorX.Models.Audit.AuditLog", b =>
                 {
                     b.Property<Guid>("Id")

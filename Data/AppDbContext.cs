@@ -1,4 +1,5 @@
 using KorridorX.Models.AccountClosure;
+using KorridorX.Models.AdminFunding;
 using KorridorX.Models.Audit;
 using KorridorX.Models.BusinessBeneficiaries;
 using KorridorX.Models.BusinessTransfers;
@@ -35,6 +36,7 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<Guid
     }
 
     public DbSet<AccountClosureRequest> AccountClosureRequests => Set<AccountClosureRequest>();
+    public DbSet<AdminWalletFundingRequest> AdminWalletFundingRequests => Set<AdminWalletFundingRequest>();
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
     public DbSet<LoginHistory> LoginHistories => Set<LoginHistory>();
 

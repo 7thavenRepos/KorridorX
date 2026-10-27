@@ -65,14 +65,11 @@ public class AdminBusinessWalletsController : ControllerBase
     }
 
     [HttpPost("credit")]
-    public async Task<IActionResult> Credit(
-        [FromBody] AdminCreditBusinessWalletRequestDto request,
-        [FromHeader(Name = "Idempotency-Key")] string? idempotencyKey,
-        CancellationToken ct)
-    {
-        var result = await _service.CreditWalletAsync(GetUserId(), request, idempotencyKey ?? "", ct);
-        return Ok(ApiResponses.Ok(result, "Business wallet credited successfully."));
-    }
+    [Authorize(Roles = "Admin,SuperAdmin")]
+    public IActionResult Credit() => StatusCode(410, new {
+        success = false,
+        message = "Legacy unbacked wallet credits are retired. Use /api/admin/wallet-funding/requests with a funded house account."
+    });
 
     [HttpPost("{walletId:guid}/freeze")]
     public async Task<IActionResult> Freeze(
@@ -105,34 +102,18 @@ public class AdminBusinessWalletsController : ControllerBase
     }
 
     [HttpPost("{walletId:guid}/adjust")]
-    public async Task<IActionResult> Adjust(
-        Guid walletId,
-        [FromBody] AdminAdjustBusinessWalletRequestDto request,
-        [FromHeader(Name = "Idempotency-Key")] string? idempotencyKey,
-        CancellationToken ct)
-    {
-        var result = await _service.AdjustWalletAsync(
-            GetUserId(),
-            walletId,
-            request,
-            idempotencyKey ?? "",
-            ct);
-        return Ok(ApiResponses.Ok(result, "Business wallet adjusted successfully."));
-    }
+    [Authorize(Roles = "Admin,SuperAdmin")]
+    public IActionResult Adjust(Guid walletId) => StatusCode(410, new {
+        success = false,
+        message = "Legacy unbacked manual wallet adjustments are retired. Use a separately reviewed ledger recovery workflow."
+    });
 
     [HttpPost("ledger/{transactionId:guid}/reverse")]
-    public async Task<IActionResult> ReverseLedgerTransaction(
-        Guid transactionId,
-        [FromBody] AdminReverseBusinessLedgerTransactionRequestDto request,
-        CancellationToken ct)
-    {
-        var result = await _service.ReverseLedgerTransactionAsync(
-            GetUserId(),
-            transactionId,
-            request.Reason,
-            ct);
-        return Ok(ApiResponses.Ok(result, "Business ledger transaction reversed successfully."));
-    }
+    [Authorize(Roles = "Admin,SuperAdmin")]
+    public IActionResult ReverseLedgerTransaction(Guid transactionId) => StatusCode(410, new {
+        success = false,
+        message = "Legacy external-bucket reversals are retired. Contact finance for a reviewed reversal workflow."
+    });
 
     private Guid GetUserId()
     {
