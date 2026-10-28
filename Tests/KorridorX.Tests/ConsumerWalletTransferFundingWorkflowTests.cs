@@ -4,6 +4,7 @@ using KorridorX.Configuration;
 using KorridorX.Providers.Remittance;
 using KorridorX.Services.BusinessFunding;
 using KorridorX.Services.Compliance;
+using KorridorX.Services.Notifications;
 using KorridorX.Services.PaymentChannels;
 using KorridorX.Services.Providers;
 using KorridorX.Services.References;
@@ -538,6 +539,17 @@ public async Task Cancellation_is_blocked_once_payout_record_exists_and_hold_is_
         Assert.Equal(wallet.Id, (await db.ProviderWalletSelections.SingleAsync(x =>
             x.OperationType == "Payout" && x.OperationId == sent.PayoutId)).WalletConfigurationId);
         Assert.Equal(1, await db.PayoutAttempts.CountAsync(x => x.PayoutId == sent.PayoutId));
+        var receipt = Assert.Single(await db.NotificationMessages.AsNoTracking().Where(x =>
+            x.UserId == setup.UserId && x.Channel == NotificationChannels.Email &&
+            x.RelatedEntityType == "Transfer" && x.RelatedEntityId == setup.Transfer.Id.ToString() &&
+            x.Subject.StartsWith(TransferCompletionNotificationStager.CompletedSubject)).ToListAsync());
+        Assert.Contains(setup.Transfer.Reference, receipt.Subject);
+        Assert.Equal(NotificationStatuses.Pending, receipt.Status);
+        scope.ServiceProvider.GetRequiredService<TransferCompletionNotificationStager>().Stage(transfer);
+        await db.SaveChangesAsync();
+        Assert.Equal(1, await db.NotificationMessages.CountAsync(x => x.UserId == setup.UserId &&
+            x.RelatedEntityId == setup.Transfer.Id.ToString() &&
+            x.Subject.StartsWith(TransferCompletionNotificationStager.CompletedSubject)));
     }
 
     public class DestinationProviderProxy : DispatchProxy

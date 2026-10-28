@@ -2,6 +2,7 @@ using KorridorX.Data;
 using KorridorX.Models.Enums;
 using KorridorX.Models.Transfers;
 using KorridorX.Services.EmbeddedFinance;
+using KorridorX.Services.Notifications;
 
 namespace KorridorX.Services.Transfers;
 
@@ -103,13 +104,16 @@ public class TransferStatusService : ITransferStatusService
 
     private readonly AppDbContext _db;
     private readonly IEmbeddedWebhookOutboxStager _webhookOutbox;
+    private readonly TransferCompletionNotificationStager? _completionNotifications;
 
     public TransferStatusService(
         AppDbContext db,
-        IEmbeddedWebhookOutboxStager webhookOutbox)
+        IEmbeddedWebhookOutboxStager webhookOutbox,
+        TransferCompletionNotificationStager? completionNotifications = null)
     {
         _db = db;
         _webhookOutbox = webhookOutbox;
+        _completionNotifications = completionNotifications;
     }
 
     public bool CanTransition(
@@ -195,6 +199,9 @@ public class TransferStatusService : ITransferStatusService
             source,
             reason,
             now);
+
+        if (newStatus == TransferStatus.Completed)
+            _completionNotifications?.Stage(transfer);
 
         return true;
     }

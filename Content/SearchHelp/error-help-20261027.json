@@ -480,7 +480,10 @@
       "CAD",
       "NGN",
       "automatic payout",
-      "stuck transfer"
+      "stuck transfer",
+      "transfer receipt",
+      "delivery notification",
+      "missing completion email"
     ],
     "errorCodes": [
       "KX-PAYOUT-005"
@@ -492,7 +495,8 @@
       "Blaaiz is enabled but automatic recipient payout dispatch is disabled.",
       "No active payout channel matches this destination, selected method, audience, funding asset and amount. Review Payment channels in Admin.",
       "Recipient delivery from CAD to NGN is currently unavailable.",
-      "Recipient delivery from NGN to CAD is currently unavailable."
+      "Recipient delivery from NGN to CAD is currently unavailable.",
+      "Transfer completed but no KorridorX email or push notification was received."
     ],
     "adminRoles": [
       "Support",
@@ -532,6 +536,10 @@
       {
         "title": "Use the recipient currency for provider settlement",
         "instruction": "The customer funds the transfer in its sending currency. The provider payout channel, selected Blaaiz wallet, liquidity check and payout request use the recipient receiving currency. CAD to NGN reserves/captures the existing customer CAD funds and pays the agreed NGN amount from the NGN Blaaiz wallet; NGN to CAD uses the CAD wallet. The two original active NGN/NGN-wallet and CAD/CAD-wallet channels are correct. A source-wallet routing assumption caused the 28 October payment_channel failures. Deploy W18 instead of creating cross-currency funding routes. Existing attempted or wallet-pinned payouts retain their recorded selections and require reconciliation if incompatible; they are never silently retargeted."
+      },
+      {
+        "title": "Check the sender delivery receipt",
+        "instruction": "W20 stages a consumer completion receipt only when the transfer becomes Completed, through the existing Email/in-app and enabled registered-device Push queue. Search Admin notifications by the transfer reference. Pending/Retry/DeadLetter requires notification-delivery review; it does not require another payment. The former completion path did not queue this receipt. Deployment handles new completion transitions and does not automatically backfill old notices."
       }
     ],
     "expectedResult": "The original transfer either acquires one provider submission and a truthful processing status, remains blocked for an identified reason, or is resolved through the existing cancellation/refund flow.",

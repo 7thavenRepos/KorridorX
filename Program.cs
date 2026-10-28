@@ -405,6 +405,7 @@ builder.Services.AddHttpClient(EmbeddedWebhookSender.HttpClientName, client =>
     AllowAutoRedirect = false
 });
 builder.Services.AddScoped<INotificationQueueService, NotificationQueueService>();
+builder.Services.AddScoped<TransferCompletionNotificationStager>();
 builder.Services.AddScoped<INotificationOperationsService, NotificationOperationsService>();
 builder.Services.AddScoped<IMobilePushDeviceService, MobilePushDeviceService>();
 builder.Services.AddScoped<SmtpNotificationDeliveryProvider>();
