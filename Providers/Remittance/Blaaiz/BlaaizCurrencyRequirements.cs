@@ -89,6 +89,12 @@ public static class BlaaizCurrencyRequirements
 
     public static BlaaizCurrencyRequirement? Find(string? currency) =>
         All.SingleOrDefault(x => x.CurrencyCode == currency?.Trim().ToUpperInvariant());
+    // Customer funding stays in the transfer source currency. Recipient
+    // settlement spends the already funded provider wallet in the payout currency.
+    public static string RecipientPayoutWalletCurrency(string payoutCurrency) =>
+        Find(payoutCurrency)?.CurrencyCode
+        ?? throw new InvalidOperationException("This currency has no implemented Blaaiz fiat payout wallet.");
+
     public static bool SupportsCountry(string? currency, string? country)
     {
         var requirement = Find(currency);

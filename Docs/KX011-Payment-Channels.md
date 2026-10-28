@@ -40,7 +40,7 @@ Prepare the required countries and audiences before activation. The FIRST activa
 Business: open Business wallets, select a wallet and choose Deposit. Mobile: install the new staging build, open a wallet and Add money. A browser refresh does not update an installed mobile binary. New bank-account deposits do not appear in a transfer-specific fixed-amount checkout; fund the wallet first and then pay from it.
 
 ### Separate payout routing
-Withdrawal configuration governs the existing remittance transfer payout, not a new cash-out-from-any-wallet screen. Country means recipient destination. The configured funding wallet must match the transfer source asset. Routes are ranked by display order; the saved payout keeps its selected route. Current executable payouts are NGN bank transfer and CAD Interac only.
+Withdrawal configuration governs recipient transfer payout routing. Country means recipient destination. The configured provider payout wallet must match the recipient receiving asset. CAD to NGN uses the NGN Blaaiz wallet; NGN to CAD uses the CAD Blaaiz wallet. Customer source-currency funding and the agreed conversion stay on the original transfer. Routes are ranked by display order, and a saved payout retains its selected wallet. Implemented recipient rails are NGN bank transfer, CAD Interac, USD ACH/Wire, GBP bank transfer and EUR SEPA; each still requires current provider and Admin readiness.
 
 ### Warnings
 Blaaiz only. No Flutterwave or other-provider integration is included.

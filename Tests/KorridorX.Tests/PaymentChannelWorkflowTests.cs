@@ -4,6 +4,7 @@ using KorridorX.Dtos.PaymentChannels;
 using KorridorX.Models.Enums;
 using KorridorX.Models.Payments;
 using KorridorX.Models.Providers;
+using KorridorX.Models.Transfers;
 using KorridorX.Services.PaymentChannels;
 using KorridorX.Services.Payments;
 using KorridorX.Services.Providers;
@@ -99,6 +100,56 @@ public sealed class PaymentChannelWorkflowTests(ReleaseCandidateDatabaseFixture 
         await Assert.ThrowsAsync<InvalidOperationException>(() => service.ValidateInitiationAsync("Collection", id, default));
         Assert.Equal(wallet.ProviderWalletId, (await db.PaymentChannelSelections.SingleAsync(x => x.OperationId == id)).ProviderWalletId);
     }
+
+    [DatabaseIntegrationFact]
+    public Task CAD_to_NGN_uses_the_existing_NGN_bank_payout_wallet() =>
+        CheckDestinationWalletRouteAsync("CAD", "NGN", "NG", "bank-payout", PaymentMethod.BankTransfer);
+
+    [DatabaseIntegrationFact]
+    public Task NGN_to_CAD_uses_the_existing_CAD_Interac_payout_wallet() =>
+        CheckDestinationWalletRouteAsync("NGN", "CAD", "CA", "interac-payout", PaymentMethod.Interac);
+
+    private async Task CheckDestinationWalletRouteAsync(
+        string source, string destination, string country, string capability, PaymentMethod method)
+    {
+        await using var scope = fixture.Factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var resolver = new Resolver();
+        var (service, wallet) = await Setup(db, resolver);
+        wallet.AssetCode = destination;
+        wallet.PayoutEnabled = true;
+        await db.SaveChangesAsync();
+        var request = new SavePaymentChannelRequest(null, wallet.Id, destination, country,
+            PaymentChannelDirection.Withdrawal, capability, "Receiving-currency route", "",
+            true, true, true, PaymentChannelStatus.Active, 10, 0m, null, "Destination-wallet regression fixture.");
+        var route = await service.SaveAsync(null, Guid.NewGuid(), request, default);
+        var transfer = new Transfer { SourceCurrencyCode = source, DestinationCurrencyCode = destination,
+            DestinationCountryCode = country, DestinationAmount = 8m };
+        var choice = await service.ResolvePayoutAsync(transfer, null, default, method);
+        Assert.NotNull(choice);
+        Assert.Equal(route.Id, choice.Channel.Id);
+        Assert.Equal(destination, choice.Wallet.AssetCode);
+
+        var sourceWallet = new ProviderWalletConfiguration {
+            ProviderCode = "BLAAIZ", Environment = resolver.EnvironmentName,
+            ProviderWalletId = "pc-source-" + Guid.NewGuid().ToString("N"),
+            AssetCode = source, NetworkCode = "", DisplayName = "Sending-currency wallet",
+            IsActive = true, PayoutEnabled = true, VerifiedAt = DateTime.UtcNow,
+            VerifiedConnectionKey = resolver.ConnectionKey };
+        db.ProviderWalletConfigurations.Add(sourceWallet);
+        await db.SaveChangesAsync();
+        var draft = await service.SaveAsync(null, Guid.NewGuid(), request with {
+            ProviderWalletConfigurationId = sourceWallet.Id, Status = PaymentChannelStatus.Draft
+        }, default);
+        Assert.False(draft.Ready);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => service.SetStatusAsync(draft.Id,
+            Guid.NewGuid(), new(draft.Revision, PaymentChannelStatus.Active, "Invalid currency fixture."), default));
+        await service.SetStatusAsync(route.Id, Guid.NewGuid(),
+            new(route.Revision, PaymentChannelStatus.Paused, "Pause fixture."), default);
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            service.ResolvePayoutAsync(transfer, null, default, method));
+    }
+
     [DatabaseIntegrationFact] public async Task Paged_admin_list_has_actual_totals()
     {
         await using var scope = fixture.Factory.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();

@@ -126,6 +126,9 @@ public class TransferService : ITransferService
             throw new InvalidOperationException(
                 "No supported recipient delivery method is configured for this destination.");
 
+        PaymentMethod? requiredPayoutMethod = deliveryMode == RecipientDeliveryPolicy.EmailTransfer
+            ? PaymentMethod.Interac : null;
+
         if (deliveryMode == RecipientDeliveryPolicy.EmailTransfer)
         {
             if (!string.Equals(quote.ProviderCode, "Blaaiz", StringComparison.OrdinalIgnoreCase))
@@ -189,18 +192,12 @@ public class TransferService : ITransferService
                 throw new InvalidOperationException("Recipient bank account is not valid for this transfer.");
             }
 
+            requiredPayoutMethod = RecipientPayoutPolicy.Method(bankAccount);
             if (BlaaizCurrencyRequirements.IsForeignBank(bankAccount.CurrencyCode))
             {
                 if (!string.Equals(quote.ProviderCode, "Blaaiz", StringComparison.OrdinalIgnoreCase))
                     throw new InvalidOperationException("This bank method requires Blaaiz.");
                 RecipientPayoutPolicy.Validate(bankAccount);
-                var channels = _paymentChannels
-                    ?? throw new InvalidOperationException("Payout channel readiness is unavailable.");
-                var choices = await channels.EligibleAsync(quote.DestinationCountryCode,
-                    quote.DestinationCurrencyCode, false, PaymentChannelDirection.Withdrawal,
-                    quote.SourceCurrencyCode, quote.DestinationAmount, ct);
-                if (!choices.Any(x => x.Capability.PaymentMethod == RecipientPayoutPolicy.Method(bankAccount)))
-                    throw new InvalidOperationException("No active payout channel matches this recipient method, source currency and amount. No transfer funds were reserved.");
             }
             else if (!await IsBankDestinationVerifiedForProviderAsync(
                     PayoutDestinationType.RecipientBankAccount,
@@ -229,6 +226,34 @@ public class TransferService : ITransferService
             if (!mobileWalletExists)
             {
                 throw new InvalidOperationException("Recipient mobile wallet is not valid for this transfer.");
+            }
+        }
+
+        // Reuse dispatch eligibility before creating a transfer or reserving
+        // customer money, including managed CAD/NGN recipient routes.
+        if (string.Equals(quote.ProviderCode, "Blaaiz", StringComparison.OrdinalIgnoreCase))
+        {
+            var foreignBank = BlaaizCurrencyRequirements.IsForeignBank(quote.DestinationCurrencyCode);
+            if (_paymentChannels is null && foreignBank)
+                throw new InvalidOperationException("Payout channel readiness is unavailable.");
+            if (_paymentChannels is not null)
+            {
+                try
+                {
+                    await _paymentChannels.ResolvePayoutAsync(new Transfer
+                    {
+                        SourceCurrencyCode = quote.SourceCurrencyCode,
+                        DestinationCurrencyCode = quote.DestinationCurrencyCode,
+                        DestinationCountryCode = quote.DestinationCountryCode,
+                        DestinationAmount = quote.DestinationAmount
+                    }, null, ct, requiredPayoutMethod, requireManagedChannel: foreignBank);
+                }
+                catch (InvalidOperationException ex)
+                {
+                    throw new InvalidOperationException(
+                        $"Recipient delivery from {quote.SourceCurrencyCode} to {quote.DestinationCurrencyCode} is currently unavailable. " +
+                        "No wallet funds were reserved. Contact support with code KX-PAYOUT-005.", ex);
+                }
             }
         }
 

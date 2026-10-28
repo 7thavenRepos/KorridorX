@@ -1,4 +1,17 @@
 using System.Net;
+using System.Reflection;
+using KorridorX.Configuration;
+using KorridorX.Providers.Remittance;
+using KorridorX.Services.BusinessFunding;
+using KorridorX.Services.Compliance;
+using KorridorX.Services.PaymentChannels;
+using KorridorX.Services.Providers;
+using KorridorX.Services.References;
+using KorridorX.Services.Security;
+using KorridorX.Services.Transfers;
+using Microsoft.Extensions.FileProviders;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Options;
 using System.Net.Http.Json;
 using KorridorX.Data;
 using KorridorX.Dtos.Auth;
@@ -279,7 +292,68 @@ public async Task Cancellation_is_blocked_once_payout_record_exists_and_hold_is_
     Assert.Equal(0m, reservation.ReleasedAmount);
 }
 
-    private async Task<TransferSetup> CreateTransferAsync(HttpClient client, decimal walletBalance)
+    [DatabaseIntegrationFact]
+    public async Task Managed_unavailable_NGN_route_is_rejected_before_wallet_reservation()
+    {
+        using var client = _fixture.CreateClient();
+        var setup = await PrepareTransferAsync(client, 500m);
+        var channelId = Guid.NewGuid();
+        var walletConfigurationId = Guid.NewGuid();
+        try
+        {
+            await using (var scope = _fixture.Factory.Services.CreateAsyncScope())
+            {
+                var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+                var resolver = scope.ServiceProvider.GetRequiredService<IProviderWalletResolver>();
+                db.ProviderWalletConfigurations.Add(new ProviderWalletConfiguration {
+                    Id = walletConfigurationId, ProviderCode = "BLAAIZ", Environment = resolver.EnvironmentName,
+                    AssetCode = "NGN", NetworkCode = "", DisplayName = "NGN preflight fixture",
+                    ProviderWalletId = "preflight-" + Guid.NewGuid().ToString("N"), IsActive = true,
+                    PayoutEnabled = true, VerifiedAt = DateTime.UtcNow, VerifiedConnectionKey = resolver.ConnectionKey });
+                db.PaymentChannels.Add(new PaymentChannel {
+                    Id = channelId, ProviderCode = "BLAAIZ", Environment = resolver.EnvironmentName,
+                    ProviderWalletConfigurationId = walletConfigurationId, AssetCode = "NGN", CountryCode = "NG",
+                    Direction = PaymentChannelDirection.Withdrawal, CapabilityCode = "bank-payout",
+                    DisplayName = "Paused NGN preflight fixture", IndividualEnabled = true,
+                    HasBeenActivated = true, Status = PaymentChannelStatus.Paused,
+                    ProviderCapabilityConfirmed = true });
+                await db.SaveChangesAsync();
+            }
+            var response = await client.PostJsonAsync("/api/transfers", setup.Request);
+            Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+            Assert.Contains("KX-PAYOUT-005", await response.Content.ReadAsStringAsync());
+            await using var checkScope = _fixture.Factory.Services.CreateAsyncScope();
+            var checkDb = checkScope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var wallet = await checkDb.FinancialAccounts.AsNoTracking().SingleAsync(x => x.Id == setup.WalletId);
+            Assert.Equal(500m, wallet.AvailableBalance);
+            Assert.Equal(0m, wallet.HeldBalance);
+            Assert.False(await checkDb.Transfers.AnyAsync(x => x.TransferQuoteId == setup.QuoteId));
+            Assert.False(await checkDb.FinancialReservations.AnyAsync(x => x.FinancialAccountId == setup.WalletId));
+            Assert.False((await checkDb.TransferQuotes.AsNoTracking().SingleAsync(x => x.Id == setup.QuoteId)).IsUsed);
+        }
+        finally
+        {
+            await using var cleanupScope = _fixture.Factory.Services.CreateAsyncScope();
+            var cleanup = cleanupScope.ServiceProvider.GetRequiredService<AppDbContext>();
+            await cleanup.PaymentChannels.Where(x => x.Id == channelId).ExecuteDeleteAsync();
+            await cleanup.ProviderWalletConfigurations.Where(x => x.Id == walletConfigurationId).ExecuteDeleteAsync();
+        }
+    }
+
+    private async Task<TransferSetup> CreateTransferAsync(HttpClient client, decimal walletBalance,
+        string sourceCurrency = "USD", string sourceCountry = "US", decimal sourceAmount = 100m)
+    {
+        var setup = await PrepareTransferAsync(client, walletBalance, sourceCurrency, sourceCountry, sourceAmount);
+        var transferResponse = await client.PostJsonAsync("/api/transfers", setup.Request);
+        await transferResponse.EnsureSuccessWithBodyAsync();
+        Assert.Equal(HttpStatusCode.OK, transferResponse.StatusCode);
+        var transferEnvelope = await transferResponse.ReadApiResponseAsync<TransferDetailsDto>();
+        var details = Assert.IsType<TransferDetailsDto>(transferEnvelope.Data);
+        return new TransferSetup(setup.UserId, setup.WalletId, details.Transfer);
+    }
+
+    private async Task<PreparedTransfer> PrepareTransferAsync(HttpClient client, decimal walletBalance,
+        string sourceCurrency = "USD", string sourceCountry = "US", decimal sourceAmount = 100m)
     {
         var email = $"wallet-transfer-{Guid.NewGuid():N}@example.test";
         var (registration, authentication) = await client.RegisterConfirmAndLoginAsync(
@@ -290,7 +364,7 @@ public async Task Cancellation_is_blocked_once_payout_record_exists_and_hold_is_
                 email,
                 "ReleaseCandidate!123",
                 "+12145550101",
-                "US",
+                sourceCountry,
                 UserType.Consumer));
         client.UseBearerToken(authentication.AccessToken);
 
@@ -310,7 +384,7 @@ public async Task Cancellation_is_blocked_once_payout_record_exists_and_hold_is_
 
         var walletResponse = await client.PostJsonAsync(
             "/api/wallets",
-            new CreateConsumerWalletRequestDto("USD"));
+            new CreateConsumerWalletRequestDto(sourceCurrency));
         Assert.Equal(HttpStatusCode.OK, walletResponse.StatusCode);
         var walletEnvelope = await walletResponse.ReadApiResponseAsync<ConsumerWalletDto>();
         var walletDto = Assert.IsType<ConsumerWalletDto>(walletEnvelope.Data);
@@ -384,35 +458,131 @@ public async Task Cancellation_is_blocked_once_payout_record_exists_and_hold_is_
             "/api/transfer-quotes",
             new CreateTransferQuoteRequestDto
             {
-                SourceCountryCode = "US",
+                SourceCountryCode = sourceCountry,
                 DestinationCountryCode = "NG",
-                SourceCurrencyCode = "USD",
+                SourceCurrencyCode = sourceCurrency,
                 DestinationCurrencyCode = "NGN",
                 TransferType = TransferType.ConsumerToConsumer,
-                SourceAmount = 100m
+                SourceAmount = sourceAmount
             });
         Assert.Equal(HttpStatusCode.OK, quoteResponse.StatusCode);
         var quoteEnvelope = await quoteResponse.ReadApiResponseAsync<TransferQuoteDto>();
         var quote = Assert.IsType<TransferQuoteDto>(quoteEnvelope.Data);
 
-        var transferResponse = await client.PostJsonAsync(
-            "/api/transfers",
-            new CreateTransferRequestDto(
-                quote.Id,
-                recipient.Id,
-                bankAccount.Id,
-                null,
-                TransferPurpose.FamilySupport,
-                "Consumer wallet funding integration test",
-                "2468"));
-
-        await transferResponse.EnsureSuccessWithBodyAsync();
-        Assert.Equal(HttpStatusCode.OK, transferResponse.StatusCode);
-        var transferEnvelope = await transferResponse.ReadApiResponseAsync<TransferDetailsDto>();
-        var details = Assert.IsType<TransferDetailsDto>(transferEnvelope.Data);
-
-        return new TransferSetup(registration.UserId, walletDto.Id, details.Transfer);
+        return new PreparedTransfer(registration.UserId, walletDto.Id, quote.Id,
+            new CreateTransferRequestDto(quote.Id, recipient.Id, bankAccount.Id, null,
+                TransferPurpose.FamilySupport, "Consumer wallet funding integration test", "2468"));
     }
+
+
+    [DatabaseIntegrationFact]
+    public async Task CAD_customer_reservation_settles_once_through_the_NGN_provider_wallet()
+    {
+        using var client = _fixture.CreateClient();
+        var setup = await CreateTransferAsync(client, 500m, "CAD", "CA", 5m);
+        await using var scope = _fixture.Factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var options = Options.Create(new BlaaizOptions { IsEnabled = true,
+            BaseUrl = "https://blaaiz.example.test", ClientId = "destination-wallet-fixture" });
+        var environment = new DestinationEnvironment("Destination-" + Guid.NewGuid().ToString("N"));
+        var resolver = new ProviderWalletResolver(db, options, environment);
+        var wallet = new ProviderWalletConfiguration { ProviderCode = "BLAAIZ", Environment = environment.EnvironmentName,
+            ProviderWalletId = "ngn-settlement-" + Guid.NewGuid().ToString("N"), AssetCode = "NGN", NetworkCode = "",
+            DisplayName = "NGN settlement fixture", IsActive = true, PayoutEnabled = true,
+            VerifiedAt = DateTime.UtcNow, VerifiedConnectionKey = resolver.ConnectionKey };
+        db.ProviderWalletConfigurations.Add(wallet);
+        await db.SaveChangesAsync();
+        var channels = new PaymentChannelService(db, resolver, options, new CollectionPaymentMethodPolicy());
+        await channels.SaveAsync(null, Guid.NewGuid(), new(null, wallet.Id, "NGN", "NG",
+            PaymentChannelDirection.Withdrawal, "bank-payout", "NGN settlement", "", true, false, true,
+            PaymentChannelStatus.Active, 10, 0m, null, "Destination-wallet regression fixture."), default);
+        var remittance = DispatchProxy.Create<IRemittanceProvider, DestinationProviderProxy>();
+        var provider = (DestinationProviderProxy)(object)remittance;
+        var liquidity = new DestinationLiquidity();
+        var service = new PayoutService(db,
+            scope.ServiceProvider.GetRequiredService<IReferenceGenerator>(),
+            scope.ServiceProvider.GetRequiredService<IPayoutStatusService>(),
+            remittance, new DestinationCompliance(),
+            scope.ServiceProvider.GetRequiredService<ITransferStatusService>(),
+            scope.ServiceProvider.GetRequiredService<IBusinessFundingService>(),
+            scope.ServiceProvider.GetRequiredService<ITransferRiskService>(),
+            scope.ServiceProvider.GetRequiredService<IComplianceScreeningService>(),
+            scope.ServiceProvider.GetRequiredService<IOutboundFundsRestrictionService>(),
+            resolver, channels, liquidity);
+        await service.DispatchForTransferAsync(setup.Transfer.Id, "DestinationWalletFixture", setup.UserId);
+        await service.DispatchForTransferAsync(setup.Transfer.Id, "DestinationWalletFixture", setup.UserId);
+
+        Assert.Equal(1, provider.Calls);
+        var sent = Assert.IsType<RemittancePayoutRequest>(provider.Request);
+        Assert.Equal("NGN", sent.SourceCurrencyCode);
+        Assert.Equal("NGN", sent.DestinationCurrencyCode);
+        Assert.Equal(wallet.ProviderWalletId, sent.WalletId);
+        Assert.Equal(setup.Transfer.DestinationAmount, sent.DestinationAmount);
+        Assert.Null(sent.FromAmount);
+        Assert.Equal("NGN", liquidity.Currency);
+        Assert.Equal(wallet.ProviderWalletId, liquidity.WalletId);
+        db.ChangeTracker.Clear();
+        var customerWallet = await db.FinancialAccounts.SingleAsync(x => x.Id == setup.WalletId);
+        var reservation = await db.FinancialReservations.SingleAsync(x =>
+            x.RelatedEntityType == "Transfer" && x.RelatedEntityId == setup.Transfer.Id && !x.IsDeleted);
+        var transfer = await db.Transfers.SingleAsync(x => x.Id == setup.Transfer.Id);
+        Assert.Equal("CAD", customerWallet.AssetCode);
+        Assert.Equal(500m - setup.Transfer.TotalPayableAmount, customerWallet.SettledBalance);
+        Assert.Equal(customerWallet.SettledBalance, customerWallet.AvailableBalance);
+        Assert.Equal(0m, customerWallet.HeldBalance);
+        Assert.Equal(setup.Transfer.TotalPayableAmount, reservation.CapturedAmount);
+        Assert.Equal(FinancialReservationStatus.Captured, reservation.Status);
+        Assert.Equal("CAD", transfer.SourceCurrencyCode);
+        Assert.Equal(setup.Transfer.CustomerRate, transfer.CustomerRate);
+        Assert.Equal(TransferStatus.Completed, transfer.Status);
+        Assert.Equal(wallet.Id, (await db.ProviderWalletSelections.SingleAsync(x =>
+            x.OperationType == "Payout" && x.OperationId == sent.PayoutId)).WalletConfigurationId);
+        Assert.Equal(1, await db.PayoutAttempts.CountAsync(x => x.PayoutId == sent.PayoutId));
+    }
+
+    public class DestinationProviderProxy : DispatchProxy
+    {
+        public RemittancePayoutRequest? Request { get; private set; }
+        public int Calls { get; private set; }
+        protected override object? Invoke(MethodInfo? method, object?[]? args)
+        {
+            if (method?.Name == "get_ProviderName") return "Blaaiz";
+            if (method?.Name == "get_ProviderCode") return ProviderCode.Blaaiz;
+            if (method?.Name == nameof(IRemittanceProvider.InitiatePayoutAsync))
+            {
+                Calls++;
+                Request = (RemittancePayoutRequest)args![0]!;
+                return Task.FromResult(new RemittancePayoutResult("settled-" + Guid.NewGuid().ToString("N"),
+                    "fixture-reference", "SUCCESSFUL", Request.DestinationCurrencyCode, Request.DestinationAmount,
+                    null, null, DateTime.UtcNow, "{}", Guid.NewGuid()));
+            }
+            throw new NotSupportedException("No external provider operations are allowed in this fixture.");
+        }
+    }
+    private sealed class DestinationCompliance : IComplianceGateService
+    {
+        public Task<ComplianceGateResult> EnsureCanInitiateMoneyMovementAsync(Guid a, ProviderCode b,
+            CancellationToken ct = default) => Task.FromResult(new ComplianceGateResult("fixture-customer", "VERIFIED"));
+        public Task<ComplianceGateResult> EnsureBusinessCanInitiateMoneyMovementAsync(Guid a, ProviderCode b,
+            CancellationToken ct = default) => throw new NotSupportedException();
+    }
+    private sealed class DestinationLiquidity : IProviderPayoutLiquidityService
+    {
+        public string? Currency { get; private set; }
+        public string? WalletId { get; private set; }
+        public Task EnsureAvailableAsync(string provider, string currency, decimal amount,
+            string? walletId = null, CancellationToken ct = default)
+        { Currency = currency; WalletId = walletId; return Task.CompletedTask; }
+    }
+    private sealed class DestinationEnvironment(string name) : IHostEnvironment
+    {
+        public string EnvironmentName { get; set; } = name;
+        public string ApplicationName { get; set; } = "KorridorX.Tests";
+        public string ContentRootPath { get; set; } = AppContext.BaseDirectory;
+        public IFileProvider ContentRootFileProvider { get; set; } = new NullFileProvider();
+    }
+
+    private sealed record PreparedTransfer(Guid UserId, Guid WalletId, Guid QuoteId, CreateTransferRequestDto Request);
 
     private sealed record TransferSetup(
         Guid UserId,

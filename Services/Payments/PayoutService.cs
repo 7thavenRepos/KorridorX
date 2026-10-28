@@ -223,18 +223,17 @@ public class PayoutService : IPayoutService
         if (!string.Equals(transfer.ProviderCode, _remittanceProvider.ProviderName, StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException("The selected transfer provider is not the active remittance adapter.");
 
-        // The Blaaiz payout payload still spends from the GBP/source wallet.
-        // Independently verify the NGN/destination provider wallet has sufficient
-        // payout liquidity before any provider POST (same-currency uses its selected wallet).
+        // Customer source-currency funding and recipient settlement are distinct.
+        // Spend the selected receiving-currency wallet at Blaaiz; the customer's
+        // source reservation and agreed conversion remain on the transfer.
+        var payoutWalletCurrency = BlaaizCurrencyRequirements.RecipientPayoutWalletCurrency(transfer.DestinationCurrencyCode);
         _dispatchStage = "provider_wallet";
         var walletId = await _wallets.SelectAsync("Payout", payout.Id, _remittanceProvider.ProviderName,
-            transfer.SourceCurrencyCode, null, ProviderWalletResolver.Payout, payout.Attempts.Count > 0, ct);
-        var sameCurrency = string.Equals(transfer.SourceCurrencyCode,
-            transfer.DestinationCurrencyCode, StringComparison.OrdinalIgnoreCase);
+            payoutWalletCurrency, null, ProviderWalletResolver.Payout, payout.Attempts.Count > 0, ct);
         _dispatchStage = "provider_liquidity";
         await _liquidity.EnsureAvailableAsync(transfer.ProviderCode,
             transfer.DestinationCurrencyCode, transfer.DestinationAmount,
-            sameCurrency ? walletId : null, ct);
+            walletId, ct);
 
         var sanitizedRequest = JsonSerializer.Serialize(new
         {
@@ -245,6 +244,7 @@ public class PayoutService : IPayoutService
             transferReference = transfer.Reference,
             transferOwnerType = transfer.BusinessProfileId.HasValue ? "business" : "individual",
             sourceCurrency = transfer.SourceCurrencyCode,
+            providerFundingCurrency = payoutWalletCurrency,
             destinationCurrency = transfer.DestinationCurrencyCode,
             amount = transfer.DestinationAmount,
             paymentMethod = paymentMethod.ToString(),
@@ -319,8 +319,8 @@ public class PayoutService : IPayoutService
                     payout.Id,
                     paymentMethod,
                     transfer.DestinationAmount,
-                    transfer.SourceCurrencyCode,
-                    transfer.DestinationCurrencyCode,
+                    payoutWalletCurrency,
+                    payoutWalletCurrency,
                     payoutProviderCustomerId,
                     walletId,
                     destination.FirstName,

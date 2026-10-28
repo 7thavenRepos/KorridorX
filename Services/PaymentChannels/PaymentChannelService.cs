@@ -1,4 +1,5 @@
 using System.Text.Json;
+using KorridorX.Providers.Remittance.Blaaiz;
 using KorridorX.Configuration;
 using KorridorX.Data;
 using KorridorX.Dtos.PaymentChannels;
@@ -143,7 +144,12 @@ public sealed class PaymentChannelService(AppDbContext db, IProviderWalletResolv
         {
             if (wallet.VerifiedAt is null || wallet.VerifiedConnectionKey != wallets.ConnectionKey) errors.Add("Verify the wallet for the current provider connection.");
             if (row.Direction == PaymentChannelDirection.Deposit && (!wallet.CollectionEnabled || wallet.AssetCode != row.AssetCode)) errors.Add("Enable collections on a wallet with the deposit asset.");
-            if (row.Direction == PaymentChannelDirection.Withdrawal && !wallet.PayoutEnabled) errors.Add("Enable payouts on the funding wallet.");
+            if (row.Direction == PaymentChannelDirection.Withdrawal)
+            {
+                if (!wallet.PayoutEnabled) errors.Add("Enable payouts on the payout wallet.");
+                if (wallet.AssetCode != row.AssetCode)
+                    errors.Add("The provider payout wallet must use the recipient receiving currency (" + row.AssetCode + ").");
+            }
             if (row.CapabilityCode == BlaaizChannelCapabilities.InteracRequest && !wallet.DefaultForCollection) errors.Add("Interac requests require the connection's default CAD collection wallet.");
         }
         var asset = await db.Assets.AsNoTracking().SingleOrDefaultAsync(x => x.Code == row.AssetCode, ct);
@@ -254,16 +260,19 @@ public sealed class PaymentChannelService(AppDbContext db, IProviderWalletResolv
             throw new InvalidOperationException("The saved channel route does not match its immutable selection.");
     }
 
-    public async Task<PaymentChannelChoice?> ResolvePayoutAsync(Transfer transfer, Payout? payout, CancellationToken ct, PaymentMethod? requiredMethod = null)
+    public async Task<PaymentChannelChoice?> ResolvePayoutAsync(Transfer transfer, Payout? payout, CancellationToken ct, PaymentMethod? requiredMethod = null,
+        bool requireManagedChannel = false)
     {
         if (payout?.PaymentChannelId is not null)
         {
             await ValidateInitiationAsync("Payout", payout.Id, ct);
             return null; // Use the existing snapshot and PaymentMethod; wallet resolver enforces the saved route.
         }
-        if (payout is not null || !await IsManagedAsync(transfer.DestinationCurrencyCode, PaymentChannelDirection.Withdrawal, ct)) return null;
+        if (payout is not null) return null;
+        if (!requireManagedChannel && !await IsManagedAsync(transfer.DestinationCurrencyCode, PaymentChannelDirection.Withdrawal, ct)) return null;
+        var payoutWalletCurrency = BlaaizCurrencyRequirements.RecipientPayoutWalletCurrency(transfer.DestinationCurrencyCode);
         var candidates = await EligibleAsync(transfer.DestinationCountryCode, transfer.DestinationCurrencyCode,
-            transfer.BusinessProfileId.HasValue, PaymentChannelDirection.Withdrawal, transfer.SourceCurrencyCode, transfer.DestinationAmount, ct);
+            transfer.BusinessProfileId.HasValue, PaymentChannelDirection.Withdrawal, payoutWalletCurrency, transfer.DestinationAmount, ct);
         return candidates.FirstOrDefault(x => !requiredMethod.HasValue || x.Capability.PaymentMethod == requiredMethod.Value)
             ?? throw new InvalidOperationException("No active payout channel matches this destination, selected method, audience, funding asset and amount. Review Payment channels in Admin.");
     }
