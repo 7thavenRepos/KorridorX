@@ -11,15 +11,14 @@ public sealed class HouseFundingPositionDto
     public DateTime? ProviderObservedAt { get; set; }
     public decimal CustomerLiabilities { get; set; }
     public decimal CustomerHeldIncluded { get; set; }
-    public decimal UncreditedCustomerDeposits { get; set; }
-    public int UncreditedDepositCount { get; set; }
-    public int UnclassifiedIncomingReceiptCount { get; set; }
-    public decimal OtherLiabilities { get; set; }
-    public decimal TotalLiabilities => CustomerLiabilities + UncreditedCustomerDeposits + OtherLiabilities;
+    // Customer settled balances include available funds and holds exactly once.
+    public decimal TotalLiabilities => CustomerLiabilities;
     public decimal NetCompanyFunds => ProviderBalance - TotalLiabilities;
     public decimal RecordedCompanyFunds { get; set; }
     public decimal RecordedHouseFunds { get; set; }
-    public decimal UnallocatedCompanyFunds => NetCompanyFunds - RecordedCompanyFunds;
+    public decimal OtherAllocatedFunds { get; set; }
+    public decimal TotalRecordedAllocations => RecordedCompanyFunds + OtherAllocatedFunds;
+    public decimal UnallocatedCompanyFunds => NetCompanyFunds - TotalRecordedAllocations;
     public decimal FundingLimit => Warnings.Count == 0 ? Math.Max(0m, UnallocatedCompanyFunds) : 0m;
     public int DecimalPlaces { get; set; } = 2;
     public List<string> Warnings { get; set; } = [];

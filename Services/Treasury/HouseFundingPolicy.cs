@@ -30,9 +30,9 @@ public static class HouseFundingPolicy
         }
         else
         {
-            // Positive settlement, suspense, clearing and other allocations remain
-            // reserved until reconciled; negative clearing is not extra company cash.
-            position.OtherLiabilities += positiveSettled;
+            // Existing internal balances are allocations of the same provider cash.
+            // They limit a new credit; they do not change Blaaiz minus customer balances.
+            position.OtherAllocatedFunds += positiveSettled;
         }
         if (account.AccountType != FinancialAccountType.ProviderClearing &&
             (account.SettledBalance < 0m || account.AvailableBalance < 0m || account.HeldBalance < 0m ||
@@ -47,7 +47,7 @@ public static class HouseFundingPolicy
         if (amount <= 0m || decimal.Round(amount, Math.Clamp(position.DecimalPlaces, 0, 18)) != amount)
             throw new InvalidOperationException("Enter a positive amount using the currency's configured precision.");
         if (amount > position.FundingLimit)
-            throw new InvalidOperationException("The amount exceeds unallocated company funds after liabilities and existing company allocations.");
+            throw new InvalidOperationException("The amount exceeds the house position remaining after existing internal allocations.");
     }
     public static void StageFunding(FinancialAccount house, decimal amount,
         LedgerTransaction ledger, Guid actor, DateTime now)

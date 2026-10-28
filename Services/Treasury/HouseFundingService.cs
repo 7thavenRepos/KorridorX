@@ -16,11 +16,11 @@ using Microsoft.EntityFrameworkCore;
 
 namespace KorridorX.Services.Treasury;
 
-public sealed partial class HouseFundingService(AppDbContext db, ITreasuryService treasury,
+public sealed class HouseFundingService(AppDbContext db, ITreasuryService treasury,
     IProviderWalletResolver connection, IAuditService audit, IDataProtectionProvider protection,
     TimeProvider? clock = null)
 {
-    private readonly IDataProtector _protector = protection.CreateProtector("KorridorX.HouseCompanyFunding.v1");
+    private readonly IDataProtector _protector = protection.CreateProtector("KorridorX.HouseCompanyFunding.v2");
     private DateTimeOffset Now => (clock ?? TimeProvider.System).GetUtcNow();
     private string Scope => "CompanyHouseFunding:" + connection.EnvironmentName + ":" + Hash(connection.ConnectionKey)[..24];
 
@@ -41,12 +41,12 @@ public sealed partial class HouseFundingService(AppDbContext db, ITreasuryServic
         var assets = await db.Assets.AsNoTracking().Where(x => codes.Contains(x.Code) && x.Type == AssetType.Fiat)
             .Select(x => new { x.Code, x.DecimalPlaces, x.IsSupported }).ToListAsync(ct);
         var accounts = await db.FinancialAccounts.AsNoTracking().Where(x => codes.Contains(x.AssetCode)).ToListAsync(ct);
-        var deposits = await UncreditedDepositsAsync(ct);
+        // Blaaiz is the cash source of truth. Receipt history is reconciled in
+        // Provider operations and is not added again as a customer liability.
         var positions = new List<HouseFundingPositionDto>();
         foreach (var asset in assets.OrderBy(x => x.Code))
         {
-            var p = new HouseFundingPositionDto { AssetCode = asset.Code, DecimalPlaces = asset.DecimalPlaces,
-                UnclassifiedIncomingReceiptCount = deposits.Unclassified };
+            var p = new HouseFundingPositionDto { AssetCode = asset.Code, DecimalPlaces = asset.DecimalPlaces };
             var cash = wallets.Where(x => x.IsActive && x.ProviderCode.Equals("BLAAIZ", StringComparison.OrdinalIgnoreCase) &&
                 x.CurrencyCode.Equals(asset.Code, StringComparison.OrdinalIgnoreCase)).ToList();
             if (cash.Count == 0) HouseFundingPolicy.Warn(p, "Sync provider wallets to obtain a current Blaaiz balance for this currency.");
@@ -61,11 +61,6 @@ public sealed partial class HouseFundingService(AppDbContext db, ITreasuryServic
             }
             if (!asset.IsSupported) HouseFundingPolicy.Warn(p, "This currency is disabled in master data.");
             foreach (var account in accounts.Where(x => x.AssetCode == asset.Code)) HouseFundingPolicy.AddAccount(p, account);
-            var reserved = deposits.Items.Where(x => x.Asset == asset.Code).ToList();
-            p.UncreditedCustomerDeposits = reserved.Sum(x => x.Amount);
-            p.UncreditedDepositCount = reserved.Count;
-            if (deposits.Unquantified) HouseFundingPolicy.Warn(p, "An incoming receipt has no reliable amount or currency. Reconcile it in Provider operations before funding.");
-            if (deposits.LimitReached) HouseFundingPolicy.Warn(p, "The retained incoming-event queue needs reconciliation before funding.");
             positions.Add(p);
         }
         return positions;
@@ -74,7 +69,7 @@ public sealed partial class HouseFundingService(AppDbContext db, ITreasuryServic
     public async Task<HouseFundingPreviewDto> PreviewAsync(Guid actor, PreviewHouseFundingRequestDto request, CancellationToken ct = default)
     {
         RequireActor(actor);
-        var reference = Clean(request.FundingReference, 150, "company funding reference");
+        var reference = Clean(request.FundingReference, 150, "funding reference");
         var reason = Clean(request.Reason, 800, "funding reason");
         var house = await RequireHouseAsync(request.HouseAccountId, ct);
         var key = FundingKey(house.AssetCode, reference);
@@ -102,7 +97,7 @@ public sealed partial class HouseFundingService(AppDbContext db, ITreasuryServic
     {
         RequireActor(actor);
         if (!request.ConfirmedCompanyFunds)
-            throw new InvalidOperationException("Confirm that this amount is reconciled company-owned money, including review of incoming deposits and other obligations.");
+            throw new InvalidOperationException("Approve recording this amount as company house funding from the displayed Blaaiz balance after customer wallet liabilities.");
         var proof = ReadConfirmation(actor, request.PreviewToken);
         var key = FundingKey(proof.Asset, proof.FundingReference);
         var existing = await db.LedgerTransactions.AsNoTracking().Include(x => x.Postings).SingleOrDefaultAsync(x => x.IdempotencyScope == Scope && x.IdempotencyKey == key, ct);
@@ -135,8 +130,9 @@ public sealed partial class HouseFundingService(AppDbContext db, ITreasuryServic
                 OldValues: before, NewValues: new { house.SettledBalance, house.AvailableBalance, house.HeldBalance },
                 Metadata: new { proof.FundingReference, proof.Reason, proof.Amount, proof.Asset,
                     position.ProviderBalance, position.CustomerLiabilities, position.CustomerHeldIncluded,
-                    position.UncreditedCustomerDeposits, position.OtherLiabilities, position.RecordedCompanyFunds,
-                    position.UnclassifiedIncomingReceiptCount, Environment = connection.EnvironmentName,
+                    position.RecordedCompanyFunds, position.OtherAllocatedFunds, position.TotalRecordedAllocations,
+                    PositionBasis = "BLAAIZ_BALANCE_MINUS_CUSTOMER_WALLETS_INCLUDING_HOLDS",
+                    Environment = connection.EnvironmentName,
                     LedgerTransactionId = ledger.Id, CompanyOwnershipConfirmed = true }, UserId: actor));
             await db.SaveChangesAsync(ct);
             await tx.CommitAsync(ct);
@@ -182,8 +178,7 @@ public sealed partial class HouseFundingService(AppDbContext db, ITreasuryServic
             ledger.Postings.FirstOrDefault(x => x.Side == LedgerPostingSide.Credit && x.BalanceBucket == LedgerBalanceBucket.Available)?.AccountBalanceAfter ?? 0m, replay);
     private static string Fingerprint(HouseFundingPositionDto p, FinancialAccount house) => Hash(JsonSerializer.Serialize(new {
         p.AssetCode, Cash = DecimalText(p.ProviderBalance), Customers = DecimalText(p.CustomerLiabilities),
-        Holds = DecimalText(p.CustomerHeldIncluded), Deposits = DecimalText(p.UncreditedCustomerDeposits),
-        p.UncreditedDepositCount, p.UnclassifiedIncomingReceiptCount, Other = DecimalText(p.OtherLiabilities),
+        Holds = DecimalText(p.CustomerHeldIncluded), OtherAllocated = DecimalText(p.OtherAllocatedFunds),
         Allocated = DecimalText(p.RecordedCompanyFunds), house.Id, HouseAssetCode = house.AssetCode, house.OwnerId, house.OwnerType,
         house.Status, Settled = DecimalText(house.SettledBalance), Available = DecimalText(house.AvailableBalance),
         Held = DecimalText(house.HeldBalance) }));

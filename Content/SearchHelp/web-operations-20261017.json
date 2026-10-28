@@ -290,18 +290,18 @@
   {
     "slug": "kx009-house-account-funding",
     "portal": "admin",
-    "title": "Fund and reconcile company house liquidity",
-    "summary": "Use the existing Blaaiz balance sync, deduct customer and other identified liabilities per currency, then record reviewed company funds in an active house account.",
+    "title": "House position and funding from Blaaiz balances",
+    "summary": "Blaaiz is the cash source of truth. Deduct customer wallet balances, including holds once, to show the house position per currency.",
     "category": "Treasury",
     "pageRoute": "/admin/treasury",
     "keywords": [
       "house funding",
+      "house position",
       "master wallet",
       "Blaaiz balance",
-      "customer liabilities",
-      "uncredited deposit",
-      "company funds",
-      "insufficient liquidity",
+      "customer wallets",
+      "holds",
+      "opening deposit",
       "internal transfer"
     ],
     "adminRoles": [
@@ -313,44 +313,43 @@
     "businessRoles": [],
     "allowNoBusiness": false,
     "isPage": false,
-    "reviewedOn": "2026-10-27",
+    "reviewedOn": "2026-10-28",
     "prerequisites": [
-      "Operations can review the funding position; Admin or SuperAdmin can preview and confirm company funding.",
-      "Create an active Treasury/Platform-owned House account in the required currency through House accounts.",
-      "Reconcile company ownership and any obligations not represented in operational wallet balances before funding."
+      "Operations can review the position; Admin or SuperAdmin can preview and confirm funding.",
+      "Use an active Treasury/Platform-owned House account in the selected currency."
     ],
     "steps": [
       {
-        "title": "Refresh the provider balance",
-        "instruction": "Open Treasury and choose Sync provider wallets. The House wallet funding table uses the existing Blaaiz balance service and shows each supported fiat currency separately."
+        "title": "Refresh the source balance",
+        "instruction": "Open Treasury and choose Sync provider wallets. The existing Blaaiz service refreshes the current provider cash balance for each currency."
       },
       {
-        "title": "Read the funding position",
-        "instruction": "Net company funds equal Blaaiz cash minus customer settled balances, identified uncredited incoming deposits and other positive reserved internal balances. Customer settled balances already include holds. Existing house, treasury and revenue allocations reduce the amount available for new funding."
+        "title": "Read the house position",
+        "instruction": "House position equals Blaaiz cash minus customer wallet available balances and holds. Customer settled balances already include holds, so they are counted once. For example, NGN 519,500 at Blaaiz minus NGN 20,000 in customer wallets gives NGN 499,500 for the house."
       },
       {
-        "title": "Choose the right funding route",
-        "instruction": "For company money already recorded in Treasury, use Internal transfers in the same currency. For reconciled company cash held at Blaaiz but not yet recorded internally, choose Fund house and enter the house account, amount, company deposit or opening-balance approval reference, and reason."
+        "title": "Keep receipt history separate",
+        "instruction": "Unmatched receipts and an external opening deposit are not deducted again from this calculation. Review incoming receipt history through Provider operations. Refresh the position after a customer wallet credit or other confirmed balance change."
       },
       {
-        "title": "Preview and confirm once",
-        "instruction": "Preview refreshes Blaaiz again and checks the available company amount. Review incoming receipts, fees and other obligations, confirm company ownership, then choose Confirm house funding. The server refreshes balances, rejects a changed or expired preview and records a balanced ledger transaction with an audit trail."
+        "title": "Allocate existing cash once",
+        "instruction": "The House position is separate from Already allocated. Existing house, treasury, revenue and other positive internal allocations reduce Available to allocate to avoid recording the same cash twice. Use Internal transfers to move already recorded Treasury funds."
       },
       {
-        "title": "Check the posted result",
-        "instruction": "Retain the ledger reference and check the house balance. Reusing the same funding reference and details returns the recorded operation rather than crediting it twice. An existing reference with different details requires reconciliation."
+        "title": "Preview and confirm funding",
+        "instruction": "Choose Fund house, enter the amount, a unique funding reference and reason, then preview. Confirm the allocation after reviewing the current position. Preview and confirmation both refresh Blaaiz; changed or expired previews must be renewed. Retain the ledger reference and reuse the original details to check an uncertain result."
       }
     ],
-    "expectedResult": "The approved company-owned amount becomes available in the selected house account, with an equal external debit and available credit and a retained ledger/audit reference. No provider transfer is initiated.",
+    "expectedResult": "Each currency shows current Blaaiz cash minus customer wallet balances including holds once. An approved new allocation is recorded with balanced ledger postings and an audit trail; the calculation itself makes no posting.",
     "warnings": [
-      "A provider balance or calculated surplus alone does not prove company ownership. Customer funds, held balances, unmatched incoming deposits and other obligations must remain protected.",
-      "Stale or missing provider balances, invalid ledger balances and incoming receipts without a reliable amount or currency block funding until reconciled.",
-      "Use Internal transfers for already recorded company funds. Provisioning starts at zero and does not fund an account. Never edit database balances."
+      "Customer balances and holds are included once. Keep currencies separate; a CAD balance does not fund an NGN house account.",
+      "Missing or stale provider balances and invalid internal ledger balances must be resolved before a new funding credit.",
+      "An already recorded internal balance must be moved through Internal transfers rather than credited again. Never edit database balances."
     ],
     "troubleshooting": [
-      "Sync first if the balance is missing or stale. A zero funding limit can mean liabilities or existing company allocations consume the provider balance; a negative net position requires Finance reconciliation.",
-      "For unquantified incoming receipts, review Provider operations and recover or reconcile the original deposit. Do not classify it as company cash to bypass the block.",
-      "If balances change or the preview expires after ten minutes, preview again. For an uncertain result, use the original funding reference and details to check whether it already posted."
+      "If an opening deposit was previously shown under Uncredited deposits, refresh after this correction. Receipt amounts no longer reduce the house position.",
+      "If House position is positive but Available to allocate is zero, review the existing internal allocations and use Internal transfers where appropriate.",
+      "A negative house position means current customer wallet balances exceed Blaaiz cash in that currency. If a preview changes or expires after ten minutes, preview again."
     ]
   },
   {

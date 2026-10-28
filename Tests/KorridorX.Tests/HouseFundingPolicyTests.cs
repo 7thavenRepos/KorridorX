@@ -30,18 +30,34 @@ public sealed class HouseFundingPolicyTests
         Assert.Equal(700m, p.FundingLimit);
     }
     [Fact]
-    public void Uncredited_deposits_other_obligations_and_recorded_company_money_reduce_new_funding()
+    public void Internal_allocations_limit_new_credit_without_reducing_the_provider_minus_customer_house_position()
     {
         var p = Position(200m);
         HouseFundingPolicy.AddAccount(p, Account(FinancialAccountType.Customer, FinancialAccountOwnerType.User, 100m, 100m, 0m));
         HouseFundingPolicy.AddAccount(p, Account(FinancialAccountType.Suspense, FinancialAccountOwnerType.Treasury, 20m, 20m, 0m));
         HouseFundingPolicy.AddAccount(p, Account(FinancialAccountType.House, FinancialAccountOwnerType.Treasury, 10m, 10m, 0m));
         HouseFundingPolicy.AddAccount(p, Account(FinancialAccountType.Revenue, FinancialAccountOwnerType.Platform, 5m, 5m, 0m));
-        p.UncreditedCustomerDeposits = 15m;
-        Assert.Equal(135m, p.TotalLiabilities);
-        Assert.Equal(65m, p.NetCompanyFunds);
+        Assert.Equal(100m, p.TotalLiabilities);
+        Assert.Equal(100m, p.NetCompanyFunds);
         Assert.Equal(15m, p.RecordedCompanyFunds);
-        Assert.Equal(50m, p.FundingLimit);
+        Assert.Equal(20m, p.OtherAllocatedFunds);
+        Assert.Equal(35m, p.TotalRecordedAllocations);
+        Assert.Equal(65m, p.FundingLimit);
+    }
+    [Theory]
+    [InlineData("NGN", 519500, 20000, 0, 499500)]
+    [InlineData("CAD", 518.46, 2.46, 16, 500)]
+    public void House_position_uses_current_provider_cash_minus_available_customer_funds_and_holds(
+        string asset, double cash, double available, double held, double expected)
+    {
+        var p = new HouseFundingPositionDto { AssetCode = asset, ProviderBalance = (decimal)cash, DecimalPlaces = 2 };
+        var customer = Account(FinancialAccountType.Customer, FinancialAccountOwnerType.User,
+            (decimal)available + (decimal)held, (decimal)available, (decimal)held);
+        customer.AssetCode = asset;
+        HouseFundingPolicy.AddAccount(p, customer);
+        Assert.Equal((decimal)expected, p.NetCompanyFunds);
+        Assert.Equal((decimal)expected, p.FundingLimit);
+        HouseFundingPolicy.ValidateAmount(p, (decimal)expected);
     }
     [Fact]
     public void Negative_net_position_does_not_create_spendable_house_funds()
