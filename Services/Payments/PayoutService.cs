@@ -303,7 +303,11 @@ public class PayoutService : IPayoutService
                         Title: "Transfer processing",
                         Description: "We are preparing to send your transfer."));
 
-            payout.Attempts.Add(attempt);
+            // A new GUID-keyed child of an existing payout must be explicitly
+            // Added. Navigation discovery can otherwise treat it as an existing
+            // row and issue UPDATE, failing before the provider request.
+            // Persist the INSERT inside the same durable dispatch claim.
+            _db.PayoutAttempts.Add(attempt);
             await _db.SaveChangesAsync(ct);
             await claim.CommitAsync(ct);
         }

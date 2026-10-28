@@ -35,3 +35,12 @@ After deployment, run the existing read-only staging-payout-diagnostics.sh comma
 ## Provider contract reference
 
 Official Blaaiz payout and money-movement documentation checked 28 October 2026: https://docs.blaaiz.com/docs/payments/payout/create-a-payout and https://docs.blaaiz.com/docs/guides/money-movement . The NGN example uses an NGN-to-NGN payout. to_amount fixes the recipient amount; applicable provider fees are added to the provider-wallet debit under the existing provider contract.
+
+
+## W18 CI recovery 1 — explicitly insert the new payout attempt
+
+The first W18 run (40780329735) compiled successfully and passed 1,666 of 1,667 checks. Its new CAD-to-NGN settlement regression stopped at the dispatch-claim SaveChanges, before its recording provider was called, with DbUpdateConcurrencyException. Deployment was skipped.
+
+PayoutAttempt inherits an initialized GUID key. Adding it only through an existing payout's navigation collection allows EF graph discovery to treat it as an existing row and issue an update. The dispatcher now explicitly adds the attempt through DbSet.Add inside the existing claim transaction, ensuring an insert before the provider call. The row claim, status concurrency predicates and all new destination-wallet regressions remain in place.
+
+This recovery changes the dispatcher and this release note only. It does not weaken or remove tests, change schema or balances, bypass a claim, retarget an attempted payout, or call a provider from its installer. The next CI run must confirm the full path succeeds. Original recipient outcomes still require post-deployment runtime evidence.
