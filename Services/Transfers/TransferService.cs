@@ -547,10 +547,7 @@ public class TransferService : ITransferService
                 .OrderByDescending(x => x.ChangedAt)
                 .Select(ToStatusHistoryDto)
                 .ToList(),
-            transfer.TimelineEvents
-                .OrderByDescending(x => x.OccurredAt)
-                .Select(ToTimelineEventDto)
-                .ToList()
+            TransferTimelinePresentation.Build(transfer.TimelineEvents, transfer.Status)
         );
     }
 
@@ -607,18 +604,6 @@ public class TransferService : ITransferService
         );
     }
 
-    private static TransferTimelineEventDto ToTimelineEventDto(TransferTimelineEvent timelineEvent)
-    {
-        return new TransferTimelineEventDto(
-            timelineEvent.Id,
-            timelineEvent.TransferId,
-            timelineEvent.EventType,
-            timelineEvent.Title,
-            timelineEvent.Description,
-            timelineEvent.MetadataJson,
-            timelineEvent.OccurredAt
-        );
-    }
 
 
     private async Task<bool> IsBankDestinationVerifiedForProviderAsync(
