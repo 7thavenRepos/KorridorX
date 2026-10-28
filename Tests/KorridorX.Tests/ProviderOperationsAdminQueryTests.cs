@@ -146,7 +146,7 @@ public sealed class ProviderOperationsAdminQueryTests
         // This shell represents a failure before any provider submission.
         db.Payouts.Add(new Payout
         {
-            Transfer = shell,
+            TransferId = shell.Id,
             Purpose = PaymentOperationPurpose.Remittance,
             Reference = $"PO-SHELL-{suffix}",
             CurrencyCode = "NGN",
