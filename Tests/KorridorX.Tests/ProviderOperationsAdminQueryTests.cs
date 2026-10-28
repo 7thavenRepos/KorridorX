@@ -167,6 +167,44 @@ public sealed class ProviderOperationsAdminQueryTests
     }
 
     [DatabaseIntegrationFact]
+    public async Task Pre_submission_failure_is_durable_deduplicated_and_never_resubmits_an_attempted_payment()
+    {
+        await using var scope = _fixture.Factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var suffix = Guid.NewGuid().ToString("N");
+        var quote = CreateQuote(suffix);
+        var transfer = CreateTransfer(quote, $"TRACE-{suffix}");
+        db.TransferQuotes.Add(quote);
+        db.Transfers.Add(transfer);
+        await db.SaveChangesAsync();
+        db.ChangeTracker.Clear();
+        Assert.True(await KorridorX.Services.Payments.PayoutFailureRecorder.RecordAsync(
+            db, transfer.Id, "payment_channel", "PAYOUT_PRECHECK_OR_PROCESSING_FAILED",
+            "No active payout channel matches the funding asset.", default));
+        Assert.False(await KorridorX.Services.Payments.PayoutFailureRecorder.RecordAsync(
+            db, transfer.Id, "payment_channel", "PAYOUT_PRECHECK_OR_PROCESSING_FAILED",
+            "No active payout channel matches the funding asset.", default));
+        Assert.Equal(TransferStatus.PaymentReceived,
+            await db.Transfers.Where(x => x.Id == transfer.Id).Select(x => x.Status).SingleAsync());
+        Assert.False(await db.Payouts.AnyAsync(x => x.TransferId == transfer.Id));
+        var payout = new Payout
+        {
+            TransferId = transfer.Id, Reference = $"TRACE-PO-{suffix}",
+            CurrencyCode = "NGN", Amount = transfer.DestinationAmount,
+            PaymentMethod = PaymentMethod.BankTransfer, Status = PayoutStatus.Pending,
+            Attempts = new List<PayoutAttempt> { new() { Status = ProviderRequestStatus.Pending } }
+        };
+        db.Payouts.Add(payout);
+        await db.SaveChangesAsync();
+        db.ChangeTracker.Clear();
+        Assert.False(await KorridorX.Services.Payments.PayoutFailureRecorder.RecordAsync(
+            db, transfer.Id, "provider_submission", "PROVIDER_REQUEST_FAILED",
+            "A new message after an attempt must be reconciled.", default));
+        Assert.Equal(1, await db.TransferTimelineEvents.CountAsync(x =>
+            x.TransferId == transfer.Id && x.EventType == "PAYOUT_DISPATCH_BLOCKED"));
+    }
+
+    [DatabaseIntegrationFact]
     public async Task Refund_queue_reports_provider_eligibility_and_refresh_state()
     {
         await using var scope = _fixture.Factory.Services.CreateAsyncScope();

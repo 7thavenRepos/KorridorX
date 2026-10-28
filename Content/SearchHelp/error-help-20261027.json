@@ -521,6 +521,10 @@
       {
         "title": "Recover without a second payment",
         "instruction": "After deployment, eligible unsubmitted funded transfers can resume through the worker, using their existing reservations. Operations can use the existing authorized Dispatch action during a worker pause. Any attempt or provider identity requires provider reconciliation before the existing retry/refund workflow. Never create a replacement transfer to unblock the original."
+      },
+      {
+        "title": "Read the recorded failure",
+        "instruction": "The transfer timeline records a deduplicated payout-blocked event before any submission attempt. Its support metadata and KX-PAYOUT-005 log include stage and redacted exception reason. Provider operations request logs retain Blaaiz HTTP status, message, error code, provider request reference when supplied, and internal request-log ID. Search request logs by the original transfer or payout reference. Authentication failures are also linked to the intended operation; an authentication log does not prove a payout was submitted."
       }
     ],
     "expectedResult": "The original transfer either acquires one provider submission and a truthful processing status, remains blocked for an identified reason, or is resolved through the existing cancellation/refund flow.",
@@ -529,7 +533,8 @@
     ],
     "troubleshooting": [
       "No payout request appears at Blaaiz: check automatic dispatch configuration and provider operations. Before W16, staging omitted the dispatch switch and defaulted off; a saved Pending preflight shell was also excluded from later automatic cycles.",
-      "KX-PAYOUT-005 is logged for a transfer: use its safe ReasonCode and reference. PROVIDER_LIQUIDITY_INSUFFICIENT or PROVIDER_WALLET_NOT_READY identifies provider preflight blocks; PROVIDER_REQUEST_FAILED requires inspecting the recorded provider request and payout attempt. Other failures require a targeted operational review."
+      "KX-PAYOUT-005 is logged for a transfer: use its safe ReasonCode and reference. PROVIDER_LIQUIDITY_INSUFFICIENT or PROVIDER_WALLET_NOT_READY identifies provider preflight blocks; PROVIDER_REQUEST_FAILED requires inspecting the recorded provider request and payout attempt. Other failures require a targeted operational review.",
+      "An HTTP error body may contain nested error objects or field-validation arrays. Error parsing must preserve that reason and HTTP status rather than replacing them with a JSON-type/communication error. No provider response exists for an internal precheck failure. The 28 October runtime snapshot showed both pending transfers unsubmitted with intact reservations and an internal InvalidOperationException; its precise precheck reason remained unobserved before this trace correction."
     ]
   }
 ]

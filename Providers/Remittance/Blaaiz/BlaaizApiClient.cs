@@ -954,11 +954,6 @@ public class BlaaizApiClient : IBlaaizApiClient
         if (useFeeReadToken && (useInteracRegistrationReadToken || method != HttpMethod.Post ||
             endpoint != "/api/external/fees/breakdown"))
             throw new InvalidOperationException("The fee-read token is restricted to the Blaaiz fee-breakdown endpoint.");
-        var token = useFeeReadToken
-            ? await _tokenService.GetFeeReadAccessTokenAsync(ct)
-            : useInteracRegistrationReadToken
-                ? await _tokenService.GetInteracAutoDepositReadAccessTokenAsync(ct)
-                : await _tokenService.GetAccessTokenAsync(ct);
 
         var requestLogId = await _auditService.StartAsync(
             ProviderCode.Blaaiz,
@@ -982,6 +977,12 @@ public class BlaaizApiClient : IBlaaizApiClient
 
         try
         {
+            var token = useFeeReadToken
+                ? await _tokenService.GetFeeReadAccessTokenAsync(ct)
+                : useInteracRegistrationReadToken
+                    ? await _tokenService.GetInteracAutoDepositReadAccessTokenAsync(ct)
+                    : await _tokenService.GetAccessTokenAsync(ct);
+
             using var request = new HttpRequestMessage(method, endpoint);
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
             request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
@@ -1010,9 +1011,10 @@ public class BlaaizApiClient : IBlaaizApiClient
 
             if (!response.IsSuccessStatusCode)
             {
-                var message = ExtractErrorMessage(
-                    rawResponse,
-                    $"Blaaiz request failed with HTTP {(int)response.StatusCode}.");
+                var providerError = BlaaizErrorDetails.Read(
+                    rawResponse, $"Blaaiz request failed with HTTP {(int)response.StatusCode}.",
+                    BlaaizErrorDetails.ResponseReference(response));
+                var message = providerError.Format();
                 if (useInteracRegistrationReadToken && response.StatusCode == System.Net.HttpStatusCode.Forbidden)
                     message = "Blaaiz denied Interac registration reads. Confirm interac-auto-deposit-email:read and API/IP access are authorized for the current provider connection.";
 
@@ -1029,7 +1031,9 @@ public class BlaaizApiClient : IBlaaizApiClient
                     (int)response.StatusCode,
                     auditResponse,
                     requestLogId,
-                    validationErrors: BlaaizValidationErrors.Read(endpoint, (int)response.StatusCode, rawResponse));
+                    validationErrors: BlaaizValidationErrors.Read(endpoint, (int)response.StatusCode, rawResponse),
+                    providerErrorCode: providerError.Code,
+                    providerRequestReference: providerError.ProviderRequestReference);
             }
 
             TResponse? parsed;
@@ -1084,6 +1088,17 @@ public class BlaaizApiClient : IBlaaizApiClient
 
             return new BlaaizApiResult<TResponse>(parsed, auditResponse, requestLogId);
         }
+        catch (ProviderIntegrationException ex) when (ex.RequestLogId != requestLogId)
+        {
+            // Authentication has its own audit record. Also link that failure
+            // to this transfer's intended operation, without copying OAuth bodies.
+            stopwatch.Stop();
+            var message = BlaaizErrorDetails.Safe(ex.Message);
+            await _auditService.FailAsync(requestLogId, ex.ProviderStatusCode, null,
+                message, stopwatch.ElapsedMilliseconds, CancellationToken.None);
+            throw new ProviderIntegrationException(message, ex.ProviderStatusCode, null,
+                requestLogId, ex, ex.ValidationErrors, ex.ProviderErrorCode, ex.ProviderRequestReference);
+        }
         catch (ProviderIntegrationException)
         {
             throw;
@@ -1096,44 +1111,15 @@ public class BlaaizApiClient : IBlaaizApiClient
                 requestLogId,
                 null,
                 null,
-                ex.Message,
+                BlaaizErrorDetails.Safe(ex.Message),
                 stopwatch.ElapsedMilliseconds,
-                ct);
+                CancellationToken.None);
 
             throw new ProviderIntegrationException(
                 "Unable to communicate with Blaaiz.",
                 requestLogId: requestLogId,
                 innerException: ex);
         }
-    }
-
-    private static string ExtractErrorMessage(string rawResponse, string fallback)
-    {
-        try
-        {
-            using var document = JsonDocument.Parse(rawResponse);
-            var root = document.RootElement;
-
-            if (root.TryGetProperty("message", out var message))
-            {
-                return message.GetString() ?? fallback;
-            }
-
-            if (root.TryGetProperty("error_description", out var description))
-            {
-                return description.GetString() ?? fallback;
-            }
-
-            if (root.TryGetProperty("error", out var error))
-            {
-                return error.GetString() ?? fallback;
-            }
-        }
-        catch (JsonException)
-        {
-        }
-
-        return fallback;
     }
 
     private static string RedactCustomerResponse(string rawResponse) =>

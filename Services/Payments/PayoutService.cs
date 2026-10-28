@@ -42,6 +42,7 @@ public class PayoutService : IPayoutService
     private readonly PaymentChannelService _channels;
     private readonly IProviderPayoutLiquidityService _liquidity;
     private readonly ILogger<PayoutService> _logger;
+    private string _dispatchStage = "idle";
 
     public PayoutService(
         AppDbContext db,
@@ -78,6 +79,7 @@ public class PayoutService : IPayoutService
         Guid? changedByUserId = null,
         CancellationToken ct = default)
     {
+        _dispatchStage = "load_transfer";
         var transfer = await _db.Transfers
             .Include(x => x.CustomerProfile)
             .Include(x => x.BusinessProfile)
@@ -94,6 +96,7 @@ public class PayoutService : IPayoutService
             throw new InvalidOperationException("Transfer not found.");
         }
 
+        _dispatchStage = "load_payout_history";
         var payout = await _db.Payouts
             .Include(x => x.Transfer)
             .ThenInclude(x => x!.CustomerProfile)
@@ -124,10 +127,14 @@ public class PayoutService : IPayoutService
                 $"Transfer payout is blocked by an operational hold: {transfer.OperationalHoldReason ?? "support review required"}.");
         }
 
+        _dispatchStage = "risk_check";
         _transferRiskService.EnsureCanProceedToPayout(transfer);
+        _dispatchStage = "screening_check";
         await _screeningService.EnsureTransferCanProceedToPayoutAsync(transfer, ct);
+        _dispatchStage = "outbound_restrictions";
         await EnsureTransferOutboundRestrictionAsync(transfer, ct);
 
+        _dispatchStage = "recipient_destination";
         var destination = await ResolveDestinationAsync(transfer, changedByUserId, ct);
         if (destination.IsMobileWallet)
         {
@@ -138,8 +145,10 @@ public class PayoutService : IPayoutService
             : RecipientPayoutPolicy.Method(destination.ConsumerBankAccount);
         if (payout is not null && preferredMethod.HasValue && payout.PaymentMethod != preferredMethod.Value)
             throw new InvalidOperationException("The saved payout method no longer matches the recipient account.");
+        _dispatchStage = "payment_channel";
         var channel = await _channels.ResolvePayoutAsync(transfer, payout, ct, preferredMethod);
         var paymentMethod = payout?.PaymentMethod ?? channel?.Capability.PaymentMethod ?? preferredMethod ?? ResolvePayoutMethod(transfer.DestinationCurrencyCode);
+        _dispatchStage = "recipient_details";
         var foreignBank = BlaaizCurrencyRequirements.IsForeignBank(transfer.DestinationCurrencyCode);
         if (foreignBank)
         {
@@ -160,6 +169,7 @@ public class PayoutService : IPayoutService
             destination.VerifiedAccountName,
             destination.Email);
 
+        _dispatchStage = "provider_customer_compliance";
         var compliance = transfer.BusinessProfileId.HasValue
             ? await _complianceGateService.EnsureBusinessCanInitiateMoneyMovementAsync(
                 transfer.BusinessProfileId.Value,
@@ -186,6 +196,7 @@ public class PayoutService : IPayoutService
                     "Embedded business customer has not completed provider onboarding for transfers.");
         }
 
+        _dispatchStage = "persist_payout";
         if (payout is null)
         {
             payout = new Payout
@@ -215,10 +226,12 @@ public class PayoutService : IPayoutService
         // The Blaaiz payout payload still spends from the GBP/source wallet.
         // Independently verify the NGN/destination provider wallet has sufficient
         // payout liquidity before any provider POST (same-currency uses its selected wallet).
+        _dispatchStage = "provider_wallet";
         var walletId = await _wallets.SelectAsync("Payout", payout.Id, _remittanceProvider.ProviderName,
             transfer.SourceCurrencyCode, null, ProviderWalletResolver.Payout, payout.Attempts.Count > 0, ct);
         var sameCurrency = string.Equals(transfer.SourceCurrencyCode,
             transfer.DestinationCurrencyCode, StringComparison.OrdinalIgnoreCase);
+        _dispatchStage = "provider_liquidity";
         await _liquidity.EnsureAvailableAsync(transfer.ProviderCode,
             transfer.DestinationCurrencyCode, transfer.DestinationAmount,
             sameCurrency ? walletId : null, ct);
@@ -260,6 +273,7 @@ public class PayoutService : IPayoutService
         // Before any provider POST, claim processing durably. This conditional
         // update synchronizes with the row lock in consumer cancellation.
         // Another dispatcher or a completed customer cancellation means STOP.
+        _dispatchStage = "claim_dispatch";
         await using (var claim = await _db.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, ct))
         {
             var observedStatus = transfer.Status;
@@ -298,6 +312,7 @@ public class PayoutService : IPayoutService
         {
             await EnsureTransferOutboundRestrictionAsync(transfer, ct);
 
+        _dispatchStage = "provider_submission";
             var result = await _remittanceProvider.InitiatePayoutAsync(
                 new RemittancePayoutRequest(
                     transfer.Id,
@@ -332,6 +347,9 @@ public class PayoutService : IPayoutService
                 ct);
 
             var payoutStatus = MapProviderPayoutStatus(result.ProviderStatus);
+            _dispatchStage = "save_provider_result";
+            var providerError = BlaaizErrorDetails.Read(result.RawResponseJson,
+                $"{_remittanceProvider.ProviderName} rejected the payout.");
             var metadata = JsonSerializer.Serialize(new
             {
                 provider = _remittanceProvider.ProviderName,
@@ -347,7 +365,7 @@ public class PayoutService : IPayoutService
                 new PayoutStatusTransitionContext(
                     Source: source,
                     Reason: payoutStatus == PayoutStatus.Failed
-                        ? $"{_remittanceProvider.ProviderName} rejected the payout."
+                        ? providerError.Format()
                         : $"Payout submitted to {_remittanceProvider.ProviderName}.",
                     ChangedByUserId: changedByUserId,
                     ProviderPayoutId: result.ProviderTransactionId,
@@ -510,9 +528,28 @@ public class PayoutService : IPayoutService
                     DbUpdateException => "PAYOUT_STORAGE_FAILED",
                     _ => "PAYOUT_PRECHECK_OR_PROCESSING_FAILED"
                 };
+                var providerFailure = ex as ProviderIntegrationException;
+                var message = BlaaizErrorDetails.Safe(ex.Message);
                 _logger.LogWarning(
-                    "KX-PAYOUT-005: Payout dispatch stopped for transfer {TransferReference} ({TransferId}). ReasonCode={ReasonCode}; ExceptionType={ExceptionType}. Review provider operations before recovering an attempted payout.",
-                    transfer.Reference, transfer.Id, code, ex.GetType().Name);
+                    "KX-PAYOUT-005: Transfer {TransferReference} ({TransferId}) blocked. Stage={FailureStage}; ReasonCode={ReasonCode}; Error={ErrorMessage}; ExceptionType={ExceptionType}; ProviderHttpStatus={ProviderHttpStatus}; ProviderRequestLogId={ProviderRequestLogId}; ProviderErrorCode={ProviderErrorCode}; ProviderRequestReference={ProviderRequestReference}.",
+                    transfer.Reference, transfer.Id, _dispatchStage, code, message, ex.GetType().Name,
+                    providerFailure?.ProviderStatusCode, providerFailure?.RequestLogId,
+                    providerFailure?.ProviderErrorCode, providerFailure?.ProviderRequestReference);
+                // Discard unsaved mutations from the failed operation before
+                // persisting a diagnostic in the existing timeline table.
+                _db.ChangeTracker.Clear();
+                try
+                {
+                    await PayoutFailureRecorder.RecordAsync(_db, transfer.Id,
+                        _dispatchStage, code, message, ct);
+                }
+                catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+                catch (Exception recordingError)
+                {
+                    _logger.LogWarning(
+                        "KX-PAYOUT-005: Could not persist diagnostic for transfer {TransferReference}; ExceptionType={ExceptionType}.",
+                        transfer.Reference, recordingError.GetType().Name);
+                }
             }
             finally
             {

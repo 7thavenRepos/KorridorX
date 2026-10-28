@@ -37,6 +37,13 @@ SELECT jsonb_build_object(
   'destinationAmount', t."DestinationAmount", 'providerTransferId', t."ProviderTransferId",
   'providerReference', t."ProviderReference", 'paymentReceivedAt', t."PaymentReceivedAt",
   'complianceHold', t."IsComplianceHold", 'operationalHold', t."IsOperationalHold",
+  'dispatchDiagnostics', COALESCE((SELECT jsonb_agg(diagnostic) FROM (
+    SELECT jsonb_build_object('title', e."Title", 'description', e."Description",
+      'metadata', e."MetadataJson", 'occurredAt', e."OccurredAt") AS diagnostic
+    FROM "TransferTimelineEvents" e WHERE e."TransferId" = t."Id"
+      AND e."EventType" = 'PAYOUT_DISPATCH_BLOCKED' AND NOT e."IsDeleted"
+    ORDER BY e."OccurredAt" DESC LIMIT 3
+  ) recent), '[]'::jsonb),
   'payouts', COALESCE((SELECT jsonb_agg(jsonb_build_object(
     'id', p."Id", 'reference', p."Reference", 'statusRaw', p."Status", 'isDeleted', p."IsDeleted",
     'providerPayoutId', p."ProviderPayoutId", 'providerReference', p."ProviderReference",
@@ -59,7 +66,8 @@ SELECT jsonb_build_object(
   ) FROM "FinancialAccounts" f WHERE f."Id" = t."SourceFinancialAccountId"),
   'providerRequests', COALESCE((SELECT jsonb_agg(jsonb_build_object(
     'id', l."Id", 'endpoint', l."Endpoint", 'method', l."HttpMethod", 'statusRaw', l."Status",
-    'httpStatus', l."ResponseStatusCode", 'requestedAt', l."RequestedAt"
+    'httpStatus', l."ResponseStatusCode", 'requestedAt', l."RequestedAt",
+    'errorMessage', l."ErrorMessage"
   )) FROM "ProviderRequestLogs" l WHERE l."RelatedTransferId" = t."Id"
     OR l."RelatedPayoutId" IN (SELECT p."Id" FROM "Payouts" p WHERE p."TransferId" = t."Id")), '[]'::jsonb)
 ) FROM affected t ORDER BY t."Reference";

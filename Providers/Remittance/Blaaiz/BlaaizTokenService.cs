@@ -245,12 +245,16 @@ public class BlaaizTokenService : IBlaaizTokenService
 
             if (!response.IsSuccessStatusCode)
             {
-                var message = ExtractErrorMessage(rawResponse, "Unable to authenticate with Blaaiz.");
+                var error = BlaaizErrorDetails.Read(rawResponse, "Unable to authenticate with Blaaiz.",
+                    BlaaizErrorDetails.ResponseReference(response));
+                var message = BlaaizErrorDetails.Safe(error.Format(), _options.ClientId, _options.ClientSecret);
+                var safeResponse = JsonSerializer.Serialize(new { message, code = error.Code,
+                    providerRequestReference = error.ProviderRequestReference });
 
                 await _auditService.FailAsync(
                     requestLogId,
                     (int)response.StatusCode,
-                    rawResponse,
+                    safeResponse,
                     message,
                     stopwatch.ElapsedMilliseconds,
                     ct);
@@ -258,8 +262,10 @@ public class BlaaizTokenService : IBlaaizTokenService
                 throw new ProviderIntegrationException(
                     message,
                     (int)response.StatusCode,
-                    rawResponse,
-                    requestLogId);
+                    safeResponse,
+                    requestLogId,
+                    providerErrorCode: error.Code,
+                    providerRequestReference: error.ProviderRequestReference);
             }
 
             var tokenResponse = JsonSerializer.Deserialize<BlaaizTokenResponse>(
@@ -269,11 +275,12 @@ public class BlaaizTokenService : IBlaaizTokenService
             if (tokenResponse is null || string.IsNullOrWhiteSpace(tokenResponse.AccessToken))
             {
                 const string message = "Blaaiz returned an invalid OAuth response.";
+                var safeResponse = JsonSerializer.Serialize(new { message });
 
                 await _auditService.FailAsync(
                     requestLogId,
                     (int)response.StatusCode,
-                    rawResponse,
+                    safeResponse,
                     message,
                     stopwatch.ElapsedMilliseconds,
                     ct);
@@ -281,7 +288,7 @@ public class BlaaizTokenService : IBlaaizTokenService
                 throw new ProviderIntegrationException(
                     message,
                     (int)response.StatusCode,
-                    rawResponse,
+                    safeResponse,
                     requestLogId);
             }
 
@@ -320,9 +327,9 @@ public class BlaaizTokenService : IBlaaizTokenService
                 requestLogId,
                 null,
                 null,
-                ex.Message,
+                BlaaizErrorDetails.Safe(ex.Message, _options.ClientId, _options.ClientSecret),
                 stopwatch.ElapsedMilliseconds,
-                ct);
+                CancellationToken.None);
 
             throw new ProviderIntegrationException(
                 "Unable to connect to Blaaiz authentication.",
@@ -348,30 +355,6 @@ public class BlaaizTokenService : IBlaaizTokenService
         }
 
         return $"{value[..2]}***{value[^2..]}";
-    }
-
-    private static string ExtractErrorMessage(string rawResponse, string fallback)
-    {
-        try
-        {
-            using var document = JsonDocument.Parse(rawResponse);
-            var root = document.RootElement;
-
-            if (root.TryGetProperty("error_description", out var description))
-            {
-                return description.GetString() ?? fallback;
-            }
-
-            if (root.TryGetProperty("message", out var message))
-            {
-                return message.GetString() ?? fallback;
-            }
-        }
-        catch (JsonException)
-        {
-        }
-
-        return fallback;
     }
 
     private static JsonSerializerOptions JsonOptions() => new()

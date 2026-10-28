@@ -96,7 +96,12 @@ public class ProviderOperationsQueryService : IProviderOperationsQueryService
             var value = search.Trim().ToLower();
             query = query.Where(x =>
                 x.Endpoint.ToLower().Contains(value) ||
-                (x.ErrorMessage != null && x.ErrorMessage.ToLower().Contains(value)));
+                (x.ErrorMessage != null && x.ErrorMessage.ToLower().Contains(value)) ||
+                _db.Transfers.Any(t => t.Id == x.RelatedTransferId &&
+                    t.Reference.ToLower().Contains(value)) ||
+                _db.Payouts.Any(p => p.Id == x.RelatedPayoutId &&
+                    (p.Reference.ToLower().Contains(value) ||
+                     (p.Transfer != null && p.Transfer.Reference.ToLower().Contains(value)))));
         }
 
         return await query

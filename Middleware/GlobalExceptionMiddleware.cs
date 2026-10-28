@@ -83,6 +83,7 @@ public class GlobalExceptionMiddleware
             await WriteErrorAsync(context, HttpStatusCode.UnprocessableEntity, "VALIDATION_ERROR",
                 ex.ValidationErrors.Count > 0 ? "Review the highlighted fields and try again." : ex.Message,
                 new { requestLogId = ex.RequestLogId, providerStatusCode = ex.ProviderStatusCode,
+                    providerErrorCode = ex.ProviderErrorCode, providerRequestReference = ex.ProviderRequestReference,
                     validationErrors = ex.ValidationErrors });
         }
         catch (InvalidOperationException ex)
@@ -128,7 +129,9 @@ public class GlobalExceptionMiddleware
                 new
                 {
                     requestLogId = ex.RequestLogId,
-                    providerStatusCode = ex.ProviderStatusCode
+                    providerStatusCode = ex.ProviderStatusCode,
+                    providerErrorCode = ex.ProviderErrorCode,
+                    providerRequestReference = ex.ProviderRequestReference
                 });
         }
         catch (Exception ex)
