@@ -15,6 +15,19 @@ public sealed class ErrorHelpTests
         Assert.NotEmpty(matches);
         Assert.Equal("error-recipient-delivery-unavailable", matches[0].Entry.Slug);
     }
+    [Theory]
+    [InlineData("KX-PAYOUT-005")]
+    [InlineData("Payment received")]
+    public void Funded_pending_transfer_search_finds_dispatch_help(string message)
+    {
+        var matches = catalog.Allowed(SearchHelpTestScopes.Admin("Support"))
+            .Select(x => (Entry: x, Score: new SearchQuery(message).ScoreHelp(x)))
+            .Where(x => x.Score > 0).OrderByDescending(x => x.Score).ToArray();
+        Assert.NotEmpty(matches);
+        Assert.Equal("error-funded-transfer-awaiting-payout", matches[0].Entry.Slug);
+        Assert.DoesNotContain(catalog.Allowed(SearchHelpTestScopes.Business()),
+            x => x.ErrorCodes.Contains("KX-PAYOUT-005"));
+    }
     [Fact] public void AdminDiagnosticsNeverLeakIntoBusinessHelp()
     {
         var allowed = catalog.Allowed(SearchHelpTestScopes.Business());

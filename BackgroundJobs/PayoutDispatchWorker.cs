@@ -22,6 +22,16 @@ public class PayoutDispatchWorker : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        var configured = _options.Value;
+        if (configured.IsEnabled && !configured.AutomaticPayoutDispatchEnabled)
+            _logger.LogWarning(
+                "KX-PAYOUT-005: Blaaiz is enabled but automatic recipient payout dispatch is disabled. Funded transfers require an authorized manual dispatch or the worker switch to be enabled.");
+        else
+            _logger.LogInformation(
+                "Recipient payout worker configuration: provider enabled {ProviderEnabled}; automatic dispatch enabled {DispatchEnabled}; interval {IntervalSeconds}s.",
+                configured.IsEnabled, configured.AutomaticPayoutDispatchEnabled,
+                configured.PayoutDispatchIntervalSeconds);
+
         while (!stoppingToken.IsCancellationRequested)
         {
             var options = _options.Value;

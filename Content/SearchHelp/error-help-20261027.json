@@ -462,5 +462,74 @@
     "troubleshooting": [
       "A visible price preview is not confirmation that money moved."
     ]
+  },
+  {
+    "slug": "error-funded-transfer-awaiting-payout",
+    "portal": "admin",
+    "title": "KX-PAYOUT-005: Payment received but recipient payout has not started",
+    "summary": "Wallet funding reserves money; Blaaiz settlement starts separately. Check the effective worker switch, unsubmitted queue, provider attempts and liquidity before recovery.",
+    "category": "Errors and fixes",
+    "pageRoute": "/admin/providers",
+    "keywords": [
+      "Payment received",
+      "Transfer funded",
+      "money deducted",
+      "Blaaiz",
+      "settlement",
+      "payout dispatch",
+      "CAD",
+      "NGN",
+      "automatic payout",
+      "stuck transfer"
+    ],
+    "errorCodes": [
+      "KX-PAYOUT-005"
+    ],
+    "errorMessages": [
+      "Payment received",
+      "Transfer funded",
+      "Provider payout-wallet liquidity is insufficient. The payout has not been submitted.",
+      "Blaaiz is enabled but automatic recipient payout dispatch is disabled."
+    ],
+    "adminRoles": [
+      "Support",
+      "Operations",
+      "Admin",
+      "SuperAdmin"
+    ],
+    "permissions": [],
+    "businessRoles": [],
+    "allowNoBusiness": false,
+    "isPage": false,
+    "reviewedOn": "2026-10-28",
+    "prerequisites": [
+      "Use the exact transfer reference and environment. Confirm the wallet reservation and whether any provider submission attempt exists."
+    ],
+    "steps": [
+      {
+        "title": "Distinguish funding from settlement",
+        "instruction": "Payment received means the transfer is funded. For wallet funding, available funds are reserved in holds. It is not a successful Blaaiz payout. Confirm the reservation and settled/available/held balances; do not infer success from the activity amount."
+      },
+      {
+        "title": "Check effective dispatch configuration",
+        "instruction": "Operations health GET /api/admin/operations/health reports payoutDispatch providerEnabled, automaticDispatchEnabled, intervalSeconds and eligible/overdue unsubmitted counts. A false provider or dispatch switch prevents background submission. WalletWithdrawalProcessing controls a separate operation."
+      },
+      {
+        "title": "Inspect the original transfer",
+        "instruction": "Search Provider operations / Pending payouts by transfer reference. A Pending payout with no attempts and no provider IDs can still be an unsubmitted preflight shell. Check active verified payout wallets, current destination liquidity, recipient/channel readiness and compliance or operational holds."
+      },
+      {
+        "title": "Recover without a second payment",
+        "instruction": "After deployment, eligible unsubmitted funded transfers can resume through the worker, using their existing reservations. Operations can use the existing authorized Dispatch action during a worker pause. Any attempt or provider identity requires provider reconciliation before the existing retry/refund workflow. Never create a replacement transfer to unblock the original."
+      }
+    ],
+    "expectedResult": "The original transfer either acquires one provider submission and a truthful processing status, remains blocked for an identified reason, or is resolved through the existing cancellation/refund flow.",
+    "warnings": [
+      "Any submission attempt can represent an uncertain external outcome. Reconcile it before retrying. Do not change balances or remove payout history to force dispatch."
+    ],
+    "troubleshooting": [
+      "No payout request appears at Blaaiz: check automatic dispatch configuration and provider operations. Before W16, staging omitted the dispatch switch and defaulted off; a saved Pending preflight shell was also excluded from later automatic cycles.",
+      "KX-PAYOUT-005 is logged for a transfer: use its safe ReasonCode and reference. PROVIDER_LIQUIDITY_INSUFFICIENT or PROVIDER_WALLET_NOT_READY identifies provider preflight blocks; PROVIDER_REQUEST_FAILED requires inspecting the recorded provider request and payout attempt. Other failures require a targeted operational review."
+    ]
   }
 ]

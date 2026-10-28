@@ -4,6 +4,7 @@ using KorridorX.Data;
 using KorridorX.Dtos.Operations;
 using KorridorX.Models.Enums;
 using KorridorX.Services.Notifications;
+using KorridorX.Services.Payments;
 using Microsoft.EntityFrameworkCore;
 
 namespace KorridorX.Services.Operations;
@@ -12,11 +13,14 @@ public sealed class OperationalHealthService : IOperationalHealthService
 {
     private readonly AppDbContext _db;
     private readonly TreasuryOptions _treasuryOptions;
+    private readonly BlaaizOptions _blaaizOptions;
 
-    public OperationalHealthService(AppDbContext db, IOptions<TreasuryOptions> treasuryOptions)
+    public OperationalHealthService(AppDbContext db, IOptions<TreasuryOptions> treasuryOptions,
+        IOptions<BlaaizOptions>? blaaizOptions = null)
     {
         _db = db;
         _treasuryOptions = treasuryOptions.Value;
+        _blaaizOptions = blaaizOptions?.Value ?? new BlaaizOptions();
     }
 
     public async Task<OperationalHealthDto> GetAsync(CancellationToken ct = default)
@@ -199,6 +203,18 @@ public sealed class OperationalHealthService : IOperationalHealthService
             await _db.SettlementBatches.CountAsync(x =>
                 !x.IsDeleted && x.Status == KorridorX.Models.Enums.SettlementBatchStatus.Variance, ct));
 
+        var unsubmitted = PayoutDispatchQueue.Unsubmitted(
+                _db.Transfers.AsNoTracking(), _db.Payouts, _db.PayoutAttempts)
+            .Where(x => !x.IsComplianceHold && !x.IsOperationalHold);
+        var payoutOverdueBefore = now.AddMinutes(-5);
+        var payoutDispatch = new PayoutDispatchHealthDto(
+            _blaaizOptions.IsEnabled,
+            _blaaizOptions.AutomaticPayoutDispatchEnabled,
+            _blaaizOptions.PayoutDispatchIntervalSeconds,
+            await unsubmitted.CountAsync(ct),
+            await unsubmitted.CountAsync(x =>
+                (x.PaymentReceivedAt ?? x.CreatedAt) < payoutOverdueBefore, ct));
+
         var status = !connected
             ? "Critical"
             : notifications.DeadLetter > 0 ||
@@ -212,7 +228,10 @@ public sealed class OperationalHealthService : IOperationalHealthService
               support.OverdueInvestigations > 0 ||
               treasury.LowLiquidityWallets > 0 ||
               treasury.StaleProviderWallets > 0 ||
-              treasury.SettlementVariances > 0
+              treasury.SettlementVariances > 0 ||
+              payoutDispatch.OverdueUnsubmittedTransfers > 0 ||
+              (payoutDispatch.EligibleUnsubmittedTransfers > 0 &&
+               (!payoutDispatch.ProviderEnabled || !payoutDispatch.AutomaticDispatchEnabled))
                 ? "Degraded"
                 : "Healthy";
 
@@ -227,7 +246,7 @@ public sealed class OperationalHealthService : IOperationalHealthService
             risk,
             compliance,
             support,
-            treasury);
+            treasury) { PayoutDispatch = payoutDispatch };
     }
 
     private Task<int> CountNotificationsAsync(string status, CancellationToken ct) =>

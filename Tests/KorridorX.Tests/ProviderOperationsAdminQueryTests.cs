@@ -111,7 +111,7 @@ public sealed class ProviderOperationsAdminQueryTests
     }
 
     [DatabaseIntegrationFact]
-    public async Task Pending_payout_queue_returns_funded_transfer_without_existing_payout()
+    public async Task Pending_payout_queue_includes_unsubmitted_shell_but_never_an_attempted_payout()
     {
         await using var scope = _fixture.Factory.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
@@ -122,14 +122,17 @@ public sealed class ProviderOperationsAdminQueryTests
         var transfer = CreateTransfer(quote, $"TRF-PENDING-{suffix}");
         var dispatchedQuote = CreateQuote($"existing-{suffix}");
         var alreadyDispatched = CreateTransfer(dispatchedQuote, $"TRF-DISPATCHED-{suffix}");
+        var shellQuote = CreateQuote($"shell-{suffix}");
+        var shell = CreateTransfer(shellQuote, $"TRF-SHELL-{suffix}");
 
-        db.TransferQuotes.AddRange(quote, dispatchedQuote);
-        db.Transfers.AddRange(transfer, alreadyDispatched);
+        db.TransferQuotes.AddRange(quote, dispatchedQuote, shellQuote);
+        db.Transfers.AddRange(transfer, alreadyDispatched, shell);
         db.Payouts.Add(new Payout
         {
             Transfer = alreadyDispatched,
             Purpose = PaymentOperationPurpose.Remittance,
             Reference = $"PO-EXISTING-{suffix}",
+            Attempts = new List<PayoutAttempt> { new() { Status = ProviderRequestStatus.Pending } },
             CurrencyCode = "NGN",
             Amount = alreadyDispatched.DestinationAmount,
             PaymentMethod = PaymentMethod.BankTransfer,
@@ -140,8 +143,24 @@ public sealed class ProviderOperationsAdminQueryTests
         await db.SaveChangesAsync();
         db.ChangeTracker.Clear();
 
+        // This shell represents a failure before any provider submission.
+        db.Payouts.Add(new Payout
+        {
+            Transfer = shell,
+            Purpose = PaymentOperationPurpose.Remittance,
+            Reference = $"PO-SHELL-{suffix}",
+            CurrencyCode = "NGN",
+            Amount = shell.DestinationAmount,
+            PaymentMethod = PaymentMethod.BankTransfer,
+            Status = PayoutStatus.Pending,
+            ProviderCode = "Blaaiz"
+        });
+        await db.SaveChangesAsync();
+        db.ChangeTracker.Clear();
+
         var result = await service.GetPendingPayoutsAsync(suffix, 1, 20);
 
+        Assert.Contains(result.Items, x => x.TransferId == shell.Id && x.CanDispatch);
         var row = Assert.Single(result.Items, x => x.TransferId == transfer.Id);
         Assert.True(row.CanDispatch);
         Assert.DoesNotContain(result.Items, x => x.TransferId == alreadyDispatched.Id);

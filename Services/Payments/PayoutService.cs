@@ -41,6 +41,7 @@ public class PayoutService : IPayoutService
     private readonly IProviderWalletResolver _wallets;
     private readonly PaymentChannelService _channels;
     private readonly IProviderPayoutLiquidityService _liquidity;
+    private readonly ILogger<PayoutService> _logger;
 
     public PayoutService(
         AppDbContext db,
@@ -54,7 +55,8 @@ public class PayoutService : IPayoutService
         IComplianceScreeningService screeningService,
         IOutboundFundsRestrictionService outboundFundsRestrictions,
         IProviderWalletResolver wallets, PaymentChannelService channels,
-        IProviderPayoutLiquidityService liquidity)
+        IProviderPayoutLiquidityService liquidity,
+        ILogger<PayoutService>? logger = null)
     {
         _db = db;
         _referenceGenerator = referenceGenerator;
@@ -67,6 +69,7 @@ public class PayoutService : IPayoutService
         _screeningService = screeningService;
         _outboundFundsRestrictions = outboundFundsRestrictions;
         _wallets = wallets; _channels = channels; _liquidity = liquidity;
+        _logger = logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<PayoutService>.Instance;
     }
 
     public async Task<PayoutDetailsDto> DispatchForTransferAsync(
@@ -470,29 +473,52 @@ public class PayoutService : IPayoutService
     {
         batchSize = Math.Clamp(batchSize, 1, 500);
 
-        var transferIds = await _db.Transfers
-            .AsNoTracking()
-            .Where(x =>
-                !x.IsDeleted &&
-                (x.Status == TransferStatus.PaymentReceived || x.Status == TransferStatus.Processing) &&
-                !x.IsComplianceHold &&
-                !x.IsOperationalHold &&
-                !_db.Payouts.Any(p => p.TransferId == x.Id && !p.IsDeleted))
-            .Select(x => x.Id)
+        var transfers = await PayoutDispatchQueue.Unsubmitted(
+                _db.Transfers.AsNoTracking(), _db.Payouts, _db.PayoutAttempts)
+            .Where(x => !x.IsComplianceHold && !x.IsOperationalHold)
+            .OrderBy(x => x.PaymentReceivedAt ?? x.CreatedAt)
+            .ThenBy(x => x.Id)
+            .Select(x => new { x.Id, x.Reference })
             .Take(batchSize)
             .ToListAsync(ct);
 
         var dispatched = 0;
-        foreach (var transferId in transferIds)
+        foreach (var transfer in transfers)
         {
             try
             {
-                await DispatchForTransferAsync(transferId, "System", null, ct);
+                await DispatchForTransferAsync(transfer.Id, "System", null, ct);
                 dispatched++;
             }
-            catch
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {
-                // Each payout records its own failure state. The worker continues with the remaining transfers.
+                throw;
+            }
+            catch (Exception ex)
+            {
+                // Preflight can fail before an attempt exists. Do not silently
+                // lose that failure, or log raw bank details/provider bodies.
+                var code = ex switch
+                {
+                    InvalidOperationException when ex.Message.StartsWith(
+                        "Provider payout-wallet liquidity is insufficient.", StringComparison.Ordinal)
+                        => "PROVIDER_LIQUIDITY_INSUFFICIENT",
+                    InvalidOperationException when ex.Message.StartsWith(
+                        "A verified, active provider payout wallet is required", StringComparison.Ordinal)
+                        => "PROVIDER_WALLET_NOT_READY",
+                    ProviderIntegrationException => "PROVIDER_REQUEST_FAILED",
+                    DbUpdateException => "PAYOUT_STORAGE_FAILED",
+                    _ => "PAYOUT_PRECHECK_OR_PROCESSING_FAILED"
+                };
+                _logger.LogWarning(
+                    "KX-PAYOUT-005: Payout dispatch stopped for transfer {TransferReference} ({TransferId}). ReasonCode={ReasonCode}; ExceptionType={ExceptionType}. Review provider operations before recovering an attempted payout.",
+                    transfer.Reference, transfer.Id, code, ex.GetType().Name);
+            }
+            finally
+            {
+                // This batch owns its scoped context. A failed transfer must
+                // not leave tracked mutations to be saved by the next one.
+                _db.ChangeTracker.Clear();
             }
         }
 

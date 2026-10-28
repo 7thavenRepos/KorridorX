@@ -63,6 +63,10 @@ services:
       Hosting__ForwardLimit: 1
       Hosting__DataProtectionKeysPath: /var/lib/korridorx/keys
       Blaaiz__IsEnabled: ${BLAAIZ_ENABLED:-false}
+      # Funded recipient transfers must be picked up by the remittance worker.
+      # An explicit server-owned false remains an emergency stop.
+      Blaaiz__AutomaticPayoutDispatchEnabled: ${BLAAIZ_AUTOMATIC_PAYOUT_DISPATCH_ENABLED:-true}
+      Blaaiz__PayoutDispatchIntervalSeconds: ${BLAAIZ_PAYOUT_DISPATCH_INTERVAL_SECONDS:-30}
       Blaaiz__BaseUrl: ${BLAAIZ_BASE_URL:-https://api-dev.blaaiz.com}
       Blaaiz__Scopes: "${BLAAIZ_SCOPES:?BLAAIZ_SCOPES is required in .env.staging}"
       Blaaiz__ClientId: ${BLAAIZ_CLIENT_ID:-}

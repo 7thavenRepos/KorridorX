@@ -5,6 +5,8 @@ using KorridorX.Infrastructure;
 using KorridorX.Models.Enums;
 using Microsoft.EntityFrameworkCore;
 
+using KorridorX.Services.Payments;
+
 namespace KorridorX.Services.Providers;
 
 public class ProviderOperationsQueryService : IProviderOperationsQueryService
@@ -292,12 +294,8 @@ public class ProviderOperationsQueryService : IProviderOperationsQueryService
         int pageSize,
         CancellationToken ct = default)
     {
-        var query = _db.Transfers
-            .AsNoTracking()
-            .Where(x =>
-                !x.IsDeleted &&
-                (x.Status == TransferStatus.PaymentReceived || x.Status == TransferStatus.Processing) &&
-                !_db.Payouts.Any(p => p.TransferId == x.Id && !p.IsDeleted));
+        var query = PayoutDispatchQueue.Unsubmitted(
+            _db.Transfers.AsNoTracking(), _db.Payouts, _db.PayoutAttempts);
 
         if (!string.IsNullOrWhiteSpace(search))
         {

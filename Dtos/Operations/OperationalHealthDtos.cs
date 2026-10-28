@@ -11,7 +11,17 @@ public record OperationalHealthDto(
     RiskHealthDto Risk,
     ComplianceOperationsHealthDto Compliance,
     SupportOperationsHealthDto Support,
-    TreasuryOperationsHealthDto Treasury);
+    TreasuryOperationsHealthDto Treasury)
+{
+    public PayoutDispatchHealthDto? PayoutDispatch { get; init; }
+}
+
+public record PayoutDispatchHealthDto(
+    bool ProviderEnabled,
+    bool AutomaticDispatchEnabled,
+    int IntervalSeconds,
+    int EligibleUnsubmittedTransfers,
+    int OverdueUnsubmittedTransfers);
 
 public record NotificationHealthDto(
     int Pending,
