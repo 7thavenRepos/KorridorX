@@ -55,6 +55,17 @@ public class TransfersController : ControllerBase
             "Transfer retrieved successfully."));
     }
 
+    [HttpGet("{transferId:guid}/receipt")]
+    public async Task<IActionResult> GetReceipt(
+        Guid transferId,
+        [FromServices] TransferReceiptService receipts,
+        CancellationToken ct)
+    {
+        Response.Headers.CacheControl = "no-store";
+        var result = await receipts.GetAsync(GetUserId(), transferId, ct);
+        return Ok(ApiResponses.Ok(result, "Transfer receipt retrieved successfully."));
+    }
+
     [HttpGet]
     public async Task<IActionResult> GetMyTransfers(
         [FromQuery] int page = 1,

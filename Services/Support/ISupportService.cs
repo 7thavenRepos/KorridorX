@@ -5,6 +5,7 @@ namespace KorridorX.Services.Support;
 
 public interface ISupportService
 {
+    Task<SupportTicketDetailsDto> ReportTransferAsync(Guid userId, Guid transferId, ReportTransferRequestDto request, CancellationToken ct = default);
     Task<SupportTicketDetailsDto> CreateTicketAsync(Guid userId, CreateSupportTicketRequestDto request, CancellationToken ct = default);
     Task<PagedResult<SupportTicketListItemDto>> GetMyTicketsAsync(Guid userId, int page, int pageSize, CancellationToken ct = default);
     Task<SupportTicketDetailsDto> GetMyTicketAsync(Guid userId, Guid ticketId, CancellationToken ct = default);

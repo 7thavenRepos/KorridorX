@@ -19,6 +19,8 @@ using KorridorX.Dtos.Auth;
 using KorridorX.Dtos.Fx;
 using KorridorX.Dtos.Payments;
 using KorridorX.Dtos.Recipients;
+using KorridorX.Dtos.Support;
+using KorridorX.Services.Support;
 using KorridorX.Dtos.Transfers;
 using KorridorX.Dtos.Wallets;
 using KorridorX.Infrastructure;
@@ -341,6 +343,66 @@ public async Task Cancellation_is_blocked_once_payout_record_exists_and_hold_is_
         }
     }
 
+    [DatabaseIntegrationFact]
+    public async Task Reporting_a_transfer_links_its_details_and_reuses_the_open_case_without_moving_funds()
+    {
+        using var client = _fixture.CreateClient();
+        var setup = await CreateTransferAsync(client, 500m);
+        var request = new ReportTransferRequestDto { Description = "My transfer has not progressed." };
+        using var first = await client.PostJsonAsync(
+            $"/api/support/transfers/{setup.Transfer.Id}/reports", request);
+        await first.EnsureSuccessWithBodyAsync();
+        var ticket = Assert.IsType<SupportTicketDetailsDto>(
+            (await first.ReadApiResponseAsync<SupportTicketDetailsDto>()).Data);
+        Assert.Equal(setup.Transfer.Id, ticket.Ticket.TransferId);
+        Assert.Contains(setup.Transfer.Reference, ticket.Summary);
+        Assert.Contains("Status: PaymentReceived", ticket.Summary);
+        Assert.Contains("Recipient amount:", ticket.Summary);
+        Assert.Contains("Fee:", ticket.Summary);
+
+        using var repeated = await client.PostJsonAsync(
+            $"/api/support/transfers/{setup.Transfer.Id}/reports", request);
+        await repeated.EnsureSuccessWithBodyAsync();
+        var same = Assert.IsType<SupportTicketDetailsDto>(
+            (await repeated.ReadApiResponseAsync<SupportTicketDetailsDto>()).Data);
+        Assert.Equal(ticket.Ticket.Id, same.Ticket.Id);
+        Assert.Single(same.Messages);
+        using var receipt = await client.GetAsync($"/api/transfers/{setup.Transfer.Id}/receipt");
+        Assert.Equal(HttpStatusCode.BadRequest, receipt.StatusCode);
+        using var dispute = await client.PostJsonAsync(
+            $"/api/support/transfers/{setup.Transfer.Id}/disputes",
+            new CreateTransferDisputeRequestDto {
+                DisputeType = TransferDisputeType.TransferNotReceived, Reason = "Not received"
+            });
+        Assert.Equal(HttpStatusCode.BadRequest, dispute.StatusCode);
+
+        await using var scope = _fixture.Factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var support = scope.ServiceProvider.GetRequiredService<ISupportService>();
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            support.ReportTransferAsync(Guid.NewGuid(), setup.Transfer.Id, request));
+        var wallet = await db.FinancialAccounts.AsNoTracking().SingleAsync(x => x.Id == setup.WalletId);
+        var transfer = await db.Transfers.AsNoTracking().SingleAsync(x => x.Id == setup.Transfer.Id);
+        Assert.Equal(TransferStatus.PaymentReceived, transfer.Status);
+        Assert.False(transfer.IsOperationalHold);
+        Assert.Equal(500m, wallet.SettledBalance);
+        Assert.Equal(setup.Transfer.TotalPayableAmount, wallet.HeldBalance);
+        Assert.Equal(500m - setup.Transfer.TotalPayableAmount, wallet.AvailableBalance);
+        Assert.Equal(0, await db.Payouts.CountAsync(x => x.TransferId == setup.Transfer.Id));
+        Assert.Equal(1, await db.SupportTickets.CountAsync(x => x.TransferId == setup.Transfer.Id));
+        Assert.Equal(0, await db.TransferDisputes.CountAsync(x => x.TransferId == setup.Transfer.Id));
+
+        using var cancelled = await client.PostJsonAsync(
+            $"/api/transfers/{setup.Transfer.Id}/cancel", new CancelTransferRequestDto("Cancel fixture"));
+        await cancelled.EnsureSuccessWithBodyAsync();
+        using var afterCancel = await client.PostJsonAsync(
+            $"/api/support/transfers/{setup.Transfer.Id}/reports", request);
+        Assert.Equal(HttpStatusCode.BadRequest, afterCancel.StatusCode);
+        using var cancelledReceipt = await client.GetAsync(
+            $"/api/transfers/{setup.Transfer.Id}/receipt");
+        Assert.Equal(HttpStatusCode.BadRequest, cancelledReceipt.StatusCode);
+    }
+
     private async Task<TransferSetup> CreateTransferAsync(HttpClient client, decimal walletBalance,
         string sourceCurrency = "USD", string sourceCountry = "US", decimal sourceAmount = 100m)
     {
@@ -550,6 +612,59 @@ public async Task Cancellation_is_blocked_once_payout_record_exists_and_hold_is_
         Assert.Equal(1, await db.NotificationMessages.CountAsync(x => x.UserId == setup.UserId &&
             x.RelatedEntityId == setup.Transfer.Id.ToString() &&
             x.Subject.StartsWith(TransferCompletionNotificationStager.CompletedSubject)));
+
+        using var receiptResponse = await client.GetAsync(
+            $"/api/transfers/{setup.Transfer.Id}/receipt");
+        await receiptResponse.EnsureSuccessWithBodyAsync();
+        Assert.True(receiptResponse.Headers.CacheControl?.NoStore);
+        var document = Assert.IsType<TransferReceiptDto>(
+            (await receiptResponse.ReadApiResponseAsync<TransferReceiptDto>()).Data);
+        Assert.Equal(setup.Transfer.Id, document.TransferId);
+        Assert.Equal(setup.Transfer.Reference, document.Reference);
+        Assert.Equal("Completed", document.Status);
+        Assert.Equal("5.00", document.SourceAmount);
+        Assert.Equal("CAD", document.SourceCurrencyCode);
+        Assert.Equal("NGN", document.DestinationCurrencyCode);
+        Assert.NotNull(document.CompletedAt);
+        Assert.DoesNotContain("0123456789", document.MaskedDestination ?? "");
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            scope.ServiceProvider.GetRequiredService<TransferReceiptService>()
+                .GetAsync(Guid.NewGuid(), setup.Transfer.Id));
+        using var reportCompleted = await client.PostJsonAsync(
+            $"/api/support/transfers/{setup.Transfer.Id}/reports",
+            new ReportTransferRequestDto { Description = "Should use Dispute." });
+        Assert.Equal(HttpStatusCode.BadRequest, reportCompleted.StatusCode);
+
+        var disputeRequest = new CreateTransferDisputeRequestDto {
+            DisputeType = TransferDisputeType.TransferNotReceived,
+            Reason = "Please investigate delivery with the recipient."
+        };
+        using var opened = await client.PostJsonAsync(
+            $"/api/support/transfers/{setup.Transfer.Id}/disputes", disputeRequest);
+        await opened.EnsureSuccessWithBodyAsync();
+        var dispute = Assert.IsType<TransferDisputeDto>(
+            (await opened.ReadApiResponseAsync<TransferDisputeDto>()).Data);
+        using var replayed = await client.PostJsonAsync(
+            $"/api/support/transfers/{setup.Transfer.Id}/disputes", disputeRequest);
+        await replayed.EnsureSuccessWithBodyAsync();
+        var sameDispute = Assert.IsType<TransferDisputeDto>(
+            (await replayed.ReadApiResponseAsync<TransferDisputeDto>()).Data);
+        Assert.Equal(dispute.Id, sameDispute.Id);
+        using var caseResponse = await client.GetAsync($"/api/support/tickets/{dispute.SupportTicketId}");
+        await caseResponse.EnsureSuccessWithBodyAsync();
+        var caseDetails = Assert.IsType<SupportTicketDetailsDto>(
+            (await caseResponse.ReadApiResponseAsync<SupportTicketDetailsDto>()).Data);
+        Assert.Contains(caseDetails.Messages, x =>
+            x.Body.Contains("Status: Completed") && x.Body.Contains(setup.Transfer.Reference));
+        db.ChangeTracker.Clear();
+        var unchangedTransfer = await db.Transfers.AsNoTracking().SingleAsync(x => x.Id == setup.Transfer.Id);
+        var unchangedWallet = await db.FinancialAccounts.AsNoTracking().SingleAsync(x => x.Id == setup.WalletId);
+        Assert.Equal(TransferStatus.Completed, unchangedTransfer.Status);
+        Assert.False(unchangedTransfer.IsOperationalHold);
+        Assert.Equal(customerWallet.SettledBalance, unchangedWallet.SettledBalance);
+        Assert.Equal(0m, unchangedWallet.HeldBalance);
+        Assert.Equal(1, provider.Calls);
+        Assert.Equal(1, await db.TransferDisputes.CountAsync(x => x.TransferId == setup.Transfer.Id));
     }
 
     public class DestinationProviderProxy : DispatchProxy

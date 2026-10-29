@@ -443,6 +443,7 @@ builder.Services.AddScoped<IAccountingService, AccountingService>();
 builder.Services.AddScoped<IFinancialCloseService, FinancialCloseService>();
 builder.Services.AddScoped<ITreasuryService, TreasuryService>();
 builder.Services.AddScoped<ITransferStatusService, TransferStatusService>();
+builder.Services.AddScoped<TransferReceiptService>();
 builder.Services.AddScoped<ITransferService, TransferService>();
 builder.Services.AddScoped<ITransactionPinService, TransactionPinService>();
 // Required by collection, payout, and business-funding services.

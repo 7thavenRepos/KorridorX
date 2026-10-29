@@ -55,6 +55,14 @@ public sealed class SupportController : ControllerBase
         return Ok(ApiResponses.Ok(result, "Support evidence added successfully."));
     }
 
+    [HttpPost("transfers/{transferId:guid}/reports")]
+    public async Task<IActionResult> ReportTransfer(
+        Guid transferId, [FromBody] ReportTransferRequestDto request, CancellationToken ct)
+    {
+        var result = await _service.ReportTransferAsync(GetUserId(), transferId, request, ct);
+        return Ok(ApiResponses.Ok(result, "Transfer report received successfully."));
+    }
+
     [HttpPost("transfers/{transferId:guid}/disputes")]
     public async Task<IActionResult> CreateDispute(Guid transferId, [FromBody] CreateTransferDisputeRequestDto request, CancellationToken ct)
     {

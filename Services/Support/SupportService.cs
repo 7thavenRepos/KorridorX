@@ -44,6 +44,57 @@ public sealed class SupportService : ISupportService
         _options = options.Value;
     }
 
+    public async Task<SupportTicketDetailsDto> ReportTransferAsync(
+        Guid userId, Guid transferId, ReportTransferRequestDto request,
+        CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(request.Description) || request.Description.Trim().Length > 2000)
+            throw new InvalidOperationException("Describe the problem using 1 to 2000 characters.");
+
+        var selectedBusinessProfileId = await ResolveSelectedBusinessAsync(userId, ct);
+        await using var transaction = await _db.Database.BeginTransactionAsync(ct);
+        await LockOwnedTransferAsync(userId, selectedBusinessProfileId, transferId, ct);
+        var transfer = await OwnedTransfers(userId, selectedBusinessProfileId)
+            .Include(x => x.Recipient)
+            .FirstOrDefaultAsync(x => x.Id == transferId, ct)
+            ?? throw new InvalidOperationException("Transfer not found or is not accessible to the authenticated user.");
+        if (!Enum.IsDefined(transfer.Status) ||
+            transfer.Status is TransferStatus.Cancelled or TransferStatus.Completed)
+            throw new InvalidOperationException("Report is unavailable for cancelled or completed transfers. Use Dispute for a completed transfer.");
+
+        var subject = $"Transfer report - {transfer.Reference}";
+        var body = TransferSupportSnapshot.Build(transfer, request.Description);
+        var existing = await _db.SupportTickets.AsNoTracking()
+            .Where(x => !x.IsDeleted && x.UserId == userId &&
+                x.BusinessProfileId == selectedBusinessProfileId &&
+                x.TransferId == transferId && x.Subject == subject &&
+                x.Status != SupportTicketStatus.Closed && x.Status != SupportTicketStatus.Resolved)
+            .OrderByDescending(x => x.CreatedAt)
+            .FirstOrDefaultAsync(ct);
+
+        SupportTicketDetailsDto details;
+        if (existing is null)
+        {
+            details = await CreateTicketAsync(userId, new CreateSupportTicketRequestDto {
+                TransferId = transferId, Category = SupportTicketCategory.Transfer,
+                Priority = SupportTicketPriority.Normal, Subject = subject, Description = body
+            }, ct);
+        }
+        else if (await _db.SupportTicketMessages.AsNoTracking().AnyAsync(x =>
+            x.SupportTicketId == existing.Id && !x.IsDeleted &&
+            x.AuthorUserId == userId && x.Body == body, ct))
+        {
+            details = await GetMyTicketAsync(userId, existing.Id, ct);
+        }
+        else
+        {
+            details = await AddCustomerMessageAsync(userId, existing.Id,
+                new AddSupportMessageRequestDto { Body = body }, ct);
+        }
+        await transaction.CommitAsync(ct);
+        return details;
+    }
+
     public async Task<SupportTicketDetailsDto> CreateTicketAsync(
         Guid userId,
         CreateSupportTicketRequestDto request,
@@ -187,20 +238,42 @@ public sealed class SupportService : ISupportService
 
     public async Task<TransferDisputeDto> CreateDisputeAsync(Guid userId, Guid transferId, CreateTransferDisputeRequestDto request, CancellationToken ct = default)
     {
+        if (string.IsNullOrWhiteSpace(request.Reason) || request.Reason.Trim().Length > 4000)
+            throw new InvalidOperationException("Describe the dispute using 1 to 4000 characters.");
+        if (!Enum.IsDefined(request.DisputeType))
+            throw new InvalidOperationException("Choose a valid dispute type.");
         var selectedBusinessProfileId = await ResolveSelectedBusinessAsync(userId, ct);
-        var transfer = await OwnedTransfers(userId, selectedBusinessProfileId).FirstOrDefaultAsync(x => x.Id == transferId, ct)
+        await using var transaction = await _db.Database.BeginTransactionAsync(ct);
+        await LockOwnedTransferAsync(userId, selectedBusinessProfileId, transferId, ct);
+        var transfer = await OwnedTransfers(userId, selectedBusinessProfileId)
+            .Include(x => x.Recipient).FirstOrDefaultAsync(x => x.Id == transferId, ct)
             ?? throw new InvalidOperationException("Transfer not found or is not accessible to the authenticated user.");
-        if (transfer.Status is TransferStatus.Draft or TransferStatus.Quoted)
+        if (!selectedBusinessProfileId.HasValue && transfer.Status != TransferStatus.Completed)
+            throw new InvalidOperationException("Dispute is available only for a completed transfer. Use Report for other eligible statuses.");
+        if (selectedBusinessProfileId.HasValue && (transfer.Status is TransferStatus.Draft or TransferStatus.Quoted))
             throw new InvalidOperationException("A dispute cannot be opened before a transfer has been submitted for payment.");
 
         var active = await _db.TransferDisputes.AsNoTracking().FirstOrDefaultAsync(x => x.TransferId == transferId && !x.IsDeleted && x.Status != TransferDisputeStatus.Resolved && x.Status != TransferDisputeStatus.Rejected && x.Status != TransferDisputeStatus.Withdrawn, ct);
-        if (active is not null) throw new InvalidOperationException($"An active dispute already exists for this transfer ({active.Reference}).");
+        if (active is not null)
+        {
+            if (active.UserId != userId || active.BusinessProfileId != selectedBusinessProfileId)
+                throw new InvalidOperationException($"An active dispute already exists for this transfer ({active.Reference}).");
+            var existing = await GetOwnedDisputeAsync(userId, active.Id, ct);
+            await transaction.CommitAsync(ct);
+            return existing;
+        }
+        var supportBody = TransferSupportSnapshot.Build(transfer, request.Reason);
 
         SupportTicket ticket;
         if (request.SupportTicketId.HasValue)
         {
-            ticket = await _db.SupportTickets.FirstOrDefaultAsync(x => x.Id == request.SupportTicketId.Value && x.UserId == userId && !x.IsDeleted && x.BusinessProfileId == selectedBusinessProfileId, ct)
-                ?? throw new InvalidOperationException("Support ticket not found.");
+            ticket = await _db.SupportTickets.FirstOrDefaultAsync(x => x.Id == request.SupportTicketId.Value && x.UserId == userId && !x.IsDeleted && x.BusinessProfileId == selectedBusinessProfileId && x.TransferId == transferId && x.Status != SupportTicketStatus.Closed && x.Status != SupportTicketStatus.Resolved, ct)
+                ?? throw new InvalidOperationException("An open support ticket linked to this transfer was not found.");
+            _db.SupportTicketMessages.Add(new SupportTicketMessage {
+                SupportTicketId = ticket.Id, AuthorUserId = userId,
+                AuthorType = SupportMessageAuthorType.Customer, Body = supportBody
+            });
+            ticket.LastCustomerMessageAt = DateTime.UtcNow;
         }
         else
         {
@@ -223,7 +296,7 @@ public sealed class SupportService : ISupportService
                 LastCustomerMessageAt = now,
                 CreatedByUserId = userId
             };
-            ticket.Messages.Add(new SupportTicketMessage { AuthorUserId = userId, AuthorType = SupportMessageAuthorType.Customer, Body = request.Reason.Trim() });
+            ticket.Messages.Add(new SupportTicketMessage { AuthorUserId = userId, AuthorType = SupportMessageAuthorType.Customer, Body = supportBody });
             _db.SupportTickets.Add(ticket);
         }
 
@@ -248,6 +321,7 @@ public sealed class SupportService : ISupportService
         _audit.Stage(new AuditRecordRequest("TransferDisputeCreated", "Support", nameof(TransferDispute), dispute.Id.ToString(), Metadata: new { transfer.Id, dispute.Reference, dispute.DisputeType }, UserId: userId));
         await _notifications.QueueUserAsync(userId, $"Transfer dispute {dispute.Reference} opened", "We received your transfer dispute. The transfer will be reviewed by our support team.", nameof(TransferDispute), dispute.Id, ct);
         await _db.SaveChangesAsync(ct);
+        await transaction.CommitAsync(ct);
         return await GetOwnedDisputeAsync(userId, dispute.Id, ct);
     }
 
@@ -327,6 +401,18 @@ public sealed class SupportService : ISupportService
             evidence.MimeType ?? "application/octet-stream",
             ct);
         return new SupportEvidenceDownloadDto(opened.Content, opened.MimeType, evidence.Name);
+    }
+
+    private async Task LockOwnedTransferAsync(
+        Guid userId, Guid? selectedBusinessProfileId, Guid transferId, CancellationToken ct)
+    {
+        // Only an owned transfer is eligible for a lock. Re-check ownership and
+        // status after taking it; concurrent reports/disputes then share one case.
+        if (!await OwnedTransfers(userId, selectedBusinessProfileId).AsNoTracking()
+            .AnyAsync(x => x.Id == transferId, ct))
+            throw new InvalidOperationException("Transfer not found or is not accessible to the authenticated user.");
+        await _db.Database.ExecuteSqlInterpolatedAsync(
+            $"SELECT 1 FROM \"Transfers\" WHERE \"Id\" = {transferId} FOR UPDATE", ct);
     }
 
     private IQueryable<Transfer> OwnedTransfers(Guid userId, Guid? selectedBusinessProfileId) => _db.Transfers

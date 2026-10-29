@@ -13,6 +13,12 @@ public sealed class CreateSupportTicketRequestDto
     public Guid? TransferId { get; set; }
 }
 
+public sealed class ReportTransferRequestDto
+{
+    [Required, MaxLength(2000)]
+    public string Description { get; set; } = "";
+}
+
 public class AddSupportMessageRequestDto
 {
     [Required, MaxLength(8000)] public string Body { get; set; } = "";
