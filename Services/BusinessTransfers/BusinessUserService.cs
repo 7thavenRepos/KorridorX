@@ -1,4 +1,6 @@
 using KorridorX.Data;
+using KorridorX.Dtos.Audit;
+using KorridorX.Services.Audit;
 using KorridorX.Dtos.BusinessTransfers;
 using KorridorX.Models.Customers;
 using KorridorX.Models.Enums;
@@ -10,11 +12,14 @@ public class BusinessUserService : IBusinessUserService
 {
     private readonly AppDbContext _db;
     private readonly IBusinessAccessService _accessService;
+    private readonly IAuditService _audit;
 
-    public BusinessUserService(AppDbContext db, IBusinessAccessService accessService)
+    public BusinessUserService(
+        AppDbContext db, IBusinessAccessService accessService, IAuditService audit)
     {
         _db = db;
         _accessService = accessService;
+        _audit = audit;
     }
 
     public async Task<IReadOnlyList<BusinessUserDto>> GetUsersAsync(
@@ -219,6 +224,10 @@ public class BusinessUserService : IBusinessUserService
         var profile = await _db.BusinessProfiles
             .FirstAsync(x => x.Id == access.BusinessProfileId && !x.IsDeleted, ct);
 
+        var before = new BusinessApprovalPolicyDto(
+            profile.RequiresTransferApproval, profile.RequiredTransferApprovals,
+            profile.TransferApprovalThreshold, profile.AllowTransferCreatorApproval);
+
         profile.RequiresTransferApproval = request.RequiresTransferApproval;
         profile.RequiredTransferApprovals = request.RequiredTransferApprovals;
         profile.TransferApprovalThreshold = request.TransferApprovalThreshold;
@@ -226,12 +235,17 @@ public class BusinessUserService : IBusinessUserService
         profile.LastUpdatedAt = DateTime.UtcNow;
         profile.LastUpdatedByUserId = userId;
 
+        var after = new BusinessApprovalPolicyDto(
+            profile.RequiresTransferApproval, profile.RequiredTransferApprovals,
+            profile.TransferApprovalThreshold, profile.AllowTransferCreatorApproval);
+        if (before != after)
+            _audit.Stage(new AuditRecordRequest(
+                "BUSINESS_TRANSFER_APPROVAL_POLICY_UPDATED", "BusinessSecurity",
+                nameof(BusinessProfile), profile.Id.ToString("D"),
+                OldValues: before, NewValues: after, UserId: userId));
+
         await _db.SaveChangesAsync(ct);
-        return new BusinessApprovalPolicyDto(
-            profile.RequiresTransferApproval,
-            profile.RequiredTransferApprovals,
-            profile.TransferApprovalThreshold,
-            profile.AllowTransferCreatorApproval);
+        return after;
     }
 
     private static BusinessPermission NormalizePermissions(

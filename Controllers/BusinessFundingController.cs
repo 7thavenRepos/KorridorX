@@ -17,10 +17,14 @@ namespace KorridorX.Controllers;
 public class BusinessFundingController : ControllerBase
 {
     private readonly IBusinessFundingService _service;
+    private readonly BusinessWalletProvisioningService _walletProvisioning;
 
-    public BusinessFundingController(IBusinessFundingService service)
+    public BusinessFundingController(
+        IBusinessFundingService service,
+        BusinessWalletProvisioningService walletProvisioning)
     {
         _service = service;
+        _walletProvisioning = walletProvisioning;
     }
 
     [HttpGet("wallets")]
@@ -32,6 +36,19 @@ public class BusinessFundingController : ControllerBase
         var result = await _service.GetWalletsAsync(GetUserId(), page, pageSize, ct);
         return Ok(ApiResponses.OkPaged(result.Items, result.Meta, "Business wallets retrieved successfully."));
     }
+
+    [HttpGet("wallets/available")]
+    public async Task<IActionResult> GetAvailableWalletAssets(CancellationToken ct) =>
+        Ok(ApiResponses.Ok(
+            await _walletProvisioning.GetAvailableAssetsAsync(GetUserId(), ct),
+            "Available Business wallet currencies retrieved."));
+
+    [HttpPost("wallets")]
+    public async Task<IActionResult> CreateWallet(
+        [FromBody] CreateBusinessWalletRequestDto request, CancellationToken ct) =>
+        Ok(ApiResponses.Ok(
+            await _walletProvisioning.CreateAsync(GetUserId(), request, ct),
+            "Business wallet ready at zero balance."));
 
     [HttpGet("wallets/{walletId:guid}/ledger")]
     public async Task<IActionResult> GetLedger(

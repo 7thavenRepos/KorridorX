@@ -350,6 +350,7 @@ builder.Services.AddScoped<IBusinessTransferService, BusinessTransferService>();
 builder.Services.AddScoped<IBusinessPaymentBatchService, BusinessPaymentBatchService>();
 builder.Services.AddScoped<IBusinessReportExportService, BusinessReportExportService>();
 builder.Services.AddScoped<IBusinessFundingService, BusinessFundingService>();
+builder.Services.AddScoped<BusinessWalletProvisioningService>();
 builder.Services.AddScoped<IFinancialReservationService, FinancialReservationService>();
 builder.Services.Configure<DigitalAssetComplianceOptions>(
     builder.Configuration.GetSection("DigitalAssets:Compliance"));

@@ -49,7 +49,9 @@ public class BusinessProfile : AuditableEntity
 
     public string? BlaaizBusinessCustomerId { get; set; }
 
-    public bool RequiresTransferApproval { get; set; } = true;
+    // Newly created single-user businesses start in Direct Transfer mode.
+    // Existing persisted approval settings are never changed by this CLR default.
+    public bool RequiresTransferApproval { get; set; } = false;
     public int RequiredTransferApprovals { get; set; } = 1;
     public decimal? TransferApprovalThreshold { get; set; }
     public bool AllowTransferCreatorApproval { get; set; } = false;

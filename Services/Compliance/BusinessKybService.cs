@@ -762,6 +762,9 @@ public class BusinessKybService : IBusinessKybService
             var created = new BusinessProfile
             {
                 OwnerUserId = userId,
+                RequiresTransferApproval = false, // Direct Transfer is the new single-user default.
+                RequiredTransferApprovals = 1,
+                AllowTransferCreatorApproval = false,
                 CreatedByUserId = userId
             };
             created.Users.Add(new BusinessUser
