@@ -137,7 +137,7 @@ public class BankDirectoryService : IBankDirectoryService
         }
 
         return await query
-            .OrderBy(x => x.Name)
+            .OrderBy(x => x.Name).ThenBy(x => x.Id)
             .Select(x => new ProviderBankDto(
                 x.Id,
                 x.ProviderCode,

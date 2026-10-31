@@ -264,7 +264,7 @@ public class BusinessBeneficiaryService : IBusinessBeneficiaryService
             CreatedByUserId = userId
         };
 
-        beneficiary.BankAccounts.Add(account);
+        _db.BusinessBeneficiaryBankAccounts.Add(account);
         await _db.SaveChangesAsync(ct);
         return ToDto(account);
     }
@@ -476,7 +476,7 @@ public class BusinessBeneficiaryService : IBusinessBeneficiaryService
             CreatedByUserId = userId
         };
 
-        beneficiary.MobileWallets.Add(wallet);
+        _db.BusinessBeneficiaryMobileWallets.Add(wallet);
         await _db.SaveChangesAsync(ct);
         return ToDto(wallet);
     }
