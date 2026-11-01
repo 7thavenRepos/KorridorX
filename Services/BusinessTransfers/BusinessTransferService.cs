@@ -88,14 +88,22 @@ public class BusinessTransferService : IBusinessTransferService
             throw new InvalidOperationException("Source amount must be greater than zero.");
         }
 
-        var sourceCountry = NormalizeCountryCode(request.SourceCountryCode);
-        var destinationCountry = NormalizeCountryCode(request.DestinationCountryCode);
         var sourceCurrency = NormalizeAssetCode(request.SourceCurrencyCode);
         var destinationCurrency = NormalizeAssetCode(request.DestinationCurrencyCode);
 
         var business = await _db.BusinessProfiles
             .AsNoTracking()
             .FirstAsync(x => x.Id == access.BusinessProfileId && !x.IsDeleted, ct);
+
+        // Currency-only quotes derive both countries from authoritative master data.
+        // Legacy explicit-country clients still follow their existing validations.
+        var sourceCountry = string.IsNullOrWhiteSpace(request.SourceCountryCode)
+            ? await ResolveQuoteSourceCountryAsync(business.CountryCode, business.OperatingCountryCode, sourceCurrency, ct)
+            : NormalizeCountryCode(request.SourceCountryCode);
+        var destinationCountry = string.IsNullOrWhiteSpace(request.DestinationCountryCode)
+            ? await ResolveQuoteDestinationCountryAsync(access.BusinessProfileId, request.BusinessBeneficiaryId,
+                destinationCurrency, request.TransferType, ct)
+            : NormalizeCountryCode(request.DestinationCountryCode);
 
         if (!string.Equals(business.CountryCode, sourceCountry, StringComparison.OrdinalIgnoreCase) &&
             !string.Equals(business.OperatingCountryCode, sourceCountry, StringComparison.OrdinalIgnoreCase))
@@ -694,6 +702,48 @@ public class BusinessTransferService : IBusinessTransferService
                 _db.TransferFees.AsNoTracking(), sourceCurrency, destinationCurrency, transferType, amount)
             .SingleOrDefaultAsync(ct)
         ?? throw new InvalidOperationException("Transfer fee is not configured for this business currency direction and amount.");
+
+    private async Task<string> ResolveQuoteSourceCountryAsync(
+        string registeredCountry, string? operatingCountry, string currency, CancellationToken ct)
+    {
+        var candidates = await _db.CountryAssets.AsNoTracking()
+            .Where(x => x.AssetCode == currency && x.Country.IsSupported && x.Country.IsSendCountry &&
+                x.Asset.IsSupported && x.Asset.BusinessEnabled && x.CanSend &&
+                (x.CountryCode == registeredCountry || x.CountryCode == operatingCountry))
+            .Select(x => x.CountryCode).Distinct().ToListAsync(ct);
+        return BusinessTransferCountrySelectionPolicy.Source(registeredCountry, operatingCountry, currency, candidates);
+    }
+
+    private async Task<string> ResolveQuoteDestinationCountryAsync(
+        Guid businessProfileId, Guid? beneficiaryId, string currency, TransferType transferType, CancellationToken ct)
+    {
+        var candidates = await _db.CountryAssets.AsNoTracking()
+            .Where(x => x.AssetCode == currency && x.Country.IsSupported && x.Country.IsReceiveCountry &&
+                x.Asset.IsSupported && x.Asset.BusinessEnabled && x.CanReceive)
+            .Select(x => x.CountryCode).Distinct().ToListAsync(ct);
+
+        string? beneficiaryCountry = null;
+        if (beneficiaryId.HasValue)
+        {
+            var beneficiary = await _db.BusinessBeneficiaries.AsNoTracking()
+                .Where(x => x.Id == beneficiaryId.Value && x.BusinessProfileId == businessProfileId &&
+                    x.IsActive && !x.IsDeleted)
+                .Select(x => new
+                {
+                    x.CountryCode,
+                    x.BeneficiaryType,
+                    HasVerifiedBank = x.BankAccounts.Any(account => account.IsActive && !account.IsDeleted &&
+                        account.CountryCode == x.CountryCode && account.CurrencyCode == currency && account.IsVerified)
+                }).SingleOrDefaultAsync(ct)
+                ?? throw new InvalidOperationException("The selected business beneficiary is unavailable.");
+            if (!beneficiary.HasVerifiedBank)
+                throw new InvalidOperationException("The selected beneficiary requires a verified bank account in the receiving currency.");
+            ValidateBeneficiaryType(beneficiary.BeneficiaryType, transferType);
+            beneficiaryCountry = beneficiary.CountryCode;
+        }
+
+        return BusinessTransferCountrySelectionPolicy.Destination(currency, candidates, beneficiaryCountry);
+    }
 
     private async Task EnsureCorridorAsync(string countryCode, string currencyCode, bool sending, CancellationToken ct)
     {

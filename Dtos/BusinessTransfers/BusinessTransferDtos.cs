@@ -4,12 +4,13 @@ using KorridorX.Models.Enums;
 namespace KorridorX.Dtos.BusinessTransfers;
 
 public record CreateBusinessTransferQuoteRequestDto(
-    string SourceCountryCode,
-    string DestinationCountryCode,
+    string? SourceCountryCode,
+    string? DestinationCountryCode,
     string SourceCurrencyCode,
     string DestinationCurrencyCode,
     decimal SourceAmount,
-    TransferType TransferType);
+    TransferType TransferType,
+    Guid? BusinessBeneficiaryId = null);
 
 public record CreateBusinessTransferRequestDto(
     Guid TransferQuoteId,
