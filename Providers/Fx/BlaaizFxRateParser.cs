@@ -41,7 +41,9 @@ public static class BlaaizFxRateParser
                 if (selectedId is not null && !string.Equals(id, selectedId, StringComparison.Ordinal)) continue;
                 var send = Flag(row, "send_enabled");
                 var swap = Flag(row, "swap_enabled");
-                if (Flag(row, "is_active") && (send || swap)) candidates.Add((row, id, send, swap));
+                // A provider-active row may be used for pricing even when neither FX execution flag is enabled.
+                // Operation-specific send/swap permissions remain checked by FxRateOperationPolicy.
+                if (Flag(row, "is_active")) candidates.Add((row, id, send, swap));
             }
             if (candidates.Count == 0)
                 throw InvalidResponse("Blaaiz has no active, usable rate for the exact requested direction and selected rate ID.");

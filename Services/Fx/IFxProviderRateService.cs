@@ -3,7 +3,8 @@ using KorridorX.Models.Fx;
 
 namespace KorridorX.Services.Fx;
 
-public enum FxRateUse { Transfer, Instant, Preview, Valuation }
+// PrefundedBusinessRemittance prices an internal two-wallet settlement; Blaaiz does not perform FX during payout.
+public enum FxRateUse { Transfer, Instant, Preview, Valuation, PrefundedBusinessRemittance }
 
 public interface ILiveFxRateService
 {

@@ -114,7 +114,7 @@ public class BusinessTransferService : IBusinessTransferService
             ct);
 
         return await _liveRates.UseFreshRateAsync(
-            sourceCurrency, destinationCurrency, FxRateUse.Transfer,
+            sourceCurrency, destinationCurrency, FxRateUse.PrefundedBusinessRemittance,
             async (rate, observationId, quoteCt) =>
             {
                 var feeAmount = Math.Round(

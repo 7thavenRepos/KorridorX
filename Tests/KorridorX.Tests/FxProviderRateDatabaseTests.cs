@@ -262,6 +262,29 @@ public sealed class FxProviderRateDatabaseTests(FxProviderRateDatabaseFixture fi
     }
 
     [DatabaseIntegrationFact]
+    public async Task Prefunded_business_price_uses_live_rate_without_send_or_swap_and_never_moves_funds()
+    {
+        // The provider supplied an active rate; our transfer settles via separate
+        // Blaaiz source collection and receiving-currency wallet payout.
+        var scenario = await ScenarioAsync();
+        scenario.Provider.SendEnabled = false;
+        scenario.Provider.SwapEnabled = false;
+        await using var db = fixture.CreateDb();
+        var service = Service(db, scenario.Provider);
+        var priced = await service.UseFreshRateAsync(
+            scenario.Source, scenario.Destination, FxRateUse.PrefundedBusinessRemittance,
+            (rate, observationId, ct) => Task.FromResult((rate.CustomerRate, observationId)));
+        Assert.Equal(98m, priced.Item1);
+        var observation = await db.FxRateObservations.AsNoTracking().SingleAsync(x => x.Id == priced.Item2);
+        Assert.Equal("PrefundedBusinessRemittance", observation.Purpose);
+        Assert.False(observation.SendEnabled);
+        Assert.False(observation.SwapEnabled);
+        Assert.Equal(0, await db.Payouts.CountAsync());
+        Assert.Equal(0, await db.Collections.CountAsync());
+        Assert.Equal(0, await db.LedgerTransactions.CountAsync());
+    }
+
+    [DatabaseIntegrationFact]
     public async Task Required_provider_capability_is_checked_without_falling_back()
     {
         var scenario = await ScenarioAsync();
@@ -321,6 +344,7 @@ public sealed class FxProviderRateDatabaseTests(FxProviderRateDatabaseFixture fi
         public bool IsAvailable => true;
         public bool Fail { get; set; }
         public bool SendEnabled { get; set; } = true;
+        public bool SwapEnabled { get; set; } = true;
         public decimal Rate { get; set; } = 100m;
         public DateTime ProviderTime { get; } = new(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
         public int Calls => _calls;
@@ -333,7 +357,7 @@ public sealed class FxProviderRateDatabaseTests(FxProviderRateDatabaseFixture fi
             var block = Interlocked.Exchange(ref _pending, null);
             if (block is not null) { block.Entered.TrySetResult(); await block.Release.Task.WaitAsync(ct); }
             return new(sourceCurrencyCode, destinationCurrencyCode, value, providerRateId ?? "123", ProviderTime,
-                started, DateTime.UtcNow, key, Guid.NewGuid(), SendEnabled, true);
+                started, DateTime.UtcNow, key, Guid.NewGuid(), SendEnabled, SwapEnabled);
         }
     }
 }

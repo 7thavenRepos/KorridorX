@@ -166,10 +166,9 @@ public sealed class FxProviderRateService : IFxProviderRateService, ILiveFxRateS
             x.SourceCurrencyCode == source && x.DestinationCurrencyCode == destination, ct)
             ?? throw new InvalidOperationException("Live FX pricing is not active for this currency pair. Contact support or ask an administrator to activate its provider configuration.");
         var observed = await ReadProviderAsync(snapshot, allowNewConnection: false, ct);
-        if ((use is FxRateUse.Transfer or FxRateUse.Preview) && !observed.SendEnabled)
-            throw new InvalidOperationException("The provider has not enabled this FX rate for sending money.");
-        if (use == FxRateUse.Instant && !observed.SwapEnabled)
-            throw new InvalidOperationException("The provider has not enabled this FX rate for instant conversion.");
+        // Business remittance uses separate source collection and destination-wallet payout.
+        // A live, active pricing rate is sufficient; no Blaaiz FX send/swap is requested.
+        FxRateOperationPolicy.EnsureAllowed(use, observed.SendEnabled, observed.SwapEnabled);
         return await WithPairLockAsync(source, destination, async () =>
         {
             var config = await CurrentAsync(snapshot.Id, ct);

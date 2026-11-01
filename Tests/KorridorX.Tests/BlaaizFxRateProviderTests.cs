@@ -72,12 +72,23 @@ public sealed class BlaaizFxRateProviderTests
     }
 
     [Theory]
+    [InlineData("false", "false")]
+    [InlineData("null", "null")]
+    public void Active_rate_without_send_or_swap_remains_a_valid_live_price(string send, string swap)
+    {
+        var parsed = BlaaizFxRateParser.Parse(
+            FxProviderTestSupport.Envelope(FxProviderTestSupport.Row(active: "true", send: send, swap: swap)),
+            "CAD", "NGN");
+        Assert.True(parsed.Rate > 0m);
+        Assert.False(parsed.SendEnabled);
+        Assert.False(parsed.SwapEnabled);
+    }
+
+    [Theory]
     [InlineData("false", "true", "true")]
     [InlineData("null", "true", "true")]
-    [InlineData("true", "false", "false")]
-    [InlineData("true", "null", "null")]
     [InlineData("true", "\"true\"", "false")]
-    public void Inactive_unusable_or_malformed_capabilities_fail_closed(string active, string send, string swap)
+    public void Inactive_or_malformed_capabilities_fail_closed(string active, string send, string swap)
     {
         Assert.Throws<ProviderIntegrationException>(() => BlaaizFxRateParser.Parse(
             FxProviderTestSupport.Envelope(FxProviderTestSupport.Row(active: active, send: send, swap: swap)), "CAD", "NGN"));
