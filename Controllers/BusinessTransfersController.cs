@@ -1,6 +1,7 @@
 using KorridorX.Configuration;
 using System.Security.Claims;
 using KorridorX.Dtos.BusinessTransfers;
+using KorridorX.Models.Enums;
 using KorridorX.Infrastructure;
 using KorridorX.Services.BusinessTransfers;
 using Microsoft.AspNetCore.Authorization;
@@ -20,6 +21,17 @@ public class BusinessTransfersController : ControllerBase
     public BusinessTransfersController(IBusinessTransferService service)
     {
         _service = service;
+    }
+
+    [HttpGet("quote-destinations")]
+    public async Task<IActionResult> QuoteDestinations(
+        [FromQuery] string destinationCurrencyCode,
+        [FromQuery] TransferType transferType,
+        CancellationToken ct)
+    {
+        var result = await _service.GetQuoteDestinationOptionsAsync(
+            GetUserId(), destinationCurrencyCode, transferType, ct);
+        return Ok(ApiResponses.Ok(result, "Eligible business quote recipients retrieved."));
     }
 
     [HttpPost("quotes")]

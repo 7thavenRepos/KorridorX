@@ -68,6 +68,42 @@ public class BusinessTransferService : IBusinessTransferService
         _remittanceProvider = remittanceProvider;
     }
 
+    /// <summary>
+    /// Read-only discovery for the quote form. It never includes unrelated
+    /// business records or recipients lacking an active verified bank in the
+    /// chosen receiving currency and an enabled payout country.
+    /// </summary>
+    public async Task<BusinessQuoteDestinationOptionsDto> GetQuoteDestinationOptionsAsync(
+        Guid userId, string destinationCurrencyCode, TransferType transferType, CancellationToken ct = default)
+    {
+        var access = await _accessService.EnsurePermissionAsync(
+            userId, BusinessPermission.CreateTransfers, ct);
+        // Recipient discovery also requires explicit permission to view business beneficiaries.
+        await _accessService.EnsurePermissionAsync(userId, BusinessPermission.ViewBeneficiaries, ct);
+        if (transferType is not TransferType.BusinessToConsumer and not TransferType.BusinessToBusiness)
+            throw new InvalidOperationException("Choose Business to individual or Business to business.");
+
+        var currency = NormalizeAssetCode(destinationCurrencyCode);
+        var receivingCountries = await _db.CountryAssets.AsNoTracking()
+            .Where(x => x.AssetCode == currency &&
+                x.Country.IsSupported && x.Country.IsReceiveCountry &&
+                x.Asset.IsSupported && x.Asset.BusinessEnabled && x.CanReceive)
+            .Select(x => x.CountryCode).Distinct().ToArrayAsync(ct);
+        var expectedType = transferType == TransferType.BusinessToBusiness
+            ? BusinessBeneficiaryType.Business : BusinessBeneficiaryType.Individual;
+
+        var eligible = await _db.BusinessBeneficiaries.AsNoTracking()
+            .Where(BusinessTransferRecipientEligibilityPolicy.ForQuote(
+                access.BusinessProfileId, expectedType, currency, receivingCountries))
+            .OrderBy(x => x.Name).ThenBy(x => x.Id)
+            .Select(x => new BusinessQuoteRecipientOptionDto(
+                x.Id, x.Name, x.CountryCode, x.BeneficiaryType))
+            .ToListAsync(ct);
+
+        return new BusinessQuoteDestinationOptionsDto(
+            receivingCountries.Length, receivingCountries.Length > 1, eligible);
+    }
+
     public async Task<TransferQuoteDto> CreateQuoteAsync(
         Guid userId,
         CreateBusinessTransferQuoteRequestDto request,

@@ -1,11 +1,14 @@
 using KorridorX.Dtos.BusinessTransfers;
 using KorridorX.Dtos.Fx;
 using KorridorX.Infrastructure;
+using KorridorX.Models.Enums;
 
 namespace KorridorX.Services.BusinessTransfers;
 
 public interface IBusinessTransferService
 {
+    Task<BusinessQuoteDestinationOptionsDto> GetQuoteDestinationOptionsAsync(
+        Guid userId, string destinationCurrencyCode, TransferType transferType, CancellationToken ct = default);
     Task<TransferQuoteDto> CreateQuoteAsync(Guid userId, CreateBusinessTransferQuoteRequestDto request, CancellationToken ct = default);
     Task<TransferQuoteDto> GetQuoteAsync(Guid userId, Guid quoteId, CancellationToken ct = default);
     Task<BusinessTransferDetailsDto> CreateTransferAsync(Guid userId, CreateBusinessTransferRequestDto request, CancellationToken ct = default);

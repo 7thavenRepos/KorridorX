@@ -12,6 +12,13 @@ public record CreateBusinessTransferQuoteRequestDto(
     TransferType TransferType,
     Guid? BusinessBeneficiaryId = null);
 
+public record BusinessQuoteRecipientOptionDto(
+    Guid Id, string Name, string CountryCode, BusinessBeneficiaryType BeneficiaryType);
+
+public record BusinessQuoteDestinationOptionsDto(
+    int ReceivingCountryCount, bool RequiresBeneficiary,
+    IReadOnlyList<BusinessQuoteRecipientOptionDto> EligibleBeneficiaries);
+
 public record CreateBusinessTransferRequestDto(
     Guid TransferQuoteId,
     Guid BusinessBeneficiaryId,
