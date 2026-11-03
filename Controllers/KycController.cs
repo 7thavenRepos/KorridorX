@@ -22,6 +22,16 @@ public class KycController : ControllerBase
         _kycService = kycService;
     }
 
+    [HttpPut("primary-owner/profile")]
+    public async Task<IActionResult> PreparePrimaryOwnerPersonalProfile(
+        [FromBody] PreparePrimaryOwnerPersonalKycRequest request,
+        CancellationToken ct)
+    {
+        var result = await _kycService.PreparePrimaryOwnerPersonalKycAsync(GetUserId(), request, ct);
+        return Ok(ApiResponses.Ok(result,
+            "Personal KYC profile prepared for this business owner login. Start and complete individual KYC before requesting a foreign receiving account."));
+    }
+
     [HttpPost("applications/start")]
     public async Task<IActionResult> StartApplication(CancellationToken ct)
     {

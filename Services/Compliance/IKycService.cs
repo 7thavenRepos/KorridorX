@@ -4,6 +4,11 @@ namespace KorridorX.Services.Compliance;
 
 public interface IKycService
 {
+    Task<PrimaryOwnerPersonalKycProfileDto> PreparePrimaryOwnerPersonalKycAsync(
+        Guid userId,
+        PreparePrimaryOwnerPersonalKycRequest request,
+        CancellationToken ct = default);
+
     Task<KycApplicationDto> StartMyApplicationAsync(
         Guid userId,
         CancellationToken ct = default);

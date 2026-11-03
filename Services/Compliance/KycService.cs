@@ -4,6 +4,7 @@ using KorridorX.Dtos.Compliance;
 using KorridorX.Dtos.Providers;
 using KorridorX.Models.Compliance;
 using KorridorX.Models.Customers;
+using KorridorX.Models.Audit;
 using KorridorX.Models.Enums;
 using KorridorX.Providers.Remittance;
 using KorridorX.Services.Providers;
@@ -39,6 +40,105 @@ public class KycService : IKycService
         _db = db;
         _providerCustomerService = providerCustomerService;
         _provider = provider;
+    }
+
+    /// <summary>
+    /// Explicit business-owner enrollment for a NEW, independent individual
+    /// profile. There is deliberately no lookup, import or reassignment of a
+    /// different Consumer login's KYC, customer ID or receiving account.
+    /// Provider KYC still runs through the normal documented workflow.
+    /// </summary>
+    public async Task<PrimaryOwnerPersonalKycProfileDto> PreparePrimaryOwnerPersonalKycAsync(
+        Guid userId, PreparePrimaryOwnerPersonalKycRequest request,
+        CancellationToken ct = default)
+    {
+        var user = await _db.Users.AsNoTracking().SingleOrDefaultAsync(x => x.Id == userId, ct)
+            ?? throw new UnauthorizedAccessException("Authenticated user not found.");
+        if (user.UserType != UserType.Business || !await _db.BusinessProfiles.AsNoTracking()
+                .AnyAsync(x => x.OwnerUserId == userId && !x.IsDeleted, ct))
+            throw new UnauthorizedAccessException("Only a registered primary business owner can prepare a separate personal KYC profile.");
+
+        static string Required(string? value, int max, string field)
+        {
+            var text = value?.Trim() ?? "";
+            if (text.Length == 0 || text.Length > max)
+                throw new InvalidOperationException($"Enter a valid {field} (maximum {max} characters).");
+            return text;
+        }
+
+        static string? Optional(string? value, int max, string field)
+        {
+            var text = value?.Trim();
+            if (text?.Length > max)
+                throw new InvalidOperationException($"{field} must be {max} characters or fewer.");
+            return string.IsNullOrWhiteSpace(text) ? null : text;
+        }
+
+        var firstName = Required(request.FirstName, 100, "legal first name");
+        var lastName = Required(request.LastName, 100, "legal last name");
+        var country = Required(request.CountryCode, 10, "personal country").ToUpperInvariant();
+        var address = Required(request.AddressLine1, 250, "residential address");
+        var city = Required(request.City, 100, "city");
+        if (!request.DateOfBirth.HasValue || request.DateOfBirth.Value.Date < new DateTime(1900, 1, 1) ||
+            request.DateOfBirth.Value.Date >= DateTime.UtcNow.Date)
+            throw new InvalidOperationException("Enter a valid past date of birth for the individual account holder.");
+        if (!await _db.Countries.AsNoTracking().AnyAsync(x => x.Code == country && x.IsSupported, ct))
+            throw new InvalidOperationException("Select a supported personal country from configured master data.");
+        if (string.IsNullOrWhiteSpace(user.Email))
+            throw new InvalidOperationException("The business owner's verified account email is required for personal KYC.");
+        if (!user.EmailConfirmed)
+            throw new InvalidOperationException("Confirm the business owner's login email before starting personal KYC.");
+
+        // Unique index on CustomerProfile.UserId is still authoritative. If an
+        // older record was soft-deleted it must be reviewed, not recreated.
+        var profile = await _db.CustomerProfiles.SingleOrDefaultAsync(x => x.UserId == userId, ct);
+        var created = profile is null;
+        if (profile?.IsDeleted == true)
+            throw new InvalidOperationException("A previous individual profile requires compliance review before reuse.");
+        if (profile is not null && (profile.CustomerType != CustomerType.Individual ||
+            profile.KycStatus is not (KycStatus.NotStarted or KycStatus.Pending) ||
+            !string.IsNullOrWhiteSpace(profile.BlaaizCustomerId) ||
+            await _db.ProviderCustomers.AsNoTracking().AnyAsync(x =>
+                x.CustomerProfileId == profile.Id && !x.IsDeleted, ct)))
+            throw new InvalidOperationException("Personal KYC already has a provider identity or verification history. Use the existing KYC/review process; identity cannot be replaced here.");
+
+        profile ??= new CustomerProfile
+        {
+            Id = Guid.NewGuid(),
+            UserId = userId,
+            CustomerType = CustomerType.Individual,
+            CreatedByUserId = userId
+        };
+        profile.FirstName = firstName;
+        profile.LastName = lastName;
+        // A birth date is a calendar day. Keep that day unchanged and use UTC
+        // midnight for PostgreSQL timestamp-with-time-zone compatibility.
+        profile.DateOfBirth = DateTime.SpecifyKind(request.DateOfBirth.Value.Date, DateTimeKind.Utc);
+        profile.CountryCode = country;
+        profile.AddressLine1 = address;
+        profile.AddressLine2 = Optional(request.AddressLine2, 250, "Address line 2");
+        profile.City = city;
+        profile.StateOrProvince = Optional(request.StateOrProvince, 100, "State or province");
+        profile.PostalCode = Optional(request.PostalCode, 50, "Postal code");
+        profile.PhoneNumber = Optional(request.PhoneNumber ?? user.PhoneNumber, 50, "Phone number");
+        profile.Email = user.Email;
+        profile.LastUpdatedAt = DateTime.UtcNow;
+        profile.LastUpdatedByUserId = userId;
+
+        if (created) _db.CustomerProfiles.Add(profile);
+        _db.AuditLogs.Add(new AuditLog
+        {
+            UserId = userId,
+            Action = created ? "BUSINESS_OWNER_PERSONAL_KYC_PROFILE_CREATED" : "BUSINESS_OWNER_PERSONAL_KYC_PROFILE_UPDATED",
+            Category = "Compliance",
+            EntityName = nameof(CustomerProfile),
+            EntityId = profile.Id.ToString(),
+            MetadataJson = "{\"separateIndividualKyc\":true,\"consumerProfileLinked\":false}"
+        });
+        await _db.SaveChangesAsync(ct);
+
+        return new PrimaryOwnerPersonalKycProfileDto(profile.Id, profile.CountryCode,
+            profile.KycStatus, true);
     }
 
     public async Task<KycApplicationDto> StartMyApplicationAsync(
