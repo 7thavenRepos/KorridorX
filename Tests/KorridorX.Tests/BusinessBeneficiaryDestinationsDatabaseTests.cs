@@ -67,6 +67,16 @@ public sealed class BusinessBeneficiaryDestinationsDatabaseTests(ReleaseCandidat
         Assert.NotEqual(first.Id, second.Id);
         Assert.True(second.IsDefault);
 
+        var manualDraft = await service.AddBankAccountAsync(registration.UserId, beneficiary.Id,
+            firstRequest with
+            {
+                AccountNumber = "0000000003", BankName = "", BankCode = null,
+                ProviderBankId = null, IsDefault = false
+            });
+        Assert.Equal("", manualDraft.BankName);
+        Assert.Null(manualDraft.ProviderBankId);
+        Assert.False(manualDraft.IsVerified);
+
         var wallet = await service.AddMobileWalletAsync(registration.UserId, beneficiary.Id,
             new AddBusinessBeneficiaryMobileWalletRequestDto(
                 "NG", "NGN", "CI Mobile Wallet", "08000000000", "CI Account Holder", true));
@@ -78,7 +88,7 @@ public sealed class BusinessBeneficiaryDestinationsDatabaseTests(ReleaseCandidat
         var savedBanks = await db.BusinessBeneficiaryBankAccounts.AsNoTracking()
             .Where(x => x.BusinessBeneficiaryId == beneficiary.Id && !x.IsDeleted)
             .ToListAsync();
-        Assert.Equal(2, savedBanks.Count);
+        Assert.Equal(3, savedBanks.Count);
         Assert.Single(savedBanks.Where(x => x.IsDefault));
         Assert.Contains(savedBanks, x => x.Id == first.Id && !x.IsDefault);
         Assert.Contains(savedBanks, x => x.Id == second.Id && x.IsDefault);

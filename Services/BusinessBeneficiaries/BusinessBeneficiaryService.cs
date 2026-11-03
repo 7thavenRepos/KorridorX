@@ -6,6 +6,7 @@ using KorridorX.Models.BusinessBeneficiaries;
 using KorridorX.Models.Enums;
 using KorridorX.Models.Providers;
 using KorridorX.Providers.Remittance;
+using KorridorX.Providers.Remittance.Blaaiz;
 using KorridorX.Services.BusinessTransfers;
 using KorridorX.Services.Compliance;
 using Microsoft.EntityFrameworkCore;
@@ -226,8 +227,7 @@ public class BusinessBeneficiaryService : IBusinessBeneficiaryService
         CancellationToken ct = default)
     {
         await _accessService.EnsurePermissionAsync(userId, BusinessPermission.ManageBeneficiaries, ct);
-        ValidateBankAccount(request.CountryCode, request.CurrencyCode, request.BankName,
-            request.AccountName, request.AccountNumber);
+        ValidateBankAccount(request.CountryCode, request.CurrencyCode);
 
         var beneficiary = await OwnedQuery(userId)
             .Include(x => x.BankAccounts)
@@ -237,8 +237,13 @@ public class BusinessBeneficiaryService : IBusinessBeneficiaryService
         var countryCode = NormalizeCode(request.CountryCode);
         var currencyCode = NormalizeCode(request.CurrencyCode);
         await EnsureCountryAssetAsync(countryCode, currencyCode, ct);
-        await EnsureBankAccountUniqueAsync(beneficiaryId, request.AccountNumber, request.BankCode, null, ct);
-        var providerBank = await ResolveProviderBankAsync(request.ProviderBankId, countryCode, ct);
+        var payoutRule = BlaaizCurrencyRequirements.Require(currencyCode, request.PayoutMethod);
+        if (payoutRule.PaymentMethod == PaymentMethod.Interac)
+            throw new InvalidOperationException("Interac uses beneficiary email, not a bank account.");
+        if (!payoutRule.UsesBankDirectory && !string.IsNullOrWhiteSpace(request.ProviderBankId))
+            throw new InvalidOperationException("This payout method does not use a provider bank ID.");
+        var providerBank = payoutRule.UsesBankDirectory
+            ? await ResolveProviderBankAsync(request.ProviderBankId, countryCode, ct) : null;
 
         if (request.IsDefault)
         {
@@ -250,20 +255,29 @@ public class BusinessBeneficiaryService : IBusinessBeneficiaryService
             BusinessBeneficiaryId = beneficiaryId,
             CountryCode = countryCode,
             CurrencyCode = currencyCode,
-            BankName = providerBank?.Name ?? request.BankName.Trim(),
+            BankName = providerBank?.Name ?? Clean(request.BankName) ?? "",
             BankCode = providerBank?.Code ?? Clean(request.BankCode),
             BranchCode = Clean(request.BranchCode),
-            AccountName = request.AccountName.Trim(),
-            AccountNumber = request.AccountNumber.Trim(),
+            AccountName = Clean(request.AccountName) ?? "",
+            AccountNumber = Clean(request.AccountNumber) ?? "",
             Iban = Clean(request.Iban),
             SwiftBic = Clean(request.SwiftBic),
             RoutingNumber = Clean(request.RoutingNumber),
             SortCode = Clean(request.SortCode),
             ProviderBankId = providerBank?.ProviderBankId,
+            PayoutMethod = payoutRule.PaymentMethod,
+            RecipientType = Clean(request.RecipientType),
+            AccountType = Clean(request.AccountType),
+            Street = Clean(request.Street),
+            City = Clean(request.City),
+            State = Clean(request.State),
+            PostalCode = Clean(request.PostalCode),
             IsDefault = request.IsDefault || !beneficiary.BankAccounts.Any(x => !x.IsDeleted && x.IsActive),
             CreatedByUserId = userId
         };
 
+        BusinessBeneficiaryPayoutPolicy.NormalizeDraft(account);
+        await EnsureBankAccountUniqueAsync(account, null, ct);
         _db.BusinessBeneficiaryBankAccounts.Add(account);
         await _db.SaveChangesAsync(ct);
         return ToDto(account);
@@ -277,8 +291,7 @@ public class BusinessBeneficiaryService : IBusinessBeneficiaryService
         CancellationToken ct = default)
     {
         await _accessService.EnsurePermissionAsync(userId, BusinessPermission.ManageBeneficiaries, ct);
-        ValidateBankAccount(request.CountryCode, request.CurrencyCode, request.BankName,
-            request.AccountName, request.AccountNumber);
+        ValidateBankAccount(request.CountryCode, request.CurrencyCode);
 
         var beneficiary = await OwnedQuery(userId)
             .Include(x => x.BankAccounts)
@@ -293,29 +306,75 @@ public class BusinessBeneficiaryService : IBusinessBeneficiaryService
         var countryCode = NormalizeCode(request.CountryCode);
         var currencyCode = NormalizeCode(request.CurrencyCode);
         await EnsureCountryAssetAsync(countryCode, currencyCode, ct);
-        await EnsureBankAccountUniqueAsync(beneficiaryId, request.AccountNumber, request.BankCode, bankAccountId, ct);
-        var providerBank = await ResolveProviderBankAsync(request.ProviderBankId, countryCode, ct);
+        var payoutRule = BlaaizCurrencyRequirements.Require(currencyCode, request.PayoutMethod);
+        if (payoutRule.PaymentMethod == PaymentMethod.Interac)
+            throw new InvalidOperationException("Interac uses beneficiary email, not a bank account.");
+        if (!payoutRule.UsesBankDirectory && !string.IsNullOrWhiteSpace(request.ProviderBankId))
+            throw new InvalidOperationException("This payout method does not use a provider bank ID.");
+        var providerBank = payoutRule.UsesBankDirectory
+            ? await ResolveProviderBankAsync(request.ProviderBankId, countryCode, ct) : null;
 
-        var bankChanged = account.ProviderBankId != providerBank?.ProviderBankId ||
-                          account.AccountNumber != request.AccountNumber.Trim();
+        var draft = new BusinessBeneficiaryBankAccount
+        {
+            BusinessBeneficiaryId = beneficiaryId,
+            CountryCode = countryCode,
+            CurrencyCode = currencyCode,
+            BankName = providerBank?.Name ?? Clean(request.BankName) ?? "",
+            BankCode = providerBank?.Code ?? Clean(request.BankCode),
+            BranchCode = Clean(request.BranchCode),
+            AccountName = Clean(request.AccountName) ?? "",
+            AccountNumber = Clean(request.AccountNumber) ?? "",
+            Iban = Clean(request.Iban),
+            SwiftBic = Clean(request.SwiftBic),
+            RoutingNumber = Clean(request.RoutingNumber),
+            SortCode = Clean(request.SortCode),
+            ProviderBankId = providerBank?.ProviderBankId,
+            PayoutMethod = payoutRule.PaymentMethod,
+            RecipientType = Clean(request.RecipientType),
+            AccountType = Clean(request.AccountType),
+            Street = Clean(request.Street),
+            City = Clean(request.City),
+            State = Clean(request.State),
+            PostalCode = Clean(request.PostalCode)
+        };
+        BusinessBeneficiaryPayoutPolicy.NormalizeDraft(draft);
+        await EnsureBankAccountUniqueAsync(draft, bankAccountId, ct);
+
+        var bankChanged = account.ProviderBankId != draft.ProviderBankId ||
+                          account.AccountNumber != draft.AccountNumber || account.AccountName != draft.AccountName ||
+                          account.BankCode != draft.BankCode || account.BranchCode != draft.BranchCode ||
+                          account.CountryCode != draft.CountryCode || account.CurrencyCode != draft.CurrencyCode ||
+                          account.PayoutMethod != draft.PayoutMethod || account.Iban != draft.Iban ||
+                          account.SwiftBic != draft.SwiftBic || account.RoutingNumber != draft.RoutingNumber ||
+                          account.SortCode != draft.SortCode || account.RecipientType != draft.RecipientType ||
+                          account.AccountType != draft.AccountType || account.Street != draft.Street ||
+                          account.City != draft.City || account.State != draft.State ||
+                          account.PostalCode != draft.PostalCode || account.BankName != draft.BankName;
 
         if (request.IsDefault)
         {
             ClearDefaultBankAccounts(beneficiary.BankAccounts);
         }
 
-        account.CountryCode = countryCode;
-        account.CurrencyCode = currencyCode;
-        account.BankName = providerBank?.Name ?? request.BankName.Trim();
-        account.BankCode = providerBank?.Code ?? Clean(request.BankCode);
-        account.BranchCode = Clean(request.BranchCode);
-        account.AccountName = request.AccountName.Trim();
-        account.AccountNumber = request.AccountNumber.Trim();
-        account.Iban = Clean(request.Iban);
-        account.SwiftBic = Clean(request.SwiftBic);
-        account.RoutingNumber = Clean(request.RoutingNumber);
-        account.SortCode = Clean(request.SortCode);
-        account.ProviderBankId = providerBank?.ProviderBankId;
+        account.CountryCode = draft.CountryCode;
+        account.CurrencyCode = draft.CurrencyCode;
+        account.BankName = draft.BankName;
+        account.BankCode = draft.BankCode;
+        account.BranchCode = draft.BranchCode;
+        account.AccountName = draft.AccountName;
+        account.AccountNumber = draft.AccountNumber;
+        account.Iban = draft.Iban;
+        account.SwiftBic = draft.SwiftBic;
+        account.RoutingNumber = draft.RoutingNumber;
+        account.SortCode = draft.SortCode;
+        account.ProviderBankId = draft.ProviderBankId;
+        account.PayoutMethod = draft.PayoutMethod;
+        account.RecipientType = draft.RecipientType;
+        account.AccountType = draft.AccountType;
+        account.Street = draft.Street;
+        account.City = draft.City;
+        account.State = draft.State;
+        account.PostalCode = draft.PostalCode;
         account.IsDefault = request.IsDefault;
         account.IsActive = request.IsActive;
         account.LastUpdatedAt = DateTime.UtcNow;
@@ -356,6 +415,16 @@ public class BusinessBeneficiaryService : IBusinessBeneficiaryService
         {
             throw new InvalidOperationException(
                 "Select a bank from the synchronized provider bank directory before verification.");
+        }
+
+        // Provider account-name verification is implemented for directory-backed
+        // bank accounts only. A foreign routing-details draft must never acquire
+        // a verified flag through the NGN provider-bank verification endpoint.
+        if (!BlaaizCurrencyRequirements.Require(account.CurrencyCode, account.PayoutMethod).UsesBankDirectory ||
+            !BlaaizCurrencyRequirements.SupportsCountry(account.CurrencyCode, account.CountryCode))
+        {
+            throw new InvalidOperationException(
+                "Provider account verification is unavailable for this currency and country.");
         }
 
         var bank = await _db.ProviderBanks.AsNoTracking().FirstOrDefaultAsync(x =>
@@ -656,15 +725,30 @@ public class BusinessBeneficiaryService : IBusinessBeneficiaryService
     }
 
     private async Task EnsureBankAccountUniqueAsync(
-        Guid beneficiaryId, string accountNumber, string? bankCode,
+        BusinessBeneficiaryBankAccount candidate,
         Guid? excludeId, CancellationToken ct)
     {
-        var number = accountNumber.Trim();
-        var code = Clean(bankCode);
-        var exists = await _db.BusinessBeneficiaryBankAccounts.AnyAsync(x =>
-            x.BusinessBeneficiaryId == beneficiaryId && !x.IsDeleted &&
-            x.AccountNumber == number && x.BankCode == code &&
-            (!excludeId.HasValue || x.Id != excludeId.Value), ct);
+        var country = candidate.CountryCode;
+        var currency = candidate.CurrencyCode;
+        var number = candidate.AccountNumber;
+        var code = candidate.BankCode;
+        var iban = candidate.Iban;
+        var sortCode = candidate.SortCode;
+        var routing = candidate.RoutingNumber;
+        var method = candidate.PayoutMethod;
+        var query = _db.BusinessBeneficiaryBankAccounts.Where(x =>
+            x.BusinessBeneficiaryId == candidate.BusinessBeneficiaryId && !x.IsDeleted &&
+            x.CountryCode == country && x.CurrencyCode == currency &&
+            (!excludeId.HasValue || x.Id != excludeId.Value));
+
+        var exists = currency switch
+        {
+            "EUR" => await query.AnyAsync(x => x.Iban == iban, ct),
+            "GBP" => await query.AnyAsync(x => x.AccountNumber == number && x.SortCode == sortCode, ct),
+            "USD" => await query.AnyAsync(x => x.AccountNumber == number &&
+                x.RoutingNumber == routing && x.PayoutMethod == method, ct),
+            _ => await query.AnyAsync(x => x.AccountNumber == number && x.BankCode == code, ct)
+        };
         if (exists) throw new InvalidOperationException("This bank account already exists for the beneficiary.");
     }
 
@@ -724,7 +808,9 @@ public class BusinessBeneficiaryService : IBusinessBeneficiaryService
         x.Id, x.BusinessBeneficiaryId, x.CountryCode, x.CurrencyCode, x.BankName,
         x.BankCode, x.BranchCode, x.AccountName, x.AccountNumber, x.Iban, x.SwiftBic,
         x.RoutingNumber, x.SortCode, x.ProviderBankId, x.ProviderVerifiedAccountName,
-        x.IsVerified, x.VerifiedAt, x.LastVerificationError, x.IsDefault, x.IsActive);
+        x.IsVerified, x.VerifiedAt, x.LastVerificationError, x.IsDefault, x.IsActive,
+        x.PayoutMethod, x.RecipientType, x.AccountType, x.Street, x.City, x.State, x.PostalCode,
+        x.ProviderBankId is not null ? "ProviderBankLookup" : "LocalDetailsOnly");
 
     private static BusinessBeneficiaryMobileWalletDto ToDto(BusinessBeneficiaryMobileWallet x) => new(
         x.Id, x.BusinessBeneficiaryId, x.CountryCode, x.CurrencyCode, x.ProviderName,
@@ -739,14 +825,12 @@ public class BusinessBeneficiaryService : IBusinessBeneficiaryService
     }
 
     private static void ValidateBankAccount(
-        string countryCode, string currencyCode, string bankName,
-        string accountName, string accountNumber)
+        string countryCode, string currencyCode)
     {
         if (string.IsNullOrWhiteSpace(countryCode)) throw new InvalidOperationException("Country code is required.");
         if (string.IsNullOrWhiteSpace(currencyCode)) throw new InvalidOperationException("Currency code is required.");
-        if (string.IsNullOrWhiteSpace(bankName)) throw new InvalidOperationException("Bank name is required.");
-        if (string.IsNullOrWhiteSpace(accountName)) throw new InvalidOperationException("Account name is required.");
-        if (string.IsNullOrWhiteSpace(accountNumber)) throw new InvalidOperationException("Account number is required.");
+        // Currency-specific routing, account-holder and bank requirements are
+        // validated by BusinessBeneficiaryPayoutPolicy before the draft is saved.
     }
 
     private static void ValidateMobileWallet(

@@ -1,4 +1,5 @@
 using KorridorX.Models.Common;
+using KorridorX.Models.Enums;
 
 namespace KorridorX.Models.BusinessBeneficiaries;
 
@@ -18,6 +19,13 @@ public class BusinessBeneficiaryBankAccount : AuditableEntity
     public string? SwiftBic { get; set; }
     public string? RoutingNumber { get; set; }
     public string? SortCode { get; set; }
+    public PaymentMethod? PayoutMethod { get; set; }
+    public string? RecipientType { get; set; }
+    public string? AccountType { get; set; }
+    public string? Street { get; set; }
+    public string? City { get; set; }
+    public string? State { get; set; }
+    public string? PostalCode { get; set; }
 
     public string? ProviderBankId { get; set; }
     public string? ProviderBeneficiaryId { get; set; }
