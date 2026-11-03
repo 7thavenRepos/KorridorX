@@ -15,6 +15,7 @@ using KorridorX.Services.References;
 using KorridorX.Services.BusinessFunding;
 using KorridorX.Services.Notifications;
 using KorridorX.Services.Payments;
+using KorridorX.Services.BusinessBeneficiaries;
 using KorridorX.Services.Transfers;
 using KorridorX.Services.Compliance;
 using KorridorX.Services.Security;
@@ -359,7 +360,7 @@ public class BusinessPaymentBatchService : IBusinessPaymentBatchService
                 var quote = item.TransferQuote
                     ?? await _db.TransferQuotes.FirstAsync(x => x.Id == item.TransferQuoteId, ct);
 
-                await EnsureBankDestinationVerifiedForQuoteProviderAsync(item, quote, ct);
+                await EnsureBankDestinationEligibleForQuoteProviderAsync(item, quote, ct);
 
                 var transfer = new Transfer
                 {
@@ -549,9 +550,6 @@ public class BusinessPaymentBatchService : IBusinessPaymentBatchService
             item.BusinessBeneficiaryMobileWalletId = walletId;
         else if (!string.IsNullOrWhiteSpace(walletIdText))
             errors.Add("mobileWalletId must be a valid GUID.");
-        if (item.BusinessBeneficiaryBankAccountId.HasValue == item.BusinessBeneficiaryMobileWalletId.HasValue)
-            errors.Add("Exactly one bankAccountId or mobileWalletId is required.");
-
         item.DestinationCurrencyCode = NormalizeCodeOrEmpty(Read(row, "destinationcurrencycode"));
         if (string.IsNullOrWhiteSpace(item.DestinationCurrencyCode))
         {
@@ -561,6 +559,15 @@ public class BusinessPaymentBatchService : IBusinessPaymentBatchService
         {
             errors.Add("destinationCurrencyCode cannot exceed 20 characters.");
             item.DestinationCurrencyCode = Truncate(item.DestinationCurrencyCode, 20);
+        }
+        if (item.DestinationCurrencyCode == "CAD")
+        {
+            if (item.BusinessBeneficiaryBankAccountId.HasValue || item.BusinessBeneficiaryMobileWalletId.HasValue)
+                errors.Add("CAD Interac uses beneficiary email and contact names; leave bankAccountId and mobileWalletId empty.");
+        }
+        else if (item.BusinessBeneficiaryBankAccountId.HasValue == item.BusinessBeneficiaryMobileWalletId.HasValue)
+        {
+            errors.Add("Exactly one bankAccountId or mobileWalletId is required.");
         }
         if (!decimal.TryParse(Read(row, "sourceamount"), NumberStyles.Number, CultureInfo.InvariantCulture, out var amount) || amount <= 0)
             errors.Add("sourceAmount must be a positive number.");
@@ -618,7 +625,13 @@ public class BusinessPaymentBatchService : IBusinessPaymentBatchService
             ? TransferType.BusinessToBusiness
             : TransferType.BusinessToConsumer;
 
-        if (item.BusinessBeneficiaryBankAccountId.HasValue)
+        if (item.DestinationCurrencyCode == "CAD")
+        {
+            if (item.BusinessBeneficiaryBankAccountId.HasValue || item.BusinessBeneficiaryMobileWalletId.HasValue)
+                throw new InvalidOperationException("CAD Interac uses beneficiary email rather than a bank or mobile wallet.");
+            BusinessBeneficiaryInteracPolicy.Validate(beneficiary);
+        }
+        else if (item.BusinessBeneficiaryBankAccountId.HasValue)
         {
             var account = await _db.BusinessBeneficiaryBankAccounts.AsNoTracking()
                 .FirstOrDefaultAsync(x =>
@@ -628,7 +641,8 @@ public class BusinessPaymentBatchService : IBusinessPaymentBatchService
                     !x.IsDeleted,
                     ct)
                 ?? throw new InvalidOperationException("Beneficiary bank account not found or inactive.");
-            if (!account.IsVerified) throw new InvalidOperationException("Beneficiary bank account is not verified.");
+            if (!BusinessBeneficiaryPayoutPolicy.IsReady(account))
+                throw new InvalidOperationException("Beneficiary bank account needs complete currency-specific payout details.");
             if (!string.Equals(account.CountryCode, beneficiary.CountryCode, StringComparison.OrdinalIgnoreCase))
                 throw new InvalidOperationException("Bank-account country does not match the beneficiary country.");
             if (!string.Equals(account.CurrencyCode, item.DestinationCurrencyCode, StringComparison.OrdinalIgnoreCase))
@@ -654,20 +668,27 @@ public class BusinessPaymentBatchService : IBusinessPaymentBatchService
         await EnsureCorridorAsync(item.DestinationCountryCode, item.DestinationCurrencyCode, false, ct);
         var quote = await CreateQuoteAsync(batch, item, transferType, userId, ct);
 
-        PayoutDestinationCapabilityPolicy.EnsureSupported(
-            quote.ProviderCode,
-            item.BusinessBeneficiaryMobileWalletId.HasValue
-                ? PayoutDestinationType.BusinessBeneficiaryMobileWallet
-                : PayoutDestinationType.BusinessBeneficiaryBankAccount);
+        if (item.DestinationCurrencyCode == "CAD")
+        {
+            PayoutDestinationCapabilityPolicy.EnsureBusinessInteracSupported(quote.ProviderCode, quote.DestinationCurrencyCode);
+        }
+        else
+        {
+            PayoutDestinationCapabilityPolicy.EnsureSupported(
+                quote.ProviderCode,
+                item.BusinessBeneficiaryMobileWalletId.HasValue
+                    ? PayoutDestinationType.BusinessBeneficiaryMobileWallet
+                    : PayoutDestinationType.BusinessBeneficiaryBankAccount);
+        }
 
-        await EnsureBankDestinationVerifiedForQuoteProviderAsync(item, quote, ct);
+        await EnsureBankDestinationEligibleForQuoteProviderAsync(item, quote, ct);
 
         item.TransferQuote = quote;
         item.TransferQuoteId = quote.Id;
         CopyQuote(item, quote);
     }
 
-    private async Task EnsureBankDestinationVerifiedForQuoteProviderAsync(
+    private async Task EnsureBankDestinationEligibleForQuoteProviderAsync(
         BusinessPaymentBatchItem item,
         TransferQuote quote,
         CancellationToken ct)
@@ -688,23 +709,26 @@ public class BusinessPaymentBatchService : IBusinessPaymentBatchService
             ?? throw new InvalidOperationException(
                 "The batch bank account is no longer active.");
 
-        if (!await IsBankDestinationVerifiedForProviderAsync(
+        if (!BusinessBeneficiaryPayoutPolicy.IsReady(account))
+            throw new InvalidOperationException("The batch bank account no longer meets payout requirements.");
+
+        if (!await IsBankDestinationEligibleForProviderAsync(
                 PayoutDestinationType.BusinessBeneficiaryBankAccount,
                 account.Id,
                 quote.ProviderCode,
-                account.IsVerified,
+                BusinessBeneficiaryPayoutPolicy.IsReady(account),
                 ct))
         {
             throw new InvalidOperationException(
-                "The batch bank account is not verified for the selected payout provider.");
+                "The batch bank account is not eligible for the selected payout provider.");
         }
     }
 
-    private async Task<bool> IsBankDestinationVerifiedForProviderAsync(
+    private async Task<bool> IsBankDestinationEligibleForProviderAsync(
         PayoutDestinationType destinationType,
         Guid destinationId,
         string providerCode,
-        bool legacyIsVerified,
+        bool fallbackPayoutReady,
         CancellationToken ct)
     {
         if (!Enum.TryParse<ProviderCode>(
@@ -712,7 +736,7 @@ public class BusinessPaymentBatchService : IBusinessPaymentBatchService
                 true,
                 out var parsedProviderCode))
         {
-            return legacyIsVerified;
+            return fallbackPayoutReady;
         }
 
         var mapping = await _db.PayoutDestinationProviderMappings
@@ -725,8 +749,8 @@ public class BusinessPaymentBatchService : IBusinessPaymentBatchService
                 ct);
 
         return mapping is null
-            ? legacyIsVerified
-            : mapping.IsActive && mapping.IsVerified;
+            ? fallbackPayoutReady
+            : mapping.IsActive && (mapping.IsVerified || fallbackPayoutReady);
     }
 
     private async Task<TransferQuote> CreateQuoteAsync(
@@ -799,7 +823,13 @@ public class BusinessPaymentBatchService : IBusinessPaymentBatchService
         if (!string.Equals(beneficiary.CountryCode, item.DestinationCountryCode, StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException("The beneficiary country changed after batch validation.");
 
-        if (item.BusinessBeneficiaryBankAccountId.HasValue)
+        if (item.DestinationCurrencyCode == "CAD")
+        {
+            if (item.BusinessBeneficiaryBankAccountId.HasValue || item.BusinessBeneficiaryMobileWalletId.HasValue)
+                throw new InvalidOperationException("CAD Interac batch items must not specify bank or wallet IDs.");
+            BusinessBeneficiaryInteracPolicy.Validate(beneficiary);
+        }
+        else if (item.BusinessBeneficiaryBankAccountId.HasValue)
         {
             var account = await _db.BusinessBeneficiaryBankAccounts.AsNoTracking()
                 .FirstOrDefaultAsync(x =>
@@ -810,8 +840,8 @@ public class BusinessPaymentBatchService : IBusinessPaymentBatchService
                     ct)
                 ?? throw new InvalidOperationException("The batch bank account is no longer active.");
 
-            if (!account.IsVerified)
-                throw new InvalidOperationException("The batch bank account is no longer verified.");
+            if (!BusinessBeneficiaryPayoutPolicy.IsReady(account))
+                throw new InvalidOperationException("The batch bank account no longer meets payout requirements.");
             if (!string.Equals(account.CountryCode, item.DestinationCountryCode, StringComparison.OrdinalIgnoreCase) ||
                 !string.Equals(account.CurrencyCode, item.DestinationCurrencyCode, StringComparison.OrdinalIgnoreCase))
                 throw new InvalidOperationException("The batch bank account no longer matches the validated corridor.");

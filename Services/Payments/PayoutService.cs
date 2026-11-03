@@ -1,4 +1,6 @@
 using KorridorX.Services.Recipients;
+using KorridorX.Services.BusinessBeneficiaries;
+using KorridorX.Models.BusinessBeneficiaries;
 using KorridorX.Providers.Remittance.Blaaiz;
 using System.Data;
 using KorridorX.Services.PaymentChannels;
@@ -141,8 +143,14 @@ public class PayoutService : IPayoutService
             throw new InvalidOperationException($"Mobile-wallet payouts are not yet enabled for {_remittanceProvider.ProviderName}.");
         }
 
-        var preferredMethod = destination.ConsumerBankAccount is null ? (PaymentMethod?)null
-            : RecipientPayoutPolicy.Method(destination.ConsumerBankAccount);
+        var preferredMethod = destination.ConsumerBankAccount is not null
+            ? RecipientPayoutPolicy.Method(destination.ConsumerBankAccount)
+            : destination.BusinessBankAccount is not null
+                ? BusinessBeneficiaryPayoutPolicy.Method(destination.BusinessBankAccount)
+                : transfer.BusinessProfileId.HasValue &&
+                  string.Equals(transfer.DestinationCurrencyCode, "CAD", StringComparison.OrdinalIgnoreCase)
+                    ? PaymentMethod.Interac
+                    : (PaymentMethod?)null;
         if (payout is not null && preferredMethod.HasValue && payout.PaymentMethod != preferredMethod.Value)
             throw new InvalidOperationException("The saved payout method no longer matches the recipient account.");
         _dispatchStage = "payment_channel";
@@ -152,22 +160,47 @@ public class PayoutService : IPayoutService
         var foreignBank = BlaaizCurrencyRequirements.IsForeignBank(transfer.DestinationCurrencyCode);
         if (foreignBank)
         {
-            var bank = destination.ConsumerBankAccount
-                ?? throw new InvalidOperationException("Complete recipient bank routing details are required for this payout.");
-            if (!bank.IsActive || bank.IsDeleted || RecipientPayoutPolicy.Method(bank) != paymentMethod)
-                throw new InvalidOperationException("An active recipient account matching the selected payout method is required.");
-            RecipientPayoutPolicy.Validate(bank);
+            if (destination.ConsumerBankAccount is { } consumerBank)
+            {
+                if (!consumerBank.IsActive || consumerBank.IsDeleted || RecipientPayoutPolicy.Method(consumerBank) != paymentMethod)
+                    throw new InvalidOperationException("An active recipient account matching the selected payout method is required.");
+                RecipientPayoutPolicy.Validate(consumerBank);
+            }
+            else if (destination.BusinessBankAccount is { } businessBank)
+            {
+                if (BusinessBeneficiaryPayoutPolicy.Method(businessBank) != paymentMethod ||
+                    !BusinessBeneficiaryPayoutPolicy.IsReady(businessBank))
+                    throw new InvalidOperationException("The business bank account no longer has complete payout routing details.");
+            }
+            else
+            {
+                throw new InvalidOperationException("Complete recipient bank routing details are required for this payout.");
+            }
         }
-        else ValidateDestination(
-            transfer.DestinationCurrencyCode,
-            paymentMethod,
-            destination.BankAccountIsActive,
-            destination.BankAccountIsDeleted,
-            destination.ProviderBankId,
-            destination.AccountNumber,
-            destination.BankAccountIsVerified,
-            destination.VerifiedAccountName,
-            destination.Email);
+        else
+        {
+            if (paymentMethod == PaymentMethod.Interac && transfer.BusinessProfileId.HasValue)
+            {
+                PayoutDestinationCapabilityPolicy.EnsureBusinessInteracSupported(
+                    _remittanceProvider.ProviderCode.ToString(), transfer.DestinationCurrencyCode);
+                BusinessBeneficiaryInteracPolicy.Validate(transfer.BusinessBeneficiary
+                    ?? throw new InvalidOperationException("Business Interac beneficiary is missing."));
+            }
+            else if (paymentMethod == PaymentMethod.BankTransfer && transfer.BusinessProfileId.HasValue &&
+                destination.BusinessBankAccount is { } businessBank &&
+                !BusinessBeneficiaryPayoutPolicy.IsReady(businessBank))
+            {
+                throw new InvalidOperationException("The business bank account no longer meets payout routing requirements.");
+            }
+            ValidateDestination(
+                transfer.DestinationCurrencyCode,
+                paymentMethod,
+                destination.BankAccountIsActive,
+                destination.BankAccountIsDeleted,
+                destination.ProviderBankId,
+                destination.AccountNumber,
+                destination.Email);
+        }
 
         _dispatchStage = "provider_customer_compliance";
         var compliance = transfer.BusinessProfileId.HasValue
@@ -340,14 +373,14 @@ public class PayoutService : IPayoutService
                     destination.Iban,
                     destination.SwiftBic,
                     $"KorridorX transfer {transfer.Reference}",
-                    RecipientType: destination.ConsumerBankAccount?.RecipientType,
-                    AccountType: destination.ConsumerBankAccount?.AccountType,
-                    RecipientCountry: destination.ConsumerBankAccount?.CountryCode,
-                    RecipientState: destination.ConsumerBankAccount?.State,
-                    RecipientStreet: destination.ConsumerBankAccount?.Street,
-                    RecipientCity: destination.ConsumerBankAccount?.City,
-                    RecipientPostalCode: destination.ConsumerBankAccount?.PostalCode,
-                    BicCode: destination.ConsumerBankAccount?.SwiftBic),
+                    RecipientType: destination.ConsumerBankAccount?.RecipientType ?? destination.BusinessBankAccount?.RecipientType,
+                    AccountType: destination.ConsumerBankAccount?.AccountType ?? destination.BusinessBankAccount?.AccountType,
+                    RecipientCountry: destination.ConsumerBankAccount?.CountryCode ?? destination.BusinessBankAccount?.CountryCode,
+                    RecipientState: destination.ConsumerBankAccount?.State ?? destination.BusinessBankAccount?.State,
+                    RecipientStreet: destination.ConsumerBankAccount?.Street ?? destination.BusinessBankAccount?.Street,
+                    RecipientCity: destination.ConsumerBankAccount?.City ?? destination.BusinessBankAccount?.City,
+                    RecipientPostalCode: destination.ConsumerBankAccount?.PostalCode ?? destination.BusinessBankAccount?.PostalCode,
+                    BicCode: destination.ConsumerBankAccount?.SwiftBic ?? destination.BusinessBankAccount?.SwiftBic),
                 ct);
 
             var payoutStatus = MapProviderPayoutStatus(result.ProviderStatus);
@@ -774,6 +807,9 @@ public class PayoutService : IPayoutService
                     changedByUserId,
                     ct);
 
+            if (providerView is { IsActive: false })
+                throw new InvalidOperationException("The beneficiary payout provider mapping is inactive.");
+
             return new PayoutDestination(
                 firstName,
                 lastName,
@@ -781,7 +817,8 @@ public class PayoutService : IPayoutService
                 beneficiary.PhoneNumber,
                 account?.BankName,
                 providerView?.ProviderBankId ?? account?.ProviderBankId,
-                providerView?.ProviderVerifiedAccountName ?? account?.ProviderVerifiedAccountName,
+                (providerView is { IsVerified: true } ? providerView.ProviderVerifiedAccountName : null) ??
+                    (account?.IsVerified == true ? account.ProviderVerifiedAccountName : null),
                 account?.AccountName,
                 account?.AccountNumber,
                 account?.RoutingNumber,
@@ -795,7 +832,9 @@ public class PayoutService : IPayoutService
                 : account?.IsVerified ?? false,
                 wallet is not null,
                 providerView?.ProviderPartyId ?? account?.ProviderBeneficiaryId,
-                providerView?.ProviderDestinationId ?? account?.ProviderBankAccountId);
+                providerView?.ProviderDestinationId ?? account?.ProviderBankAccountId,
+                null,
+                account);
         }
 
         var recipient = transfer.Recipient
@@ -948,8 +987,6 @@ public class PayoutService : IPayoutService
         bool bankAccountIsDeleted,
         string? providerBankId,
         string? accountNumber,
-        bool bankAccountIsVerified,
-        string? verifiedAccountName,
         string? recipientEmail)
     {
         if (method == PaymentMethod.BankTransfer)
@@ -965,11 +1002,13 @@ public class PayoutService : IPayoutService
                     $"A provider bank selection and account number are required for {currencyCode} payout.");
             }
 
-            if (!bankAccountIsVerified || string.IsNullOrWhiteSpace(verifiedAccountName))
-            {
-                throw new InvalidOperationException(
-                    "The recipient bank account must be verified with the provider before payout.");
-            }
+            if (currencyCode == "NGN" && (accountNumber.Length != 10 ||
+                accountNumber.Any(ch => ch is < '0' or > '9')))
+                throw new InvalidOperationException("NGN payout requires a valid ten-digit bank account number.");
+
+            // A provider account-name lookup is advisory. NGN routing still requires
+            // a selected provider bank and correctly shaped account number; the
+            // downstream provider may accept or reject the attempted payment.
         }
 
         if (method == PaymentMethod.Interac && string.IsNullOrWhiteSpace(recipientEmail))
@@ -1006,7 +1045,8 @@ public class PayoutService : IPayoutService
         bool IsMobileWallet,
         string? ProviderPartyId,
         string? ProviderDestinationId,
-        RecipientBankAccount? ConsumerBankAccount = null);
+        RecipientBankAccount? ConsumerBankAccount = null,
+        BusinessBeneficiaryBankAccount? BusinessBankAccount = null);
 
     private static PayoutStatus MapProviderPayoutStatus(string status) =>
         status.Trim().ToUpperInvariant() switch

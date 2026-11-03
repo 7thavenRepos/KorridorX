@@ -27,6 +27,17 @@ public static class PayoutDestinationCapabilityPolicy
                destinations.Contains(destinationType);
     }
 
+    /// <summary>Interac uses beneficiary email and contact names, not a bank or wallet mapping.</summary>
+    public static void EnsureBusinessInteracSupported(string providerCode, string currencyCode)
+    {
+        if (!string.Equals(currencyCode, "CAD", StringComparison.OrdinalIgnoreCase) ||
+            !Enum.TryParse<ProviderCode>(providerCode, true, out var provider) ||
+            provider != ProviderCode.Blaaiz)
+        {
+            throw new InvalidOperationException("CAD Interac email payouts are not supported by the selected provider.");
+        }
+    }
+
     public static void EnsureSupported(string providerCode, PayoutDestinationType destinationType)
     {
         if (IsSupported(providerCode, destinationType))

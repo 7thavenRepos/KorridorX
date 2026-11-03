@@ -10,6 +10,7 @@ using KorridorX.Models.Fx;
 using KorridorX.Models.Providers;
 using KorridorX.Models.Transfers;
 using KorridorX.Providers.Remittance;
+using KorridorX.Services.BusinessBeneficiaries;
 using KorridorX.Services.References;
 using KorridorX.Services.BusinessFunding;
 using KorridorX.Services.Notifications;
@@ -70,7 +71,7 @@ public class BusinessTransferService : IBusinessTransferService
 
     /// <summary>
     /// Read-only discovery for the quote form. It never includes unrelated
-    /// business records or recipients lacking an active verified bank in the
+    /// business records or recipients lacking a ready bank destination in the
     /// chosen receiving currency and an enabled payout country.
     /// </summary>
     public async Task<BusinessQuoteDestinationOptionsDto> GetQuoteDestinationOptionsAsync(
@@ -95,13 +96,18 @@ public class BusinessTransferService : IBusinessTransferService
         var eligible = await _db.BusinessBeneficiaries.AsNoTracking()
             .Where(BusinessTransferRecipientEligibilityPolicy.ForQuote(
                 access.BusinessProfileId, expectedType, currency, receivingCountries))
+            .Include(x => x.BankAccounts)
             .OrderBy(x => x.Name).ThenBy(x => x.Id)
-            .Select(x => new BusinessQuoteRecipientOptionDto(
-                x.Id, x.Name, x.CountryCode, x.BeneficiaryType))
             .ToListAsync(ct);
 
+        var ready = eligible
+            .Where(x => BusinessTransferRecipientEligibilityPolicy.HasReadyDestination(x, currency))
+            .Select(x => new BusinessQuoteRecipientOptionDto(
+                x.Id, x.Name, x.CountryCode, x.BeneficiaryType))
+            .ToList();
+
         return new BusinessQuoteDestinationOptionsDto(
-            receivingCountries.Length, receivingCountries.Length > 1, eligible);
+            receivingCountries.Length, receivingCountries.Length > 1, ready);
     }
 
     public async Task<TransferQuoteDto> CreateQuoteAsync(
@@ -223,8 +229,6 @@ public class BusinessTransferService : IBusinessTransferService
             "business_transfer_create",
             ct);
 
-        ValidateDestinationSelection(request.BusinessBeneficiaryBankAccountId, request.BusinessBeneficiaryMobileWalletId);
-
         if (!Enum.IsDefined(typeof(TransferPurpose), request.Purpose))
             throw new InvalidOperationException("A valid transfer purpose is required.");
         if (!Enum.IsDefined(typeof(BusinessFundingSource), request.FundingSource))
@@ -242,17 +246,32 @@ public class BusinessTransferService : IBusinessTransferService
 
         ValidateQuote(quote);
 
+        var interacEmail = quote.DestinationCurrencyCode == "CAD";
+        if (interacEmail)
+        {
+            if (request.BusinessBeneficiaryBankAccountId.HasValue || request.BusinessBeneficiaryMobileWalletId.HasValue)
+                throw new InvalidOperationException("CAD Interac requires beneficiary email, not a bank or mobile-wallet destination.");
+            PayoutDestinationCapabilityPolicy.EnsureBusinessInteracSupported(quote.ProviderCode, quote.DestinationCurrencyCode);
+        }
+        else
+        {
+            ValidateDestinationSelection(request.BusinessBeneficiaryBankAccountId, request.BusinessBeneficiaryMobileWalletId);
+        }
+
         var enabledAssetCount = await _db.Assets.AsNoTracking()
             .CountAsync(x => x.IsSupported && x.BusinessEnabled &&
                 (x.Code == quote.SourceCurrencyCode || x.Code == quote.DestinationCurrencyCode), ct);
         if (enabledAssetCount != (quote.SourceCurrencyCode == quote.DestinationCurrencyCode ? 1 : 2))
             throw new InvalidOperationException("One or more quoted assets are no longer available to business users.");
 
-        PayoutDestinationCapabilityPolicy.EnsureSupported(
-            quote.ProviderCode,
-            request.BusinessBeneficiaryMobileWalletId.HasValue
-                ? PayoutDestinationType.BusinessBeneficiaryMobileWallet
-                : PayoutDestinationType.BusinessBeneficiaryBankAccount);
+        if (!interacEmail)
+        {
+            PayoutDestinationCapabilityPolicy.EnsureSupported(
+                quote.ProviderCode,
+                request.BusinessBeneficiaryMobileWalletId.HasValue
+                    ? PayoutDestinationType.BusinessBeneficiaryMobileWallet
+                    : PayoutDestinationType.BusinessBeneficiaryBankAccount);
+        }
 
         var beneficiary = await _db.BusinessBeneficiaries
             .Include(x => x.BankAccounts)
@@ -279,7 +298,10 @@ public class BusinessTransferService : IBusinessTransferService
                 !x.IsDeleted)
             : null;
 
-        await ValidateDestinationAsync(beneficiary.CountryCode, quote, bankAccount, mobileWallet, ct);
+        if (!interacEmail && bankAccount is null && mobileWallet is null)
+            throw new InvalidOperationException("The selected beneficiary payout destination is unavailable or inactive.");
+
+        await ValidateDestinationAsync(beneficiary, quote, bankAccount, mobileWallet, ct);
 
         var approvalRequired = RequiresApproval(access, quote.TotalPayableAmount);
         if (approvalRequired)
@@ -762,18 +784,13 @@ public class BusinessTransferService : IBusinessTransferService
         if (beneficiaryId.HasValue)
         {
             var beneficiary = await _db.BusinessBeneficiaries.AsNoTracking()
+                .Include(x => x.BankAccounts)
                 .Where(x => x.Id == beneficiaryId.Value && x.BusinessProfileId == businessProfileId &&
                     x.IsActive && !x.IsDeleted)
-                .Select(x => new
-                {
-                    x.CountryCode,
-                    x.BeneficiaryType,
-                    HasVerifiedBank = x.BankAccounts.Any(account => account.IsActive && !account.IsDeleted &&
-                        account.CountryCode == x.CountryCode && account.CurrencyCode == currency && account.IsVerified)
-                }).SingleOrDefaultAsync(ct)
+                .SingleOrDefaultAsync(ct)
                 ?? throw new InvalidOperationException("The selected business beneficiary is unavailable.");
-            if (!beneficiary.HasVerifiedBank)
-                throw new InvalidOperationException("The selected beneficiary requires a verified bank account in the receiving currency.");
+            if (!BusinessTransferRecipientEligibilityPolicy.HasReadyDestination(beneficiary, currency))
+                throw new InvalidOperationException("The selected beneficiary needs a ready payout destination in the receiving currency.");
             ValidateBeneficiaryType(beneficiary.BeneficiaryType, transferType);
             beneficiaryCountry = beneficiary.CountryCode;
         }
@@ -866,14 +883,22 @@ public class BusinessTransferService : IBusinessTransferService
     }
 
     private async Task ValidateDestinationAsync(
-        string beneficiaryCountry,
+        BusinessBeneficiary beneficiary,
         TransferQuote quote,
         BusinessBeneficiaryBankAccount? bankAccount,
         BusinessBeneficiaryMobileWallet? mobileWallet,
         CancellationToken ct)
     {
-        if (!string.Equals(beneficiaryCountry, quote.DestinationCountryCode, StringComparison.OrdinalIgnoreCase))
+        if (!string.Equals(beneficiary.CountryCode, quote.DestinationCountryCode, StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException("The beneficiary country does not match the quote destination country.");
+
+        if (quote.DestinationCurrencyCode == "CAD")
+        {
+            if (bankAccount is not null || mobileWallet is not null)
+                throw new InvalidOperationException("Interac payouts use the beneficiary email, not a bank account.");
+            BusinessBeneficiaryInteracPolicy.Validate(beneficiary);
+            return;
+        }
 
         if (bankAccount is not null)
         {
@@ -881,15 +906,18 @@ public class BusinessTransferService : IBusinessTransferService
                 !string.Equals(bankAccount.CurrencyCode, quote.DestinationCurrencyCode, StringComparison.OrdinalIgnoreCase))
                 throw new InvalidOperationException("The bank account does not match the quote destination corridor.");
 
-            if (!await IsBankDestinationVerifiedForProviderAsync(
+            if (!BusinessBeneficiaryPayoutPolicy.IsReady(bankAccount))
+                throw new InvalidOperationException("The bank account needs complete currency-specific payout routing details.");
+
+            if (!await IsBankDestinationEligibleForProviderAsync(
                     PayoutDestinationType.BusinessBeneficiaryBankAccount,
                     bankAccount.Id,
                     quote.ProviderCode,
-                    bankAccount.IsVerified,
+                    BusinessBeneficiaryPayoutPolicy.IsReady(bankAccount),
                     ct))
             {
                 throw new InvalidOperationException(
-                    "The beneficiary bank account must be verified for the selected payout provider before transfer creation.");
+                    "The beneficiary bank account is not eligible for the selected payout provider.");
             }
         }
 
@@ -903,16 +931,16 @@ public class BusinessTransferService : IBusinessTransferService
         }
     }
 
-    private async Task<bool> IsBankDestinationVerifiedForProviderAsync(
+    private async Task<bool> IsBankDestinationEligibleForProviderAsync(
         PayoutDestinationType destinationType,
         Guid destinationId,
         string providerCode,
-        bool legacyIsVerified,
+        bool fallbackPayoutReady,
         CancellationToken ct)
     {
         if (!Enum.TryParse<ProviderCode>(providerCode, true, out var parsedProviderCode))
         {
-            return legacyIsVerified;
+            return fallbackPayoutReady;
         }
 
         var mapping = await _db.PayoutDestinationProviderMappings
@@ -925,8 +953,8 @@ public class BusinessTransferService : IBusinessTransferService
                 ct);
 
         return mapping is null
-            ? legacyIsVerified
-            : mapping.IsActive && mapping.IsVerified;
+            ? fallbackPayoutReady
+            : mapping.IsActive && (mapping.IsVerified || fallbackPayoutReady);
     }
 
     private async Task<string> GenerateUniqueReferenceAsync(CancellationToken ct)

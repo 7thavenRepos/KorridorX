@@ -5,8 +5,8 @@ using KorridorX.Providers.Remittance.Blaaiz;
 namespace KorridorX.Services.BusinessBeneficiaries;
 
 /// <summary>
-/// Currency-dependent beneficiary draft validation. This policy never grants
-/// provider verification or permission to initiate a business payout.
+/// Currency-dependent validation and local destination readiness. Local readiness
+/// never means the provider has verified ownership or accepted a payout.
 /// </summary>
 public static class BusinessBeneficiaryPayoutPolicy
 {
@@ -43,6 +43,30 @@ public static class BusinessBeneficiaryPayoutPolicy
                 ["postalCode"] = account.PostalCode,
             },
             allowUnverifiedBankDraft: allowUnverifiedBankDraft && !account.IsVerified);
+    }
+
+    /// <summary>
+    /// All bank rails require complete local routing details. NGN requires a chosen
+    /// provider bank ID and ten-digit account number, but a successful account-name
+    /// lookup is optional; provider acceptance/ownership is never inferred.
+    /// Any provider-specific destination mapping is checked separately at transfer
+    /// creation. Interac is email-based and is not a business bank account.
+    /// </summary>
+    public static bool IsReady(BusinessBeneficiaryBankAccount account)
+    {
+        if (account.IsDeleted || !account.IsActive) return false;
+
+        try
+        {
+            var rule = BlaaizCurrencyRequirements.Require(account.CurrencyCode, account.PayoutMethod);
+            if (rule.PaymentMethod == PaymentMethod.Interac) return false;
+            Validate(account);
+            return true;
+        }
+        catch (InvalidOperationException)
+        {
+            return false;
+        }
     }
 
     public static void NormalizeDraft(BusinessBeneficiaryBankAccount account)

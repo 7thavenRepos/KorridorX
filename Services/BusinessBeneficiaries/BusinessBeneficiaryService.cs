@@ -810,7 +810,8 @@ public class BusinessBeneficiaryService : IBusinessBeneficiaryService
         x.RoutingNumber, x.SortCode, x.ProviderBankId, x.ProviderVerifiedAccountName,
         x.IsVerified, x.VerifiedAt, x.LastVerificationError, x.IsDefault, x.IsActive,
         x.PayoutMethod, x.RecipientType, x.AccountType, x.Street, x.City, x.State, x.PostalCode,
-        x.ProviderBankId is not null ? "ProviderBankLookup" : "LocalDetailsOnly");
+        x.ProviderBankId is not null ? "ProviderBankLookup" : "LocalDetailsOnly",
+        BusinessBeneficiaryPayoutPolicy.IsReady(x));
 
     private static BusinessBeneficiaryMobileWalletDto ToDto(BusinessBeneficiaryMobileWallet x) => new(
         x.Id, x.BusinessBeneficiaryId, x.CountryCode, x.CurrencyCode, x.ProviderName,

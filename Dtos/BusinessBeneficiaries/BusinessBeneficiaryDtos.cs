@@ -84,7 +84,8 @@ public record BusinessBeneficiaryBankAccountDto(
     string? City = null,
     string? State = null,
     string? PostalCode = null,
-    string? VerificationMode = null);
+    string? VerificationMode = null,
+    bool IsPayoutReady = false);
 
 public record AddBusinessBeneficiaryBankAccountRequestDto(
     string CountryCode,
