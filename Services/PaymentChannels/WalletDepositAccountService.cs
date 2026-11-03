@@ -4,6 +4,7 @@ using KorridorX.Data;
 using KorridorX.Dtos.PaymentChannels;
 using KorridorX.Dtos.Payments;
 using KorridorX.Exceptions;
+using KorridorX.Models.Audit;
 using KorridorX.Models.Enums;
 using KorridorX.Models.FinancialCore;
 using KorridorX.Models.Notifications;
@@ -29,12 +30,17 @@ public sealed class WalletDepositAccountService(AppDbContext db, PaymentChannelS
     public async Task<WalletDepositAccountDto?> GetAsync(Guid user, Guid walletId, Guid channelId, bool business,
         bool refresh, CancellationToken ct)
     {
-        await contexts.LoadAsync(user, walletId, business, false, false, ct);
+        var context = await contexts.LoadAsync(user, walletId, business, false, false, ct);
         var channel = await db.PaymentChannels.AsNoTracking().SingleOrDefaultAsync(x => x.Id == channelId && x.Environment == channels.EnvironmentName, ct);
         if (channel is null) return null;
         var row = await db.WalletDepositAccounts.SingleOrDefaultAsync(x => x.FinancialAccountId == walletId &&
             x.ProviderWalletConfigurationId == channel.ProviderWalletConfigurationId && x.Environment == channels.EnvironmentName && !x.IsDeleted, ct);
         if (row is null) return null;
+        if (channel.CapabilityCode == BlaaizChannelCapabilities.BusinessPrincipalVirtualAccount &&
+            row.PaymentChannelId != channelId)
+            return null; // Never disclose a prior business-customer account as the principal's receiving details.
+        if (channel.CapabilityCode == BlaaizChannelCapabilities.BusinessPrincipalVirtualAccount)
+            await EnsureBusinessPrincipalMappingCurrentAsync(row, context.OwnerId, ct);
         EnsureConnection(row);
         if (refresh)
         {
@@ -47,18 +53,50 @@ public sealed class WalletDepositAccountService(AppDbContext db, PaymentChannelS
     }
 
     public async Task<WalletDepositAccountDto> ProvisionAsync(Guid user, Guid walletId, Guid channelId,
-        bool business, CancellationToken ct)
+        bool business, CancellationToken ct, bool principalHolderConsent = false)
     {
         var context = await contexts.LoadAsync(user, walletId, business, true, true, ct);
         var choice = await channels.RequireDepositAsync(channelId, context.CountryCode, context.Wallet.AssetCode,
             business, true, PaymentMethod.VirtualAccount, 0, ct)
             ?? throw new InvalidOperationException("Select an active bank-account deposit channel.");
-        var compliance = await contexts.EnsureComplianceAsync(context, ct);
+        BusinessPrincipalReceivingAccountPolicy.RequireCorrectRoute(business, context.Wallet.AssetCode, choice.Capability.Code);
+        var principalRoute = choice.Capability.Code == BlaaizChannelCapabilities.BusinessPrincipalVirtualAccount;
+        var principal = principalRoute
+            ? await contexts.EnsureBusinessPrincipalReceivingAccountAsync(context, user, principalHolderConsent, ct)
+            : null;
+        var compliance = principal is not null ? principal.IndividualCompliance : await contexts.EnsureComplianceAsync(context, ct);
+        var providerContextProfileId = principal?.CustomerProfileId ?? context.CustomerProfileId ?? context.OwnerId;
+        if (principal is not null)
+        {
+            // This is a read-only call against the ACTUAL configured Blaaiz connection.
+            // Never assume the local provider-customer mapping belongs to production.
+            var liveIndividual = await api.GetCustomerAsync(compliance.ProviderCustomerId, principal.CustomerProfileId, ct);
+            BusinessPrincipalReceivingAccountPolicy.RequireVerifiedProviderCustomer(
+                compliance.ProviderCustomerId, liveIndividual.Data.Data.Id, liveIndividual.Data.Data.Type,
+                liveIndividual.Data.Data.VerificationStatus, "individual");
+            var businessCompliance = await contexts.EnsureComplianceAsync(context, ct);
+            var liveBusiness = await api.GetBusinessCustomerAsync(businessCompliance.ProviderCustomerId, context.OwnerId, ct);
+            BusinessPrincipalReceivingAccountPolicy.RequireVerifiedProviderCustomer(
+                businessCompliance.ProviderCustomerId, liveBusiness.Data.Data.Id, liveBusiness.Data.Data.Type,
+                liveBusiness.Data.Data.VerificationStatus, "business");
+        }
         WalletDepositAccount row; var newRequest = false;
         await using (var tx = await db.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, ct))
         {
+            // Lock the FINANCIAL wallet first: a second provider customer or
+            // concurrent primary-owner change must not create another live account.
+            var walletLockKey = "WalletDepositAccount:FinancialWallet:" + channels.EnvironmentName + ":" + walletId + ":" + choice.Wallet.Id;
+            await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({walletLockKey}, 0))", ct);
             var lockKey = "WalletDepositAccount:" + channels.EnvironmentName + ":" + choice.Wallet.ProviderWalletId + ":" + compliance.ProviderCustomerId;
             await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({lockKey}, 0))", ct);
+            var walletAccount = await db.WalletDepositAccounts.SingleOrDefaultAsync(x =>
+                x.FinancialAccountId == walletId && x.Environment == channels.EnvironmentName &&
+                x.ProviderWalletConfigurationId == choice.Wallet.Id, ct);
+            if (walletAccount is not null &&
+                (walletAccount.IsDeleted || walletAccount.ProviderCustomerId != compliance.ProviderCustomerId ||
+                 walletAccount.ProviderWalletId != choice.Wallet.ProviderWalletId ||
+                 principalRoute && walletAccount.PaymentChannelId != channelId))
+                throw new InvalidOperationException("A receiving account is already associated with this wallet using a different identity or route. Contact support for reconciliation; no new account was requested.");
             var existing = await db.WalletDepositAccounts.SingleOrDefaultAsync(x => x.Environment == channels.EnvironmentName &&
                 x.ProviderWalletId == choice.Wallet.ProviderWalletId && x.ProviderCustomerId == compliance.ProviderCustomerId, ct);
             if (existing is not null)
@@ -79,6 +117,14 @@ public sealed class WalletDepositAccountService(AppDbContext db, PaymentChannelS
                     Environment = channels.EnvironmentName, ConnectionKey = wallets.ConnectionKey, CreatedByUserId = user };
                 db.WalletDepositAccounts.Add(row);
                 channels.Record(choice, "WalletDepositAccount", row.Id, context.CountryCode, business, context.OwnerId, walletId, null);
+                if (principal is not null)
+                    db.AuditLogs.Add(new AuditLog { UserId = user, Category = "BusinessFunding",
+                        Action = "BUSINESS_PRINCIPAL_RECEIVING_ACCOUNT_AUTHORIZED", EntityName = nameof(WalletDepositAccount),
+                        EntityId = row.Id.ToString(), MetadataJson = JsonSerializer.Serialize(new {
+                            businessProfileId = context.OwnerId, financialAccountId = walletId, principalUserId = principal.OwnerUserId,
+                            principalCustomerProfileId = principal.CustomerProfileId, channelId,
+                            currencyCode = context.Wallet.AssetCode, consent = principalHolderConsent,
+                            holderIsIndividual = true, intendedCreditOwner = "Business", environment = channels.EnvironmentName }) });
                 newRequest = true;
             }
             await db.SaveChangesAsync(ct); await tx.CommitAsync(ct);
@@ -99,6 +145,7 @@ public sealed class WalletDepositAccountService(AppDbContext db, PaymentChannelS
         try
         {
             await channels.ValidateInitiationAsync("WalletDepositAccount", row.Id, ct);
+            if (principal is not null) await EnsureBusinessPrincipalMappingCurrentAsync(row, context.OwnerId, ct);
             var selectedWallet = await wallets.SelectAsync("WalletDepositAccount", row.Id, "BLAAIZ", row.AssetCode,
                 null, ProviderWalletResolver.Collection, false, ct);
             if (selectedWallet != row.ProviderWalletId) throw new InvalidOperationException("Provider wallet selection changed. Provisioning was stopped.");
@@ -120,7 +167,7 @@ public sealed class WalletDepositAccountService(AppDbContext db, PaymentChannelS
                 if (previous is not null) { await SaveStateAndNotifyAsync(row, previous, ct); return ToDto(row, channelId); }
             }
             var response = await api.CreateVirtualBankAccountAsync(new BlaaizVirtualBankAccountRequest
-                { WalletId = row.ProviderWalletId, CustomerId = row.ProviderCustomerId }, context.CustomerProfileId ?? context.OwnerId, ct);
+                { WalletId = row.ProviderWalletId, CustomerId = row.ProviderCustomerId }, providerContextProfileId, ct);
             await SaveStateAndNotifyAsync(row,
                 BlaaizVirtualAccountState.ParseResponse(response.RawResponseJson, row.ProviderWalletId, row.ProviderCustomerId, row.AssetCode), ct);
             return ToDto(row, channelId);
@@ -224,6 +271,21 @@ public sealed class WalletDepositAccountService(AppDbContext db, PaymentChannelS
             throw new InvalidOperationException("This receiving account belongs to a previous provider connection. Reconcile it before further use; bank details are not being reused across connections.");
     }
 
+    private async Task EnsureBusinessPrincipalMappingCurrentAsync(WalletDepositAccount row, Guid businessId, CancellationToken ct)
+    {
+        var principalUserId = await db.BusinessProfiles.AsNoTracking().Where(x => x.Id == businessId && !x.IsDeleted)
+            .Select(x => x.OwnerUserId).SingleOrDefaultAsync(ct);
+        if (principalUserId == Guid.Empty || !await db.ProviderCustomers.AsNoTracking().AnyAsync(x =>
+                !x.IsDeleted && x.ProviderCode == ProviderCode.Blaaiz &&
+                x.ProviderCustomerId == row.ProviderCustomerId &&
+                x.CustomerProfileId != null && x.CustomerProfile != null &&
+                x.CustomerProfile.UserId == principalUserId && !x.CustomerProfile.IsDeleted &&
+                x.CustomerProfile.CustomerType == CustomerType.Individual &&
+                x.CustomerProfile.KycStatus == KycStatus.Approved &&
+                x.ProviderStatus != null && x.ProviderStatus.ToUpper() == "VERIFIED", ct))
+            throw new InvalidOperationException("The receiving account's individual holder no longer matches the verified primary business owner. Retain the account/deposit for reviewed reconciliation; no automatic reassignment is allowed.");
+    }
+
     public static void ApplyState(WalletDepositAccount row, BlaaizVirtualAccountState state)
     {
         if (row.ProviderAccountId is not null && row.ProviderAccountId != state.Id ||
@@ -301,6 +363,10 @@ public sealed class WalletDepositAccountService(AppDbContext db, PaymentChannelS
                 ? await db.CustomerProfiles.AsNoTracking().AnyAsync(x => x.UserId == account.OwnerId && !x.IsDeleted && x.KycStatus == KycStatus.Approved, ct)
                 : await db.BusinessProfiles.AsNoTracking().AnyAsync(x => x.Id == account.OwnerId && !x.IsDeleted && x.KybStatus == KybStatus.Approved, ct);
             if (!ownerApproved) throw new InvalidOperationException("Receiving owner requires compliance review. The webhook is retained; no balance was changed.");
+            if (account.OwnerType == FinancialAccountOwnerType.Business &&
+                await db.PaymentChannels.AsNoTracking().AnyAsync(x => x.Id == row.PaymentChannelId &&
+                    x.CapabilityCode == BlaaizChannelCapabilities.BusinessPrincipalVirtualAccount, ct))
+                await EnsureBusinessPrincipalMappingCurrentAsync(row, account.OwnerId, ct);
             if (recovery is not null) await recovery.ValidateAndStart(row, account, verified, ct);
             var existing = await db.ProviderTransactions.AsNoTracking().SingleOrDefaultAsync(x => x.ProviderCode == ProviderCode.Blaaiz && x.ProviderTransactionId == request.ProviderTransactionId, ct);
             if (existing?.CollectionId is not null)

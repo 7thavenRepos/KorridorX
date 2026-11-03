@@ -30,6 +30,55 @@ public sealed class PaymentChannelTests
         var cap = BlaaizChannelCapabilities.Find("virtual-account", asset, PaymentChannelDirection.Deposit)!;
         Assert.True(cap.Implemented); Assert.True(cap.IndividualSupported); Assert.Equal(business, cap.BusinessSupported);
     }
+    [Theory][InlineData("USD")][InlineData("GBP")][InlineData("EUR")]
+    public void Foreign_business_collection_has_separate_verified_primary_holder_route(string asset)
+    {
+        var cap = BlaaizChannelCapabilities.Find(BlaaizChannelCapabilities.BusinessPrincipalVirtualAccount,
+            asset, PaymentChannelDirection.Deposit)!;
+        Assert.NotNull(cap); Assert.True(cap.Implemented);
+        Assert.True(cap.BusinessSupported); Assert.False(cap.IndividualSupported);
+        Assert.Equal(PaymentMethod.VirtualAccount, cap.PaymentMethod);
+        Assert.Equal("VirtualAccount", cap.Flow);
+        Assert.False(BlaaizChannelCapabilities.Find(BlaaizChannelCapabilities.VirtualAccount,
+            asset, PaymentChannelDirection.Deposit)!.BusinessSupported);
+        Assert.True(BlaaizChannelCapabilities.IsVirtualBankAccount(cap.Code));
+        BusinessPrincipalReceivingAccountPolicy.RequireCorrectRoute(true, asset, cap.Code);
+        Assert.Throws<InvalidOperationException>(() => BusinessPrincipalReceivingAccountPolicy.RequireCorrectRoute(
+            true, asset, BlaaizChannelCapabilities.VirtualAccount));
+        Assert.Throws<InvalidOperationException>(() => BusinessPrincipalReceivingAccountPolicy.RequireCorrectRoute(
+            false, asset, cap.Code));
+    }
+    [Theory][InlineData("NGN")][InlineData("CAD")]
+    public void Primary_holder_business_channel_is_not_available_for_other_assets(string asset)
+    {
+        Assert.Null(BlaaizChannelCapabilities.Find(BlaaizChannelCapabilities.BusinessPrincipalVirtualAccount,
+            asset, PaymentChannelDirection.Deposit));
+        Assert.Throws<InvalidOperationException>(() => BusinessPrincipalReceivingAccountPolicy.RequireCorrectRoute(
+            true, asset, BlaaizChannelCapabilities.BusinessPrincipalVirtualAccount));
+    }
+    [Fact] public void Only_the_authenticated_primary_owner_can_authorize_individual_receiving_account()
+    {
+        var owner = Guid.NewGuid();
+        Assert.Throws<UnauthorizedAccessException>(() => BusinessPrincipalReceivingAccountPolicy.RequireOwnerConsent(
+            Guid.NewGuid(), owner, true));
+        Assert.Throws<InvalidOperationException>(() => BusinessPrincipalReceivingAccountPolicy.RequireOwnerConsent(
+            owner, owner, false));
+        BusinessPrincipalReceivingAccountPolicy.RequireOwnerConsent(owner, owner, true);
+    }
+    [Theory]
+    [InlineData("other-id", "individual", "VERIFIED")]
+    [InlineData("customer-id", "business", "VERIFIED")]
+    [InlineData("customer-id", "individual", "PENDING")]
+    [InlineData("customer-id", "individual", "REJECTED")]
+    [InlineData("customer-id", null, "VERIFIED")]
+    public void Foreign_account_requires_live_verified_provider_individual(string id, string? type, string status) =>
+        Assert.Throws<InvalidOperationException>(() => BusinessPrincipalReceivingAccountPolicy.RequireVerifiedProviderCustomer(
+            "customer-id", id, type, status, "individual"));
+    [Fact] public void Matching_live_business_and_individual_customers_are_recognized()
+    {
+        BusinessPrincipalReceivingAccountPolicy.RequireVerifiedProviderCustomer("a", "a", "individual", "VERIFIED", "individual");
+        BusinessPrincipalReceivingAccountPolicy.RequireVerifiedProviderCustomer("b", "b", "business", "verified", "business");
+    }
     [Theory][InlineData("NGN")][InlineData("USD")]
     public void Raw_card_flow_is_not_exposed_to_business_web(string asset) =>
         Assert.False(BlaaizChannelCapabilities.Find("card", asset, PaymentChannelDirection.Deposit)!.BusinessSupported);

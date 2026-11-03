@@ -56,10 +56,10 @@ public sealed class PaymentChannelService(AppDbContext db, IProviderWalletResolv
             ?? throw new InvalidOperationException("Select a capability supported by the implemented provider.");
         if (!request.IndividualEnabled && !request.BusinessEnabled) throw new InvalidOperationException("Select at least one customer audience.");
         if (request.IndividualEnabled && !cap.IndividualSupported || request.BusinessEnabled && !cap.BusinessSupported)
-            throw new InvalidOperationException("This capability does not support the selected customer audience. Business card checkout and non-NGN business virtual accounts are not available.");
+            throw new InvalidOperationException("This capability does not support the selected customer audience. USD/GBP/EUR business deposits require the separate verified-primary-holder virtual-account capability.");
         if (request.MinimumAmount < 0 || request.MaximumAmount is <= 0 || request.MaximumAmount < request.MinimumAmount || request.SortOrder is < 0 or > 10000)
             throw new InvalidOperationException("Enter valid amount limits and a display order from 0 to 10000.");
-        if (code == BlaaizChannelCapabilities.VirtualAccount && (request.MinimumAmount != 0 || request.MaximumAmount.HasValue))
+        if (BlaaizChannelCapabilities.IsVirtualBankAccount(code) && (request.MinimumAmount != 0 || request.MaximumAmount.HasValue))
             throw new InvalidOperationException("Static bank deposits are unsolicited; transaction limits cannot be enforced by this form. Leave limits empty/zero and retain compliance controls.");
         var configuredAsset = await db.Assets.AsNoTracking().SingleOrDefaultAsync(x => x.Code == asset, ct)
             ?? throw new InvalidOperationException("Select an asset from master data.");
@@ -134,7 +134,7 @@ public sealed class PaymentChannelService(AppDbContext db, IProviderWalletResolv
         var wallet = await db.ProviderWalletConfigurations.AsNoTracking().SingleOrDefaultAsync(x => x.Id == row.ProviderWalletConfigurationId, ct);
         if (cap is null || !cap.Implemented) errors.Add(cap?.BlockedReason ?? "Provider capability is not implemented.");
         if (cap is not null) warnings.Add(cap.Note);
-        if (row.CapabilityCode == BlaaizChannelCapabilities.VirtualAccount && row.AssetCode == "USD" && IsProviderDevelopment)
+        if (BlaaizChannelCapabilities.IsVirtualBankAccount(row.CapabilityCode) && row.AssetCode == "USD" && IsProviderDevelopment)
             warnings.Add("Blaaiz development supports USD account creation only; test deposits do not settle. Do not send real funds.");
         if (!options.Value.IsEnabled) errors.Add("Blaaiz connection is disabled.");
         if (!row.ProviderCapabilityConfirmed) errors.Add("Confirm the provider has approved/enabled this payment capability for your account.");
@@ -164,7 +164,8 @@ public sealed class PaymentChannelService(AppDbContext db, IProviderWalletResolv
         if (!any) errors.Add("Enable the country/asset mapping for this operation.");
         if (row.Direction == PaymentChannelDirection.Withdrawal && row.CountryCode != "*" &&
             (row.AssetCode == "NGN" && row.CountryCode != "NG" || row.AssetCode == "CAD" && row.CountryCode != "CA")) errors.Add("The enabled payout rail requires its supported destination country (NG/NGN or CA/CAD).");
-        if (row.CapabilityCode == BlaaizChannelCapabilities.VirtualAccount && row.AssetCode is "GBP" or "EUR" && IsProviderDevelopment)
+        if (BlaaizChannelCapabilities.IsVirtualBankAccount(row.CapabilityCode) &&
+            (row.AssetCode is "GBP" or "EUR") && IsProviderDevelopment)
             errors.Add("Blaaiz GBP/EUR virtual-account creation is on hold in its development environment. Do not enable it there.");
         return new(row.Id, row.Revision, row.Environment, row.ProviderCode, row.ProviderWalletConfigurationId,
             wallet?.DisplayName ?? "Unavailable wallet", wallet?.AssetCode ?? "", row.AssetCode, row.CountryCode,

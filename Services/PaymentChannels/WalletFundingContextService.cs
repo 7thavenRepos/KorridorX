@@ -10,6 +10,9 @@ namespace KorridorX.Services.PaymentChannels;
 public sealed record WalletFundingContext(FinancialAccount Wallet, string CountryCode, bool Business,
     Guid OwnerId, Guid? CustomerProfileId, string? Email, string Name, string? Phone);
 
+public sealed record VerifiedBusinessPrincipal(Guid OwnerUserId, Guid CustomerProfileId,
+    ComplianceGateResult IndividualCompliance);
+
 public sealed class WalletFundingContextService(AppDbContext db, IBusinessAccessService businessAccess,
     IComplianceGateService compliance)
 {
@@ -51,4 +54,35 @@ public sealed class WalletFundingContextService(AppDbContext db, IBusinessAccess
     public Task<ComplianceGateResult> EnsureComplianceAsync(WalletFundingContext context, CancellationToken ct) =>
         context.Business ? compliance.EnsureBusinessCanInitiateMoneyMovementAsync(context.OwnerId, ProviderCode.Blaaiz, ct)
         : compliance.EnsureCanInitiateMoneyMovementAsync(context.CustomerProfileId!.Value, ProviderCode.Blaaiz, ct);
+
+    public async Task<VerifiedBusinessPrincipal> EnsureBusinessPrincipalReceivingAccountAsync(
+        WalletFundingContext context, Guid actorUserId, bool principalHolderConsent, CancellationToken ct)
+    {
+        if (!context.Business || !BusinessPrincipalReceivingAccountPolicy.IsForeignVirtualAccountCurrency(context.Wallet.AssetCode))
+            throw new InvalidOperationException("Primary-holder receiving accounts are only for USD, GBP and EUR business wallets.");
+
+        // OwnerUserId is the authoritative primary owner, not an arbitrary team
+        // member supplied by the browser. A finance/admin member cannot consent
+        // on behalf of another natural person.
+        var ownerUserId = await db.BusinessProfiles.AsNoTracking()
+            .Where(x => x.Id == context.OwnerId && !x.IsDeleted)
+            .Select(x => x.OwnerUserId).SingleAsync(ct);
+        BusinessPrincipalReceivingAccountPolicy.RequireOwnerConsent(actorUserId, ownerUserId, principalHolderConsent);
+
+        // Both the business KYB and the holder's separate individual KYC must
+        // pass; their provider customer IDs must not be conflated.
+        var businessApproval = await compliance.EnsureBusinessCanInitiateMoneyMovementAsync(
+            context.OwnerId, ProviderCode.Blaaiz, ct);
+        var principal = await db.CustomerProfiles.AsNoTracking()
+            .Where(x => x.UserId == ownerUserId && !x.IsDeleted)
+            .Select(x => new { x.Id, x.CustomerType }).SingleOrDefaultAsync(ct)
+            ?? throw new InvalidOperationException("The business's primary holder must complete their separate individual KYC before a foreign receiving account can be requested.");
+        if (principal.CustomerType != CustomerType.Individual)
+            throw new InvalidOperationException("The business's primary holder needs a verified Blaaiz individual customer profile, not another business profile.");
+        var individualApproval = await compliance.EnsureCanInitiateMoneyMovementAsync(
+            principal.Id, ProviderCode.Blaaiz, ct);
+        if (string.Equals(individualApproval.ProviderCustomerId, businessApproval.ProviderCustomerId, StringComparison.Ordinal))
+            throw new InvalidOperationException("The primary holder and business resolve to the same Blaaiz customer. Separate identity verification is required.");
+        return new VerifiedBusinessPrincipal(ownerUserId, principal.Id, individualApproval);
+    }
 }

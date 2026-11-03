@@ -46,7 +46,8 @@ public sealed class BusinessPaymentChannelsController(ConsumerWalletFundingServi
 
     [HttpPost("wallets/{walletId:guid}/bank-account")]
     public async Task<IActionResult> Provision(Guid walletId, [FromBody] CreateWalletDepositAccountRequest request, CancellationToken ct) =>
-        Ok(ApiResponses.Ok(await accounts.ProvisionAsync(Actor(), walletId, request.ChannelId, true, ct), "Deposit account setup processed."));
+        Ok(ApiResponses.Ok(await accounts.ProvisionAsync(Actor(), walletId, request.ChannelId, true, ct,
+            request.PrincipalHolderConsent), "Deposit account setup processed."));
 
     [HttpPost("wallets/{walletId:guid}/bank-account/refresh")]
     public async Task<IActionResult> Refresh(Guid walletId, [FromBody] CreateWalletDepositAccountRequest request, CancellationToken ct) =>
