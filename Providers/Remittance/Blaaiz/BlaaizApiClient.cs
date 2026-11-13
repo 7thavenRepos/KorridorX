@@ -450,6 +450,52 @@ public class BlaaizApiClient : IBlaaizApiClient
             ct);
     }
 
+    public Task<BlaaizApiResult<BlaaizIdentificationTypeEnvelope>> GetIndividualIdentificationTypeAsync(
+        string providerCustomerId,
+        Guid customerProfileId,
+        CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(providerCustomerId))
+            throw new InvalidOperationException("A verified individual provider customer is required.");
+        var endpoint = "/api/external/virtual-bank-account/identification-type?customer_id=" +
+            Uri.EscapeDataString(providerCustomerId.Trim());
+        return SendAsync<object, BlaaizIdentificationTypeEnvelope>(
+            HttpMethod.Get,
+            endpoint,
+            null,
+            JsonSerializer.Serialize(new { customerProfileId, providerCustomerId }),
+            null, null, null, null, ct);
+    }
+
+    public Task<BlaaizApiResult<BlaaizCustomerEnvelope>> UpdateIndividualCustomerTinAsync(
+        string providerCustomerId,
+        string tin,
+        Guid customerProfileId,
+        CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(providerCustomerId) || string.IsNullOrWhiteSpace(tin))
+            throw new InvalidOperationException("A verified individual provider customer and identification are required.");
+        var endpoint = "/api/external/customer/" + Uri.EscapeDataString(providerCustomerId.Trim());
+        // Only the previously empty TIN field may be updated on a VERIFIED
+        // individual. Do not resend or rewrite already verified identity data.
+        // The actual value exists only in the outbound request body, never
+        // the provider audit request or stored response.
+        var wireBody = new JsonObject { ["tin"] = tin };
+        var auditBody = JsonSerializer.Serialize(new
+        {
+            customerProfileId,
+            providerCustomerId,
+            tin = "***REDACTED***"
+        });
+        return SendAsync<JsonObject, BlaaizCustomerEnvelope>(
+            HttpMethod.Put,
+            endpoint,
+            wireBody,
+            auditBody,
+            null, null, null, RedactCustomerResponse, ct,
+            sensitiveValue: tin);
+    }
+
     public Task<BlaaizApiResult<BlaaizKycUploadUrlResponse>> RequestKycUploadUrlAsync(
         BlaaizKycUploadUrlRequest request,
         Guid customerProfileId,
@@ -947,7 +993,8 @@ public class BlaaizApiClient : IBlaaizApiClient
         CancellationToken ct,
         IReadOnlyDictionary<string, string>? additionalHeaders = null,
         bool useInteracRegistrationReadToken = false,
-        bool useFeeReadToken = false)
+        bool useFeeReadToken = false,
+        string? sensitiveValue = null)
     {
         if (useInteracRegistrationReadToken && method != HttpMethod.Get)
             throw new InvalidOperationException("The Interac registration read token can be used only for GET requests.");
@@ -1007,6 +1054,8 @@ public class BlaaizApiClient : IBlaaizApiClient
             using var response = await _httpClient.SendAsync(request, ct);
             var rawResponse = await response.Content.ReadAsStringAsync(ct);
             var auditResponse = responseSanitizer?.Invoke(rawResponse) ?? rawResponse;
+            if (!string.IsNullOrEmpty(sensitiveValue))
+                auditResponse = auditResponse.Replace(sensitiveValue, "***REDACTED***", StringComparison.Ordinal);
             stopwatch.Stop();
 
             if (!response.IsSuccessStatusCode)
@@ -1014,7 +1063,7 @@ public class BlaaizApiClient : IBlaaizApiClient
                 var providerError = BlaaizErrorDetails.Read(
                     rawResponse, $"Blaaiz request failed with HTTP {(int)response.StatusCode}.",
                     BlaaizErrorDetails.ResponseReference(response));
-                var message = providerError.Format();
+                var message = BlaaizErrorDetails.Safe(providerError.Format(), sensitiveValue);
                 if (useInteracRegistrationReadToken && response.StatusCode == System.Net.HttpStatusCode.Forbidden)
                     message = "Blaaiz denied Interac registration reads. Confirm interac-auto-deposit-email:read and API/IP access are authorized for the current provider connection.";
 
@@ -1031,9 +1080,15 @@ public class BlaaizApiClient : IBlaaizApiClient
                     (int)response.StatusCode,
                     auditResponse,
                     requestLogId,
-                    validationErrors: BlaaizValidationErrors.Read(endpoint, (int)response.StatusCode, rawResponse),
-                    providerErrorCode: providerError.Code,
-                    providerRequestReference: providerError.ProviderRequestReference);
+                    // A sensitive identifier must never come back through the
+                    // validation-error payload or exception metadata.
+                    validationErrors: sensitiveValue is null
+                        ? BlaaizValidationErrors.Read(endpoint, (int)response.StatusCode, rawResponse)
+                        : null,
+                    // Provider-supplied diagnostic metadata may echo a submitted
+                    // identifier. Omit it entirely on the sensitive PUT path.
+                    providerErrorCode: sensitiveValue is null ? providerError.Code : null,
+                    providerRequestReference: sensitiveValue is null ? providerError.ProviderRequestReference : null);
             }
 
             TResponse? parsed;
@@ -1093,11 +1148,14 @@ public class BlaaizApiClient : IBlaaizApiClient
             // Authentication has its own audit record. Also link that failure
             // to this transfer's intended operation, without copying OAuth bodies.
             stopwatch.Stop();
-            var message = BlaaizErrorDetails.Safe(ex.Message);
+            var message = BlaaizErrorDetails.Safe(ex.Message, sensitiveValue);
             await _auditService.FailAsync(requestLogId, ex.ProviderStatusCode, null,
                 message, stopwatch.ElapsedMilliseconds, CancellationToken.None);
             throw new ProviderIntegrationException(message, ex.ProviderStatusCode, null,
-                requestLogId, ex, ex.ValidationErrors, ex.ProviderErrorCode, ex.ProviderRequestReference);
+                requestLogId, ex,
+                sensitiveValue is null ? ex.ValidationErrors : null,
+                sensitiveValue is null ? ex.ProviderErrorCode : null,
+                sensitiveValue is null ? ex.ProviderRequestReference : null);
         }
         catch (ProviderIntegrationException)
         {
@@ -1111,7 +1169,7 @@ public class BlaaizApiClient : IBlaaizApiClient
                 requestLogId,
                 null,
                 null,
-                BlaaizErrorDetails.Safe(ex.Message),
+                BlaaizErrorDetails.Safe(ex.Message, sensitiveValue),
                 stopwatch.ElapsedMilliseconds,
                 CancellationToken.None);
 

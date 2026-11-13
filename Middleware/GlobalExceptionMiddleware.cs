@@ -86,6 +86,19 @@ public class GlobalExceptionMiddleware
                     providerErrorCode = ex.ProviderErrorCode, providerRequestReference = ex.ProviderRequestReference,
                     validationErrors = ex.ValidationErrors });
         }
+        catch (InvalidOperationException ex) when (
+            ex.Message.Contains("A second operation was started on this context instance", StringComparison.OrdinalIgnoreCase) ||
+            ex.Message.Contains("A second operation started on this context", StringComparison.OrdinalIgnoreCase))
+        {
+            // This is a server-side database programming fault, not a bad client
+            // request. Never echo EF Core's internal exception to the browser.
+            _logger.LogError(ex, "Concurrent DbContext operation. CorrelationId: {CorrelationId}", context.TraceIdentifier);
+            await WriteErrorAsync(
+                context,
+                HttpStatusCode.InternalServerError,
+                "DATABASE_OPERATION_FAILED",
+                "Unable to load this information right now. Please retry or contact support with the reference.");
+        }
         catch (InvalidOperationException ex)
         {
             await WriteErrorAsync(

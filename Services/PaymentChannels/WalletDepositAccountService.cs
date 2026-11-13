@@ -188,6 +188,92 @@ public sealed class WalletDepositAccountService(AppDbContext db, PaymentChannelS
         }
     }
 
+    /// <summary>
+    /// Resolve the provider's country-specific identification label for a USD
+    /// primary-holder account. The holder, channel and both verified customer
+    /// identities are checked server-side; the browser cannot select a customer.
+    /// </summary>
+    public async Task<PrincipalHolderIdentificationTypeDto> GetUsdPrincipalIdentificationTypeAsync(
+        Guid user, Guid walletId, Guid channelId, bool principalHolderConsent,
+        CancellationToken ct)
+    {
+        var principal = await RequireVerifiedUsdPrincipalAsync(
+            user, walletId, channelId, principalHolderConsent, ct);
+        var info = await api.GetIndividualIdentificationTypeAsync(
+            principal.IndividualCompliance.ProviderCustomerId, principal.CustomerProfileId, ct);
+        return VerifiedIdentificationType(info.Data.Data);
+    }
+
+    /// <summary>
+    /// Pass a holder-supplied USD identification value directly to Blaaiz. No
+    /// local customer profile, payment record, audit log or response contains it.
+    /// This does not create an account or credit a wallet.
+    /// </summary>
+    public async Task SubmitUsdPrincipalIdentificationAsync(
+        Guid user, Guid walletId, Guid channelId, string? identificationValue,
+        bool principalHolderConsent, bool identificationDisclosureConsent, CancellationToken ct)
+    {
+        if (!identificationDisclosureConsent)
+            throw new InvalidOperationException("The primary holder must consent to securely sharing their identification with the receiving-account provider.");
+
+        var principal = await RequireVerifiedUsdPrincipalAsync(
+            user, walletId, channelId, principalHolderConsent, ct);
+        var info = await api.GetIndividualIdentificationTypeAsync(
+            principal.IndividualCompliance.ProviderCustomerId, principal.CustomerProfileId, ct);
+        var type = VerifiedIdentificationType(info.Data.Data);
+        var value = identificationValue?.Trim() ?? "";
+        if (value.Length < 4 || value.Length > 64 ||
+            value.Any(c => !(char.IsLetterOrDigit(c) || c is ' ' or '-' or '/')))
+            throw new InvalidOperationException($"Enter a valid {type.Label} without unsupported characters.");
+        // For an NG individual, Blaaiz's 'tin' means the eleven-digit BVN.
+        if (type.CountryCode == "NG" && (value.Length != 11 || value.Any(c => c < '0' || c > '9')))
+            throw new InvalidOperationException("A Nigerian primary holder must enter a valid 11-digit BVN.");
+
+        var updated = await api.UpdateIndividualCustomerTinAsync(
+            principal.IndividualCompliance.ProviderCustomerId, value, principal.CustomerProfileId, ct);
+        BusinessPrincipalReceivingAccountPolicy.RequireVerifiedProviderCustomer(
+            principal.IndividualCompliance.ProviderCustomerId,
+            updated.Data.Data.Id, updated.Data.Data.Type,
+            updated.Data.Data.VerificationStatus, "individual");
+    }
+
+    private static PrincipalHolderIdentificationTypeDto VerifiedIdentificationType(
+        BlaaizIdentificationTypeData info)
+    {
+        if (string.IsNullOrWhiteSpace(info.Label) ||
+            info.Country is null || info.Country.Length != 2 ||
+            !string.Equals(info.CustomerType, "individual", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("The receiving-account provider did not return a valid individual identification requirement. Contact support before submitting identification.");
+        return new PrincipalHolderIdentificationTypeDto(info.Label.Trim(), info.Country.ToUpperInvariant());
+    }
+
+    private async Task<VerifiedBusinessPrincipal> RequireVerifiedUsdPrincipalAsync(
+        Guid user, Guid walletId, Guid channelId, bool principalHolderConsent,
+        CancellationToken ct)
+    {
+        var context = await contexts.LoadAsync(user, walletId, true, true, true, ct);
+        if (context.Wallet.AssetCode != "USD")
+            throw new InvalidOperationException("The additional identification workflow is only available for USD business receiving accounts.");
+        var choice = await channels.RequireDepositAsync(channelId, context.CountryCode, "USD",
+            true, true, PaymentMethod.VirtualAccount, 0, ct)
+            ?? throw new InvalidOperationException("Select an active USD bank-account deposit channel.");
+        if (choice.Capability.Code != BlaaizChannelCapabilities.BusinessPrincipalVirtualAccount)
+            throw new InvalidOperationException("USD identification requires the verified primary-holder channel.");
+        var principal = await contexts.EnsureBusinessPrincipalReceivingAccountAsync(
+            context, user, principalHolderConsent, ct);
+        var individual = await api.GetCustomerAsync(
+            principal.IndividualCompliance.ProviderCustomerId, principal.CustomerProfileId, ct);
+        BusinessPrincipalReceivingAccountPolicy.RequireVerifiedProviderCustomer(
+            principal.IndividualCompliance.ProviderCustomerId, individual.Data.Data.Id,
+            individual.Data.Data.Type, individual.Data.Data.VerificationStatus, "individual");
+        var business = await contexts.EnsureComplianceAsync(context, ct);
+        var businessIdentity = await api.GetBusinessCustomerAsync(business.ProviderCustomerId, context.OwnerId, ct);
+        BusinessPrincipalReceivingAccountPolicy.RequireVerifiedProviderCustomer(
+            business.ProviderCustomerId, businessIdentity.Data.Data.Id,
+            businessIdentity.Data.Data.Type, businessIdentity.Data.Data.VerificationStatus, "business");
+        return principal;
+    }
+
     private async Task<BlaaizVirtualAccountState?> FetchStateAsync(WalletDepositAccount row, CancellationToken ct)
     {
         EnsureConnection(row);

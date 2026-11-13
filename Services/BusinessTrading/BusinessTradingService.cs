@@ -49,16 +49,14 @@ public sealed class BusinessTradingService : IBusinessTradingService
         var profile = await GetProfileAsync(access.BusinessProfileId, requireApproved: false, ct);
         var countryCode = TradingCountry(profile);
 
-        var balancesTask = GetBalancesForProfileAsync(access.BusinessProfileId, ct);
-        var marketplaceTask = GetMarketplacePairsForCountryAsync(countryCode, ct);
-        var instantTask = GetInstantPairsForCountryAsync(countryCode, ct);
+        // All three projections use the request-scoped AppDbContext. EF Core
+        // does not permit simultaneous queries on the same context instance.
+        // Await each projection before issuing the next database operation.
+        var balances = await GetBalancesForProfileAsync(access.BusinessProfileId, ct);
+        var marketplacePairs = await GetMarketplacePairsForCountryAsync(countryCode, ct);
+        var instantPairs = await GetInstantPairsForCountryAsync(countryCode, ct);
 
-        await Task.WhenAll(balancesTask, marketplaceTask, instantTask);
-
-        return new BusinessTradingWorkspaceDto(
-            await balancesTask,
-            await marketplaceTask,
-            await instantTask);
+        return new BusinessTradingWorkspaceDto(balances, marketplacePairs, instantPairs);
     }
 
     public async Task<IReadOnlyList<BusinessTradingBalanceDto>> GetBalancesAsync(

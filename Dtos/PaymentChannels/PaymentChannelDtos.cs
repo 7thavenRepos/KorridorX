@@ -25,6 +25,10 @@ public sealed record SavePaymentChannelRequest(Guid? Revision, Guid ProviderWall
 
 public sealed record SetPaymentChannelStatusRequest(Guid Revision, PaymentChannelStatus Status, string Reason);
 public sealed record CreateWalletDepositAccountRequest(Guid ChannelId, bool PrincipalHolderConsent = false);
+// The identification value is intentionally absent from response DTOs and persistence.
+public sealed record PrincipalHolderIdentificationTypeDto(string Label, string CountryCode);
+public sealed record SubmitPrincipalHolderIdentificationRequest(Guid ChannelId,
+    string IdentificationValue, bool PrincipalHolderConsent, bool IdentificationDisclosureConsent);
 public sealed record WalletDepositAccountDto(Guid Id, Guid WalletId, Guid ChannelId,
     string AssetCode, string Status, bool CanRetry, string? FailureReason, FundingInstructionsDto Instructions);
 public sealed record WithdrawalChannelOptionDto(Guid Id, string DisplayName, string DestinationAssetCode,

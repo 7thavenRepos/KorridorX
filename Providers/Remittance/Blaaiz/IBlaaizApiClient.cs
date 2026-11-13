@@ -77,6 +77,17 @@ public interface IBlaaizApiClient
         Guid customerProfileId,
         CancellationToken ct = default);
 
+    Task<BlaaizApiResult<BlaaizIdentificationTypeEnvelope>> GetIndividualIdentificationTypeAsync(
+        string providerCustomerId,
+        Guid customerProfileId,
+        CancellationToken ct = default);
+
+    Task<BlaaizApiResult<BlaaizCustomerEnvelope>> UpdateIndividualCustomerTinAsync(
+        string providerCustomerId,
+        string tin,
+        Guid customerProfileId,
+        CancellationToken ct = default);
+
     Task<BlaaizApiResult<BlaaizKycUploadUrlResponse>> RequestKycUploadUrlAsync(
         BlaaizKycUploadUrlRequest request,
         Guid customerProfileId,

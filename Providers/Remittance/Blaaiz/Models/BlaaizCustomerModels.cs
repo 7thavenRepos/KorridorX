@@ -211,6 +211,24 @@ public sealed class BlaaizCustomerEnvelope
     public BlaaizCustomerData Data { get; set; } = new();
 }
 
+public sealed class BlaaizIdentificationTypeEnvelope
+{
+    [JsonPropertyName("data")]
+    public BlaaizIdentificationTypeData Data { get; set; } = new();
+}
+
+public sealed class BlaaizIdentificationTypeData
+{
+    [JsonPropertyName("label")]
+    public string Label { get; set; } = "";
+
+    [JsonPropertyName("country")]
+    public string Country { get; set; } = "";
+
+    [JsonPropertyName("customer_type")]
+    public string CustomerType { get; set; } = "";
+}
+
 public sealed class BlaaizCustomerData
 {
     [JsonPropertyName("id")]

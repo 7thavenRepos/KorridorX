@@ -53,6 +53,26 @@ public sealed class BusinessPaymentChannelsController(ConsumerWalletFundingServi
     public async Task<IActionResult> Refresh(Guid walletId, [FromBody] CreateWalletDepositAccountRequest request, CancellationToken ct) =>
         Ok(ApiResponses.Ok(await accounts.GetAsync(Actor(), walletId, request.ChannelId, true, true, ct), "Deposit account status checked."));
 
+    [HttpGet("wallets/{walletId:guid}/bank-account/identification-type")]
+    public async Task<IActionResult> PrincipalIdentificationType(Guid walletId,
+        [FromQuery] Guid channelId, [FromQuery] bool principalHolderConsent,
+        CancellationToken ct) =>
+        Ok(ApiResponses.Ok(await accounts.GetUsdPrincipalIdentificationTypeAsync(
+            Actor(), walletId, channelId, principalHolderConsent, ct),
+            "USD account-holder identification requirement retrieved."));
+
+    [HttpPost("wallets/{walletId:guid}/bank-account/identification")]
+    public async Task<IActionResult> SubmitPrincipalIdentification(Guid walletId,
+        [FromBody] SubmitPrincipalHolderIdentificationRequest request, CancellationToken ct)
+    {
+        await accounts.SubmitUsdPrincipalIdentificationAsync(Actor(), walletId,
+            request.ChannelId, request.IdentificationValue,
+            request.PrincipalHolderConsent, request.IdentificationDisclosureConsent, ct);
+        // Never echo the submitted personal identification number.
+        return Ok(ApiResponses.Ok(new { submitted = true },
+            "Identification securely submitted to the receiving-account provider. You may now retry USD account setup."));
+    }
+
     [HttpGet("transfers/{transferId:guid}/methods")]
     public async Task<IActionResult> TransferMethods(Guid transferId, CancellationToken ct)
     {
