@@ -214,7 +214,28 @@ public sealed class BlaaizCustomerEnvelope
 public sealed class BlaaizIdentificationTypeEnvelope
 {
     [JsonPropertyName("data")]
-    public BlaaizIdentificationTypeData Data { get; set; } = new();
+    public BlaaizIdentificationTypeData? Data { get; set; }
+
+    // Blaaiz has returned both documented { data: { ... } } and live
+    // { label, country, customer_type } JSON for this endpoint. Preserve
+    // either shape, but do not invent missing fields or weaken the individual
+    // identity validation performed by WalletDepositAccountService.
+    [JsonPropertyName("label")]
+    public string Label { get; set; } = "";
+
+    [JsonPropertyName("country")]
+    public string Country { get; set; } = "";
+
+    [JsonPropertyName("customer_type")]
+    public string CustomerType { get; set; } = "";
+
+    [JsonIgnore]
+    public BlaaizIdentificationTypeData ResolvedIdentification => Data ?? new BlaaizIdentificationTypeData
+    {
+        Label = Label,
+        Country = Country,
+        CustomerType = CustomerType
+    };
 }
 
 public sealed class BlaaizIdentificationTypeData

@@ -201,7 +201,7 @@ public sealed class WalletDepositAccountService(AppDbContext db, PaymentChannelS
             user, walletId, channelId, principalHolderConsent, ct);
         var info = await api.GetIndividualIdentificationTypeAsync(
             principal.IndividualCompliance.ProviderCustomerId, principal.CustomerProfileId, ct);
-        return VerifiedIdentificationType(info.Data.Data);
+        return VerifiedIdentificationType(info.Data.ResolvedIdentification);
     }
 
     /// <summary>
@@ -220,7 +220,7 @@ public sealed class WalletDepositAccountService(AppDbContext db, PaymentChannelS
             user, walletId, channelId, principalHolderConsent, ct);
         var info = await api.GetIndividualIdentificationTypeAsync(
             principal.IndividualCompliance.ProviderCustomerId, principal.CustomerProfileId, ct);
-        var type = VerifiedIdentificationType(info.Data.Data);
+        var type = VerifiedIdentificationType(info.Data.ResolvedIdentification);
         var value = identificationValue?.Trim() ?? "";
         if (value.Length < 4 || value.Length > 64 ||
             value.Any(c => !(char.IsLetterOrDigit(c) || c is ' ' or '-' or '/')))
