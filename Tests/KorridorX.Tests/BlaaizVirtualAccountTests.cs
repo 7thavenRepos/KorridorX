@@ -22,6 +22,37 @@ public sealed class BlaaizVirtualAccountTests
         Assert.Null(mapping.AccountNumber);
     }
 
+    [Fact]
+    public void Customer_created_lookup_status_is_pending_not_bank_account_ready()
+    {
+        var state = BlaaizVirtualAccountState.ParseResponse(
+            JsonSerializer.Serialize(new { data = new[] { new {
+                id = "va", status = "CUSTOMER_CREATED", currency = "USD",
+                customer_id = "customer", business_wallet_id = "wallet"
+            } } }), "wallet", "customer", "USD");
+        var mapping = Mapping("USD");
+        state.Apply(mapping, "wallet");
+        Assert.Equal(ProviderAccountMappingStatus.Pending, state.Status);
+        Assert.Equal(ProviderAccountMappingStatus.Pending, mapping.Status);
+        Assert.Equal(CollectionAccountStatus.Pending, mapping.CollectionAccount.Status);
+        Assert.Null(mapping.AccountNumber);
+    }
+
+    [Fact]
+    public void Customer_created_cannot_impersonate_a_ready_webhook()
+    {
+        Assert.Throws<InvalidOperationException>(() => BlaaizVirtualAccountState.ParseWebhook(
+            Payload("USD", "virtual_account.ready", "CUSTOMER_CREATED"), "virtual_account.ready"));
+    }
+
+    [Fact]
+    public void Unknown_account_status_still_fails_closed()
+    {
+        Assert.Throws<InvalidOperationException>(() => BlaaizVirtualAccountState.ParseResponse(
+            JsonSerializer.Serialize(new { data = new { id = "va", status = "UNKNOWN_STATE", currency = "USD" } }),
+            "wallet", "customer", "USD"));
+    }
+
     [Theory]
     [InlineData("EUR")]
     [InlineData("GBP")]

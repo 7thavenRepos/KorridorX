@@ -60,7 +60,9 @@ public sealed record BlaaizVirtualAccountState(
         var mapped = status switch
         {
             "SUCCESSFUL" => ProviderAccountMappingStatus.Active,
-            "PENDING" or null => ProviderAccountMappingStatus.Pending,
+            // Observed in Blaaiz's account-list response after USD customer setup.
+            // Customer creation is not evidence that receiving details are ready.
+            "PENDING" or "CUSTOMER_CREATED" or null => ProviderAccountMappingStatus.Pending,
             "FAILED" or "REJECTED" => ProviderAccountMappingStatus.Failed,
             _ => throw new InvalidOperationException("Unrecognized virtual-account status.")
         };
