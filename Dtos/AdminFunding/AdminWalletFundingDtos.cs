@@ -10,11 +10,11 @@ public sealed record CreateAdminWalletFundingRequestDto(
     Guid SourceHouseAccountId,
     Guid DestinationWalletId,
     decimal Amount,
-    [property: Required, MaxLength(1000)] string Reason);
+    [Required, MaxLength(1000)] string Reason);
 
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record ReviewAdminWalletFundingRequestDto(
-    [property: MaxLength(1000)] string? Reason);
+    [MaxLength(1000)] string? Reason);
 
 public sealed record AdminWalletFundingWalletDto(
     Guid WalletId,
